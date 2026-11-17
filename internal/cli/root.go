@@ -1,0 +1,34 @@
+// Package cli wires up the netrunner command tree.
+//
+// netrunner is the umbrella console. Its first deck is NetWatch (defensive).
+// Offensive (recon/lab) and RUView (3D spatial) decks hang off the same shell.
+package cli
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/r0n1n9/netwatch/internal/theme"
+)
+
+var rootCmd = &cobra.Command{
+	Use:           "netrunner",
+	Short:         "netrunner — a cyberpunk network console (NetWatch defensive deck)",
+	Long:          theme.Banner(),
+	SilenceUsage:  true,
+	SilenceErrors: true,
+}
+
+// Execute runs the root command.
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, theme.Crit.Render("!! "+err.Error()))
+		os.Exit(1)
+	}
+}
+
+func init() {
+	rootCmd.AddCommand(sweepCmd)
+}
