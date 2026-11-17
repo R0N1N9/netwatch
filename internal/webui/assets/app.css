@@ -199,3 +199,105 @@ html, body {
   letter-spacing: 0.1em; background: var(--panel); border: 1px solid rgba(0,229,255,0.1); }
 .hud-bottom .k { color: var(--cyan); font-weight: 800; }
 .hud-bottom .msg { flex: 1; text-align: right; color: var(--fg); }
+
+/* ===================== KIROSHI HUD LAYER ===================== */
+
+/* random CRT flicker + chromatic feel */
+.fx-flicker { position: fixed; inset: 0; z-index: 85; pointer-events: none; background: rgba(0,229,255,0.015); animation: crt 7s steps(60) infinite; }
+@keyframes crt { 0%,100%{opacity:0.1} 7%{opacity:0.25} 8%{opacity:0.05} 40%{opacity:0.18} 41%{opacity:0.03} }
+
+/* scramble / decode text */
+.scram { color: var(--cyan); }
+.cursor::after { content: "▌"; color: var(--cyan); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* glitch title */
+.brand .net, .brand .watch { position: relative; }
+.brand:hover .watch { animation: glitch 0.3s steps(2) 2; }
+@keyframes glitch { 0%{transform:translate(0)} 25%{transform:translate(-2px,1px); text-shadow:2px 0 var(--red),-2px 0 var(--cyan)} 50%{transform:translate(2px,-1px)} 75%{transform:translate(-1px,-1px)} }
+
+/* panel corner data-tags (ambient busy-HUD) */
+.panel { }
+.panel-head::after { content: attr(data-code); position: absolute; right: 10px; top: 7px; font-size: 8px; color: var(--dim); letter-spacing: 0.1em; opacity: 0.6; }
+
+/* animated accent bar grows on new data */
+@keyframes barflash { 0%{box-shadow:0 0 12px var(--accent,var(--cyan))} 50%{box-shadow:0 0 26px var(--accent,var(--cyan)), 0 0 40px var(--accent,var(--cyan))} 100%{box-shadow:0 0 12px var(--accent,var(--cyan))} }
+.panel.flash::before { animation: barflash 0.6s ease 2; }
+
+/* alert arrival red glitch flash */
+@keyframes alertflash { 0%{background:rgba(255,46,77,0.0)} 20%{background:rgba(255,46,77,0.22)} 100%{background:rgba(255,46,77,0.0)} }
+.alert.new { animation: alertflash 0.9s ease 1; }
+
+/* ---------- telemetry ticker ---------- */
+.ticker { position: relative; overflow: hidden; height: 20px; background: rgba(0,0,0,0.5); border: 1px solid rgba(0,229,255,0.12);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.ticker-track { position: absolute; white-space: nowrap; will-change: transform; animation: tick 48s linear infinite; font-size: 10.5px; line-height: 20px; color: var(--dim); letter-spacing: 0.06em; }
+.ticker-track .hl { color: var(--cyan); } .ticker-track .hlr { color: var(--red); } .ticker-track .hly { color: var(--yellow); } .ticker-track .hlg { color: var(--green); }
+@keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ---------- target-lock reticle ---------- */
+#reticle { position: fixed; z-index: 70; pointer-events: none; border: 0; transition: all 0.12s cubic-bezier(.2,.8,.2,1); }
+#reticle .br { position: absolute; width: 16px; height: 16px; border: 2px solid var(--cyan); filter: drop-shadow(0 0 4px var(--cyan)); }
+#reticle .tl { left: -4px; top: -4px; border-right: 0; border-bottom: 0; }
+#reticle .tr { right: -4px; top: -4px; border-left: 0; border-bottom: 0; }
+#reticle .bl { left: -4px; bottom: -4px; border-right: 0; border-top: 0; }
+#reticle .br2 { right: -4px; bottom: -4px; border-left: 0; border-top: 0; }
+#reticle .recticle-scan { position: absolute; left: 0; right: 0; height: 2px; top: 0; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); animation: rscan 1.3s ease-in-out infinite; opacity: 0.8; }
+@keyframes rscan { 0%,100%{top:0} 50%{top:100%} }
+#reticle .rtag { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); min-width: 170px;
+  background: rgba(6,7,12,0.92); border: 1px solid var(--cyan); padding: 6px 9px; font-size: 10px; line-height: 1.5; color: var(--fg);
+  clip-path: polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); box-shadow: 0 0 18px rgba(0,229,255,0.25); }
+#reticle .rtag b { color: var(--cyan); } #reticle .rtag .lo { color: var(--dim); }
+#reticle .rtag .risk-hi { color: var(--red); } #reticle .rtag .risk-ok { color: var(--green); }
+
+/* ---------- boot sequence ---------- */
+#boot { position: fixed; inset: 0; z-index: 1000; background: #04050a; display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.6s ease; }
+#boot.done { opacity: 0; pointer-events: none; }
+.boot-inner { width: min(680px, 86vw); }
+.boot-logo { color: var(--cyan); font-size: 10px; line-height: 1.05; text-shadow: 0 0 10px rgba(0,229,255,0.5); margin-bottom: 18px; white-space: pre; }
+.boot-lines { font-size: 12.5px; line-height: 1.7; color: var(--green); min-height: 180px; }
+.boot-lines .ln { opacity: 0; animation: bootln 0.25s forwards; }
+.boot-lines .ok { color: var(--cyan); } .boot-lines .warn { color: var(--yellow); }
+@keyframes bootln { to { opacity: 1; } }
+.boot-bar { margin-top: 16px; height: 6px; background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.3); }
+.boot-bar span { display: block; height: 100%; width: 0; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); animation: bootfill 2.4s ease forwards; }
+@keyframes bootfill { to { width: 100%; } }
+
+/* ===================== KILL CHAIN DECK ===================== */
+.kc { display: flex !important; flex-direction: column; gap: 10px; }
+.kc[hidden] { display: none !important; }
+.kc-flow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; align-items: stretch; }
+.kc-node { position: relative; cursor: pointer; padding: 10px 8px; text-align: center; background: var(--panel);
+  border: 1px solid rgba(0,229,255,0.14); transition: all 0.15s;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%); }
+.kc-node:first-child { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
+.kc-node .num { font-size: 9px; color: var(--dim); letter-spacing: 0.1em; }
+.kc-node .nm { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--fg); margin-top: 3px; }
+.kc-node .cov { height: 3px; margin-top: 7px; background: rgba(255,255,255,0.08); }
+.kc-node .cov i { display: block; height: 100%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+.kc-node:hover { border-color: var(--cyan); background: rgba(0,229,255,0.06); }
+.kc-node.active { border-color: var(--yellow); background: rgba(252,238,10,0.08); box-shadow: inset 0 0 20px rgba(252,238,10,0.12); }
+.kc-node.active .nm { color: var(--yellow); text-shadow: 0 0 8px rgba(252,238,10,0.4); }
+
+.kc-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; }
+
+.kc-sec { margin-bottom: 14px; }
+.kc-sec h4 { font-size: 11px; letter-spacing: 0.18em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.kc-sec.red h4 { color: var(--red); } .kc-sec.blue h4 { color: var(--cyan); }
+.kc-tech { display: flex; align-items: center; gap: 8px; padding: 7px 9px; margin-bottom: 6px; background: rgba(255,255,255,0.015); border-left: 2px solid var(--dim); }
+.kc-sec.red .kc-tech { border-left-color: rgba(255,46,77,0.6); }
+.kc-sec.blue .kc-tech { border-left-color: rgba(0,229,255,0.6); }
+.kc-tech .ttl { flex: 1; font-size: 12px; color: var(--fg); }
+.kc-tech .att { font-size: 9px; color: var(--dim); letter-spacing: 0.06em; }
+.kc-tech .go { cursor: pointer; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; padding: 4px 9px; border: 1px solid; white-space: nowrap;
+  clip-path: polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px); background: transparent; }
+.kc-sec.red .go { color: var(--red); border-color: var(--red); } .kc-sec.red .go:hover { background: var(--red); color: #fff; }
+.kc-sec.blue .go { color: var(--cyan); border-color: var(--cyan); } .kc-sec.blue .go:hover { background: var(--cyan); color: var(--bg); }
+.kc-tech .go.info { color: var(--dim); border-color: var(--dim); }
+
+#kcOpsLog { font-size: 11.5px; line-height: 1.6; }
+.op { margin-bottom: 8px; border-left: 2px solid var(--green); padding: 5px 9px; background: rgba(82,255,143,0.04); white-space: pre-wrap; word-break: break-word; }
+.op.red { border-color: var(--red); background: rgba(255,46,77,0.05); }
+.op .ohead { font-size: 9px; font-weight: 800; letter-spacing: 0.14em; color: var(--green); display: block; margin-bottom: 3px; }
+.op.red .ohead { color: var(--red); }

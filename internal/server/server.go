@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/r0n1n9/netwatch/internal/audit"
 	"github.com/r0n1n9/netwatch/internal/blackwall"
 	"github.com/r0n1n9/netwatch/internal/copilot"
 	"github.com/r0n1n9/netwatch/internal/ice"
@@ -69,6 +70,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/blackwall", s.handleBlackwall)
 	mux.HandleFunc("/api/scan", s.handleScan)
 	mux.HandleFunc("/api/copilot", s.handleCopilot)
+	// kill-chain blue-team audits (read-only, localhost)
+	mux.HandleFunc("/api/kc/listeners", auditHandler(audit.Listeners))
+	mux.HandleFunc("/api/kc/persistence", auditHandler(audit.Persistence))
+	mux.HandleFunc("/api/kc/connections", auditHandler(audit.Connections))
+	mux.HandleFunc("/api/kc/eicar", auditHandler(audit.Eicar))
 	return mux
 }
 
@@ -402,6 +408,12 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
+}
+
+func auditHandler(fn func() []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"ok": true, "lines": fn()})
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

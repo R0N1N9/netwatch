@@ -22,6 +22,7 @@ One binary, multiple **decks**:
 > targets. Don't point it at things you don't own or have permission to test.
 
 ![NetWatch deck](docs/netwatch.png)
+![Kill Chain deck](docs/killchain.png)
 
 ---
 
@@ -83,6 +84,29 @@ Defensive situational awareness for your LAN, rendered as a neon command deck.
 Authorized, lab-scoped recon. **PROBE** runs a concurrent TCP-connect scan of a
 target across common + IoT ports — and **refuses any non-private address**.
 
+## The Kill Chain deck (purple team)
+
+The whole Lockheed-Martin kill chain as an interactive, MITRE ATT&CK-mapped
+console — RECON → WEAPONIZATION → DELIVERY → EXPLOITATION → INSTALLATION → C2 →
+ACTIONS ON OBJECTIVES. Each stage pairs **RED** (authorized/lab offense) with
+**BLUE** (live defense), and an OPS CONSOLE streams results.
+
+The red side is deliberately **assessment + safe test artifacts** (scope-locked
+scanning, the benign EICAR string for AV/EDR validation, planning briefs) — *not*
+weaponized exploit/C2/malware generators. The blue side does the real work, with
+read-only host introspection:
+
+- **Listening-socket audit** — your C2/backdoor surface (`/proc/net/tcp`, or `ss`).
+- **Persistence audit** — systemd units, cron, shell rc, autostart, rc.local (T1543/T1547/T1053).
+- **Established-peer hunt** — live outbound/inbound TCP peers, **public egress flagged** (C2/exfil, T1041/T1048).
+- **EICAR validation** — confirm your scanner actually fires.
+
+## Kiroshi HUD
+
+The optic layer: a boot/uplink sequence, **scramble-decode** text reveals, a live
+**telemetry ticker**, a **target-lock reticle** that snaps onto the selected host
+with a threat-score readout, plus scanlines, CRT flicker and glitch.
+
 ## RUView (scaffold)
 
 Placeholder for the ESP32-S3 sensor mesh → live 3D spatial map (WebGL/three.js
@@ -104,6 +128,7 @@ internal/
   blackwall/  nftables quarantine (atomic rebuild of one dedicated table)
   copilot/    AI daemon — heuristic now, LLM-pluggable via the Copilot interface
   offensive/  Netrunner recon — scope-locked TCP-connect scan
+  audit/      blue-team host introspection (listeners, persistence, peers, EICAR)
   server/     HTTP server: serves the GUI + SSE live stream + action endpoints
   webui/      embedded Cyberpunk web console (assets/ baked in with go:embed)
   tui/        terminal deck (Bubble Tea) — fallback

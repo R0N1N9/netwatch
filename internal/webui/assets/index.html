@@ -15,6 +15,7 @@
     <nav class="tabs">
       <div class="tab active" data-deck="netwatch">NETWATCH</div>
       <div class="tab" data-deck="netrunner">NETRUNNER</div>
+      <div class="tab" data-deck="killchain">KILL&nbsp;CHAIN</div>
       <div class="tab" data-deck="ruview">RUVIEW</div>
     </nav>
     <div class="spacer"></div>
@@ -96,6 +97,24 @@
     </section>
   </main>
 
+  <!-- KILL CHAIN DECK (purple team) -->
+  <main class="deck kc" data-deck="killchain" hidden>
+    <div class="kc-flow" id="kcFlow"></div>
+    <div class="kc-grid">
+      <div class="panel grow" id="kcStage" style="--accent: var(--yellow)">
+        <div class="panel-head"><span id="kcStageTitle">SELECT A STAGE</span><span class="meta" id="kcAttck">MITRE ATT&amp;CK</span></div>
+        <div class="panel-body" id="kcStageBody"></div>
+      </div>
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>OPS CONSOLE</span><span class="meta">purple team · authorized</span></div>
+        <div class="panel-body" id="kcOpsLog"></div>
+        <div class="field">
+          <input id="kcTarget" placeholder="lab target for red ops — ip you own / are authorized to test" autocomplete="off" />
+        </div>
+      </div>
+    </div>
+  </main>
+
   <!-- RUVIEW DECK (3D spatial) -->
   <main class="deck" data-deck="ruview" hidden>
     <div class="coming">
@@ -104,6 +123,8 @@
       <p style="opacity:0.6">// uplink pending — hardware integration //</p>
     </div>
   </main>
+
+  <div class="ticker"><div class="ticker-track" id="ticker"></div></div>
 
   <footer class="hud-bottom">
     <span><span class="k">[TAB]</span> deck</span>
@@ -116,6 +137,24 @@
 
 <div class="fx-scan"></div>
 <div class="fx-vignette"></div>
+<div class="fx-flicker"></div>
+
+<!-- Kiroshi target-lock reticle -->
+<div id="reticle" hidden>
+  <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br br2"></span>
+  <span class="recticle-scan"></span>
+  <div class="rtag" id="rtag"></div>
+</div>
+
+<!-- boot sequence -->
+<div id="boot">
+  <div class="boot-inner">
+    <pre class="boot-logo" id="bootLogo"></pre>
+    <div class="boot-lines" id="bootLines"></div>
+    <div class="boot-bar"><span id="bootFill"></span></div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
