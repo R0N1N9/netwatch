@@ -1,0 +1,90 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/r0n1n9/netwatch/internal/netif"
+	"github.com/r0n1n9/netwatch/internal/server"
+	"github.com/r0n1n9/netwatch/internal/theme"
+)
+
+var (
+	guiAddr   string
+	guiAuto   time.Duration
+	guiDemo   bool
+	guiNoOpen bool
+)
+
+var guiCmd = &cobra.Command{
+	Use:   "gui",
+	Short: "GUI — launch the Cyberpunk NetWatch web console",
+	Long:  "GUI starts the NetWatch console (embedded web UI) on localhost and streams live\nnetwork state to it. Use --demo to preview with sample data (no privileges needed).",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var info *netif.Info
+		if guiDemo {
+			info = syntheticInfo()
+		} else {
+			var err error
+			info, err = netif.Discover()
+			if err != nil {
+				return err
+			}
+		}
+
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
+		srv := server.New(info, guiAuto, guiDemo)
+		url := "http://" + guiAddr
+
+		fmt.Println(theme.Banner())
+		fmt.Println()
+		fmt.Printf("  %s %s\n", theme.H.Render("console:"), theme.Good.Render(url))
+		mode := "live watch"
+		if guiDemo {
+			mode = "demo (sample data)"
+		}
+		fmt.Printf("  %s %s · iface %s · %s\n\n", theme.Label.Render("mode:"), theme.Value.Render(mode), theme.Value.Render(info.Iface.Name), theme.Faint.Render("ctrl-c to stop"))
+
+		if !guiNoOpen {
+			go openBrowser(url)
+		}
+
+		if err := srv.Run(ctx, guiAddr); err != nil {
+			return err
+		}
+		return nil
+	},
+}
+
+func init() {
+	guiCmd.Flags().StringVar(&guiAddr, "addr", "127.0.0.1:7979", "listen address for the console")
+	guiCmd.Flags().DurationVar(&guiAuto, "auto", 20*time.Second, "auto-sweep interval (0 to disable)")
+	guiCmd.Flags().BoolVar(&guiDemo, "demo", false, "serve sample data instead of live capture (no privileges needed)")
+	guiCmd.Flags().BoolVar(&guiNoOpen, "no-open", false, "do not auto-open the browser")
+	rootCmd.AddCommand(guiCmd)
+}
+
+func openBrowser(url string) {
+	time.Sleep(400 * time.Millisecond)
+	_ = exec.Command("xdg-open", url).Start()
+}
+
+func syntheticInfo() *netif.Info {
+	_, ipnet, _ := net.ParseCIDR("192.168.1.0/24")
+	return &netif.Info{
+		Iface:   &net.Interface{Index: 0, Name: "wlan0"},
+		IP:      net.ParseIP("192.168.1.50").To4(),
+		IPNet:   ipnet,
+		Gateway: net.ParseIP("192.168.1.1").To4(),
+	}
+}

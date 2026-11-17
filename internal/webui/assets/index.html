@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>netrunner // NetWatch</title>
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div class="fx-grid"></div>
+
+<div id="app">
+  <header class="hud-top">
+    <div class="brand"><span class="net">NET</span><span class="watch">RUNNER</span><span class="bug">_</span></div>
+    <nav class="tabs">
+      <div class="tab active" data-deck="netwatch">NETWATCH</div>
+      <div class="tab" data-deck="netrunner">NETRUNNER</div>
+      <div class="tab" data-deck="ruview">RUVIEW</div>
+    </nav>
+    <div class="spacer"></div>
+    <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">WATCH ACTIVE</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </header>
+
+  <!-- NETWATCH DECK -->
+  <main class="deck" data-deck="netwatch">
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>SEGMENT MAP</span><span class="meta" id="segMeta">--</span></div>
+        <div class="radar-wrap">
+          <div class="radar"><div class="sweep"></div></div>
+          <div class="radar-stat"><b id="hostCount">0</b><small>HOSTS ONLINE</small></div>
+          <div class="radar-stat" style="margin-left:auto"><b id="newCount" style="color:var(--yellow)">0</b><small>NEW</small></div>
+        </div>
+        <div class="panel-body" id="deviceList"></div>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="panel grow" id="alertPanel" style="--accent: var(--red)">
+        <div class="panel-head"><span>ICE // INTRUSION LOG</span><span class="meta" id="alertMeta">0 events</span></div>
+        <div class="panel-body" id="alertList"></div>
+      </div>
+      <div class="panel copilot" style="--accent: var(--magenta); flex: 0 0 38%">
+        <div class="panel-head"><span>COPILOT // DAEMON</span><span class="meta">neural uplink</span></div>
+        <div class="panel-body" id="copilotLog"></div>
+        <div class="field">
+          <input id="copilotInput" placeholder="ask the daemon…  e.g. what's weird right now?" autocomplete="off" />
+          <button class="btn" id="copilotSend">SEND</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="panel" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>SYSTEM VITALS</span></div>
+        <div class="vitals">
+          <div class="vital"><b id="vHosts">0</b><small>HOSTS</small></div>
+          <div class="vital"><b id="vNew" style="color:var(--yellow)">0</b><small>NEW 24H</small></div>
+          <div class="vital" id="vThreatCard"><b id="vThreats">0</b><small>THREATS</small></div>
+          <div class="vital"><b id="vTrust" style="color:var(--green)">0</b><small>TRUSTED</small></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btnSweep">⟳ SWEEP</button>
+          <button class="btn warn" id="btnTrust" disabled>◈ TRUST</button>
+        </div>
+      </div>
+
+      <div class="panel grow" style="--accent: var(--red)">
+        <div class="panel-head"><span>BLACKWALL</span><span class="meta">quarantine</span></div>
+        <div class="bw">
+          <div class="wall"></div>
+          <div class="target" id="bwTarget">no host selected</div>
+          <div class="btn-row" style="padding:0">
+            <button class="btn danger" id="btnQuarantine" disabled>⊘ QUARANTINE</button>
+            <button class="btn" id="btnRelease" disabled>⊚ RELEASE</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- NETRUNNER DECK (offensive) -->
+  <main class="deck" data-deck="netrunner" hidden>
+    <section class="col" style="grid-column: 1 / -1">
+      <div class="panel grow" style="--accent: var(--yellow)">
+        <div class="panel-head"><span>NETRUNNER // RECON &amp; INTRUSION (AUTHORIZED)</span><span class="meta">scope-locked</span></div>
+        <div class="field">
+          <input id="scanTarget" placeholder="target — ip / cidr you own or are authorized to test" autocomplete="off" />
+          <button class="btn warn" id="btnScan">⌁ PROBE</button>
+        </div>
+        <div class="panel-body" id="scanLog">
+          <div class="empty">authorized lab recon. targets you own only.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- RUVIEW DECK (3D spatial) -->
+  <main class="deck" data-deck="ruview" hidden>
+    <div class="coming">
+      <h2>RU<span class="glitch">VIEW</span></h2>
+      <p>ESP32-S3 SENSOR MESH · 3D SPATIAL MAP</p>
+      <p style="opacity:0.6">// uplink pending — hardware integration //</p>
+    </div>
+  </main>
+
+  <footer class="hud-bottom">
+    <span><span class="k">[TAB]</span> deck</span>
+    <span><span class="k">[S]</span> sweep</span>
+    <span><span class="k">[T]</span> trust</span>
+    <span><span class="k">[↑↓]</span> select</span>
+    <span class="msg" id="statusLine">deck online</span>
+  </footer>
+</div>
+
+<div class="fx-scan"></div>
+<div class="fx-vignette"></div>
+<script src="app.js"></script>
+</body>
+</html>

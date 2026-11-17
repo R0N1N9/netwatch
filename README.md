@@ -5,22 +5,59 @@
 
 `netrunner` is the **R&D sandbox** counterpart to a grounded, enterprise suite
 (*Ronin Suite*). Where that suite is modern-day production security, `netrunner`
-is where the bleeding-edge and the slightly-crazy gets prototyped: AI-driven
-detection, agentic response, and hardware/RF/3D fusion.
+is where the bleeding-edge gets prototyped: AI-driven detection, agentic
+response, and hardware/RF/3D fusion — behind a sleek Cyberpunk-2077-style HUD.
 
-It is organized as one binary with multiple **decks**:
+One binary, multiple **decks**:
 
 | Deck | Stance | Status |
 |------|--------|--------|
-| **NetWatch** | Defensive — watch the segment, guard the wall | ✅ MVP working |
-| **Netrunner** | Offensive — authorized recon & lab testing | ⏳ planned |
-| **RUView** | Spatial — fuse ESP32-S3 sensors into a live 3D map | 🔭 future |
+| **NetWatch** | Defensive — watch the segment, guard the wall | ✅ working (GUI + TUI) |
+| **Netrunner** | Offensive — authorized recon & lab testing | 🟡 recon seed (scope-locked) |
+| **RUView** | Spatial — fuse ESP32-S3 sensors into a live 3D map | 🔭 scaffold |
 
 > **Scope & ethics.** `netrunner` is for **defense, your own networks, lab
 > environments, CTFs, and engagements you are authorized to perform**. The
-> offensive deck is built as an authorized-use toolkit with scope/target
-> confirmation baked in. Don't point it at things you don't own or have written
-> permission to test.
+> offensive deck is scope-locked to private/lab address space and refuses public
+> targets. Don't point it at things you don't own or have permission to test.
+
+![NetWatch deck](docs/netwatch.png)
+
+---
+
+## Quick start (Linux)
+
+Requires Go ≥ 1.24. The capture layer is **pure-Go AF_PACKET — no libpcap, no
+cgo** — so it builds to a single static binary; the GUI is embedded inside it.
+
+```bash
+make build
+```
+
+```bash
+# Preview the console with sample data — no privileges needed:
+./bin/netrunner gui --demo
+```
+
+```bash
+# Live watch (needs raw sockets + nftables). Grant caps instead of running as root:
+sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netrunner
+./bin/netrunner gui
+```
+
+The GUI serves on `http://127.0.0.1:7979` and auto-opens your browser.
+`cap_net_raw` covers capture/injection; `cap_net_admin` powers BLACKWALL (nftables).
+
+### Commands
+
+```
+netrunner gui     # Cyberpunk web console (NetWatch deck)  — primary UI
+netrunner watch   # lightweight terminal deck (TUI fallback)
+netrunner sweep   # one-shot device discovery, printed to the terminal
+```
+
+`gui` flags: `--demo`, `--addr 127.0.0.1:7979`, `--auto 20s` (sweep interval,
+`0` disables), `--no-open`.
 
 ---
 
@@ -28,57 +65,28 @@ It is organized as one binary with multiple **decks**:
 
 Defensive situational awareness for your LAN, rendered as a neon command deck.
 
-- **SWEEP** — active ARP discovery of every host on your subnet, with MAC-vendor
-  (OUI) fingerprinting, reverse-DNS, and `you` / `gateway` role tagging.
-- **ICE** (Intrusion Countermeasures) — the detection engine. Today it diffs
-  successive sweeps to flag **new hosts joining** and **gateway-MAC changes**
-  (a classic ARP-spoof / man-in-the-middle signal). Passive packet-level
-  detectors (live ARP-spoof, port-scan, rogue DHCP) plug in next.
-- **The Deck** — a full-screen TUI: live device map, ICE alert feed, and stats,
-  updating on a configurable auto-sweep.
+- **SEGMENT MAP / SWEEP** — active ARP discovery of every host, with MAC-vendor
+  (OUI) fingerprinting, reverse-DNS, and `you` / `gateway` / trusted tagging.
+- **ICE** (Intrusion Countermeasures) — detection engine. Flags **new hosts
+  joining** and **gateway-MAC changes** (classic ARP-spoof / MITM signal).
+  Passive packet-level detectors (live ARP-spoof, port-scan, rogue DHCP) next.
+- **COPILOT** — an AI daemon you can ask *"what's weird right now?"*. Today it
+  reasons over live state locally; the `copilot.Copilot` interface lets an LLM
+  backend (local model or API) drop in behind the same call.
+- **BLACKWALL** — one-click **quarantine** of a selected host via nftables
+  (behind an explicit confirm). Release just as easily. Gateway and self are
+  protected from accidental lockout.
+- **VITALS** — live counts: hosts, new, threats, trusted.
 
-### Commands
+## The Netrunner deck (recon seed)
 
-```bash
-netrunner watch          # launch the live NetWatch deck (TUI)
-netrunner watch --auto 30s
-netrunner sweep          # one-shot discovery, printed to the terminal
-netrunner sweep -d 5s --no-dns
-```
+Authorized, lab-scoped recon. **PROBE** runs a concurrent TCP-connect scan of a
+target across common + IoT ports — and **refuses any non-private address**.
 
-### Keys (deck)
+## RUView (scaffold)
 
-`s` sweep · `↑/↓` select · `t` trust/untrust host · `q` quit
-
----
-
-## Build & run (Linux)
-
-Requires Go ≥ 1.24. The capture layer is **pure-Go AF_PACKET — no libpcap, no
-cgo** — so it builds to a single static binary with no system dependencies.
-
-```bash
-make build            # -> ./bin/netrunner (static)
-# or:
-CGO_ENABLED=0 go build -o bin/netrunner .
-```
-
-Raw sockets need privilege. Instead of running as root, grant the binary just
-the capabilities it needs:
-
-```bash
-sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netrunner
-./bin/netrunner watch
-```
-
-`cap_net_raw` covers capture/injection; `cap_net_admin` is for the future
-**BLACKWALL** quarantine (nftables). Drop it if you don't want blocking.
-
-### Other laptops
-
-The logic is portable; only the capture backend is OS-specific. macOS (BPF) and
-Windows (Npcap) backends slot in behind the same `capture.Handle` API — the
-non-Linux build currently compiles with a stub so the rest of the tool runs.
+Placeholder for the ESP32-S3 sensor mesh → live 3D spatial map (WebGL/three.js
+in the same shell).
 
 ---
 
@@ -93,46 +101,51 @@ internal/
   oui/        MAC-prefix -> vendor (built-in table + optional IEEE CSV load)
   sweep/      SWEEP: ARP request injection + reply collection
   ice/        ICE engine: sweep-diff detectors (ARP-spoof, new-device)
-  theme/      cyberpunk lipgloss palette + banner
-  tui/        the NetWatch deck (Bubble Tea)
-  cli/        cobra command tree (netrunner ...)
+  blackwall/  nftables quarantine (atomic rebuild of one dedicated table)
+  copilot/    AI daemon — heuristic now, LLM-pluggable via the Copilot interface
+  offensive/  Netrunner recon — scope-locked TCP-connect scan
+  server/     HTTP server: serves the GUI + SSE live stream + action endpoints
+  webui/      embedded Cyberpunk web console (assets/ baked in with go:embed)
+  tui/        terminal deck (Bubble Tea) — fallback
+  theme/      cyberpunk palette + banner
+  cli/        cobra command tree (netrunner gui | watch | sweep)
 ```
 
-Design principle: the capture + model layer is deck-agnostic. NetWatch,
-the offensive deck, and RUView all consume the same engine.
+The capture + model + ICE engine is deck-agnostic: the GUI, the TUI, and the
+offensive deck all consume the same core. The front-end (plain HTML/CSS/JS, no
+build step) can also be dropped into a native Wails window later for a packaged
+desktop app.
 
 ---
 
 ## Roadmap
 
 **NetWatch — deepen the defense**
-- [ ] Passive live capture mode: continuous flow table (top talkers, per-host bandwidth).
-- [ ] Live ICE detectors: ARP-spoof (gratuitous ARP watch), port-scan against us, rogue DHCP, SSDP/mDNS snooping.
-- [ ] Persistent asset DB (SQLite, pure-Go `modernc.org/sqlite`): trusted vs unknown, first/last seen, nicknames.
-- [ ] **BLACKWALL**: nftables quarantine of a host behind explicit confirmation.
-- [ ] GeoIP + reputation enrichment of remote destinations (offline DB + optional feed).
-- [ ] Black-box: auto-capture a pcap when an alert fires.
-- [ ] Desktop/notification + logfile alerting.
+- [x] Cyberpunk GUI shell + live SSE stream.
+- [x] BLACKWALL nftables quarantine.
+- [x] Copilot (local heuristic) + pluggable LLM interface.
+- [ ] Passive live capture: continuous flow table (top talkers, per-host bandwidth).
+- [ ] Live ICE detectors: real-time ARP-spoof, port-scan-against-us, rogue DHCP, SSDP/mDNS snooping.
+- [ ] Persistent asset DB (pure-Go SQLite): trusted/unknown, first/last seen, nicknames.
+- [ ] GeoIP + reputation enrichment; auto-pcap on alert; desktop notifications.
 
-**AI-native layer (the netrunner twist)**
-- [ ] Copilot: natural-language queries over network state ("what's new/weird right now?").
-- [ ] LLM threat triage: summarize + rank alerts, suggest response.
-- [ ] Agentic response: reason about a confirmed threat and propose/execute BLACKWALL (human-in-the-loop).
-- [ ] Pluggable model backend (local or API), no hard dependency.
+**AI-native layer**
+- [x] Copilot Q&A over live state.
+- [ ] LLM backend (local model / API) behind the Copilot interface.
+- [ ] Agentic response: reason about a confirmed threat → propose/execute BLACKWALL (human-in-the-loop).
 
 **Netrunner deck — offensive (authorized)**
-- [ ] Ping/port sweep + service fingerprint of targets you own.
-- [ ] IoT lab probing (your own devices).
+- [x] Scope-locked TCP-connect port/service scan.
+- [ ] CIDR ranges, service banners, OS hints.
 - [ ] Traffic masking / VPN (WireGuard) integration.
-- [ ] Target allowlist + scope confirmation guardrails.
 
 **RUView — spatial**
-- [ ] ESP32-S3 sensor mesh ingestion (Wi-Fi/BLE/UWB).
-- [ ] Live 3D map of hosts + physical/RF space.
+- [ ] ESP32-S3 sensor mesh ingestion (Wi-Fi/BLE/UWB) → live 3D map.
 
 ---
 
 ## Status
 
-MVP of the NetWatch deck is working: SWEEP, sweep-diff ICE, and the live TUI.
-Everything builds to one static, cgo-free binary.
+The NetWatch deck is working end-to-end: SWEEP, sweep-diff ICE, the live
+Cyberpunk GUI (SSE), BLACKWALL quarantine, the Copilot daemon, and a
+scope-locked recon probe. Everything builds to one static, cgo-free binary.
