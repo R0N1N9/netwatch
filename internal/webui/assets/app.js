@@ -679,22 +679,25 @@ function renderHud() {
 }
 
 // ---- resource bars: live RAM and CPU of the machine running NetWatch ----
-function fillBar(id, segs, pct) {
+// Gauges show what is LEFT, like a cyberdeck's RAM: full when the machine is
+// idle, draining from the right as it is used, red when nearly spent.
+function fillBar(id, segs, freePct) {
   const bar = $(id);
   if (bar.children.length !== segs) { bar.innerHTML = ""; for (let i = 0; i < segs; i++) { const seg = el("i", "off"); seg.style.animationDelay = (i * 0.03) + "s"; bar.appendChild(seg); } }
-  const on = Math.max(pct > 0 ? 1 : 0, Math.round(pct / 100 * segs)), hot = pct >= 85;
-  [...bar.children].forEach((seg, i) => { seg.className = i < on ? (hot ? "hot" : "") : "off"; });
+  const left = Math.min(segs, Math.max(freePct > 0 ? 1 : 0, Math.round(freePct / 100 * segs))), low = freePct <= 15;
+  [...bar.children].forEach((seg, i) => { seg.className = i < left ? (low ? "hot" : "") : "off"; });
 }
 async function sysPoll() {
   const r = await get("/api/sys");
   if (!r || !r.ok) { $("#ramText").textContent = "n/a"; $("#cpuText").textContent = "n/a"; return; }
   const gb = (b) => (b / 1073741824).toFixed(1);
-  $("#ramText").textContent = gb(r.memUsed) + "/" + gb(r.memTotal) + " GB";
-  $("#cpuText").textContent = Math.round(r.cpu) + "%";
+  const ramFree = Math.max(0, 100 - r.memPct), cpuFree = Math.max(0, 100 - r.cpu);
+  $("#ramText").textContent = gb(r.memTotal - r.memUsed) + "/" + gb(r.memTotal) + " GB";
+  $("#cpuText").textContent = Math.round(cpuFree) + "%";
   $("#cpuCores").textContent = r.cores;
   $("#cpuLoad").textContent = r.load1.toFixed(2);
-  fillBar("#ramBar", 16, r.memPct);
-  fillBar("#cpuBar", 12, r.cpu);
+  fillBar("#ramBar", 16, ramFree);
+  fillBar("#cpuBar", 12, cpuFree);
 }
 
 function tri(sym, label, cls) {

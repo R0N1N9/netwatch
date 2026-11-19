@@ -71,7 +71,7 @@ and reporting, all of it has only seen the built-in simulator.
 
 | Feature | What it does | Status | Proven by | Needs / limits |
 |---|---|---|---|---|
-| **Live RAM and CPU bars** | Header bars show real usage of the host. | ✅ | Compared with `free` | Linux `/proc`. |
+| **Live RAM and CPU gauges** | Header bars show how much of the host's memory and processor is still free: full when idle, draining as it is used, red when under 15% is left. | ✅ | Compared with `free` | Linux `/proc`. |
 | **USB watch** | Alerts on a newly attached USB device; calls out keyboards. | 🧪 | Tests on a fake device tree | No real plug-in event has been observed. |
 | **Keystroke-injection check** | Flags a new keyboard typing faster than a person can. | 🧪 rate rule · 🔧 input reading | Unit test of the rate rule | Reading `/dev/input` has never run; needs permission to read it. |
 | **Daily surface diff** | Compares listening ports, start-up entries, hosts and USB devices with the previous day. | ✅ sources · 🧪 diff | Sources read on the development machine; diff and storage unit-tested | Needs a previous day's snapshot to be useful. |

@@ -84,8 +84,9 @@ The console opens at `http://127.0.0.1:7979`.
 ![Watchtower](screens/watchtower.jpg)
 
 - **Top bar** — deck tabs, watch status, clock.
-- **Strip below it** — a link trace that turns red on intrusion; live **RAM**
-  and **CPU** of this machine (red above 85%); host integrity, packets per
+- **Strip below it** — a link trace that turns red on intrusion; **RAM** and
+  **CPU** gauges showing what this machine has left (full when idle, draining
+  as it is used, red when under 15% remains); host integrity, packets per
   second and threat count; **PROX LOCK** and **AUDIO** switches.
 - **Time scrubber** (above the ticker) — drag back to replay the console's
   recent state. Ticks mark alerts; red is critical. Controls lock while you are

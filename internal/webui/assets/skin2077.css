@@ -282,7 +282,7 @@ body.replay .btn-row, body.replay .field { opacity: 0.35; pointer-events: none; 
 
 /* resource bars: real RAM and CPU of the host running NetWatch */
 .hs-center { display: flex; gap: 30px; }
-.ram i.off { background: transparent; border: 1px solid rgba(94, 246, 255, 0.28); box-shadow: none; }
+.ram i.off { background: transparent; border: 1px solid rgba(255, 84, 73, 0.4); box-shadow: none; } /* spent */
 .ram i.hot { background: linear-gradient(180deg, #ff9a92, #ff5449); box-shadow: 0 0 8px rgba(255, 84, 73, 0.6); }
 .ram i { transition: background 0.3s, box-shadow 0.3s; }
 
