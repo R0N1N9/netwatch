@@ -73,14 +73,12 @@ The console opens at `http://127.0.0.1:7979`.
 
 ### Environment
 
-`NETWATCH_ESPTOOL` — the full path to `esptool`, if NetWatch cannot find it by
-itself when flashing a board.
-
 | Variable | Meaning |
 |---|---|
 | `NETWATCH_LLM` | `off` forces the Copilot's built-in rules. |
 | `NETWATCH_LLM_URL` | Ollama address (default `http://127.0.0.1:11434`). |
 | `NETWATCH_LLM_MODEL` | Model name (default: the first one installed). |
+| `NETWATCH_ESPTOOL` | Full path to `esptool`, if NetWatch cannot find it by itself when flashing a board. |
 
 ---
 
