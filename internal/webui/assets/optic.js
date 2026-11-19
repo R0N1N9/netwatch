@@ -9,10 +9,10 @@ const bzSpan = () => (bz.times.length ? [bz.times[0], bz.times[bz.times.length -
 function bzScene() {
   if (bz.kind === "clip") return danceClipScene(bz.clip, danceIndex(bz.times, bz.at));
   const v = bz.room || {};
-  if (bz.kind !== "phone") return { layout: v.layout || {}, walls: v.walls || [], nodes: v.nodes || [], hosts: v.hosts || [], est: v.est && v.est.ok ? v.est : null };
+  if (bz.kind !== "phone") return { layout: v.layout || {}, walls: v.walls || [], nodes: v.nodes || [], hosts: v.hosts || [], est: v.est && v.est.ok ? v.est : null, people: v.people || 0 };
   const i = danceIndex(bz.times, bz.at), f = bz.frames[i];
-  // the room is drawn as it is now; only the phone's own position, heading and what was in view are from then
-  return { layout: v.layout || {}, walls: v.walls || [], nodes: (v.nodes || []).map((n) => ({ node: n.node, state: "clear", score: 0 })), hosts: (v.hosts || []).map((h) => ({ name: h.name || h.ip, x: h.x, y: h.y, hot: h.mac === f.g })), est: null,
+  // devices and nodes are drawn where they are now; the phone's position, heading, what was in view and where movement was are from then
+  return { layout: v.layout || {}, walls: v.walls || [], nodes: (v.nodes || []).map((n) => ({ node: n.node, state: "clear", score: 0 })), hosts: (v.hosts || []).map((h) => ({ name: h.name || h.ip, x: h.x, y: h.y, hot: h.mac === f.g })), est: f.e ? { x: f.e[0], y: f.e[1] } : null,
     phone: { x: f.x, y: f.y, heading: f.h, fov: v.fov || 62, seen: f.s || [], path: bz.frames.slice(Math.max(0, i - 160), i + 1), label: bz.name.toUpperCase() }, frame: f };
 }
 // The first-person view: the things that were in front of the phone, placed where its X-RAY would have drawn them.
@@ -41,7 +41,8 @@ function bzInfo(sc) {
   const [t0, t1] = bzSpan(), clock = (ms) => new Date(ms).toLocaleTimeString("en-GB");
   if (bz.kind === "clip") {
     const hot = sc.nodes.filter((n) => n.state === "motion").map((n) => n.node.toUpperCase() + " " + Math.round(n.score));
-    return { time: clock(bz.at) + " · " + mmss(bz.at - t0) + " / " + mmss(t1 - t0), line: hot.length ? "MOVEMENT · " + hot.join(" · ") : "nothing moving", hot: hot.length > 0 };
+    const still = sc.nodes.filter((n) => n.state !== "motion" && n.breath > 0).length, count = sc.people ? " · ≈ " + sc.people + (sc.people === 1 ? " person" : " people") : "";
+    return { time: clock(bz.at) + " · " + mmss(bz.at - t0) + " / " + mmss(t1 - t0), line: (hot.length ? "MOVEMENT · " + hot.join(" · ") : still ? "someone keeping still" : "nobody sensed") + count, hot: hot.length > 0 };
   }
   if (bz.kind === "phone") {
     const f = sc.frame, tabs = { find: "FIND", xray: "X-RAY", dance: "BD", alerts: "ALERTS" };
@@ -49,9 +50,12 @@ function bzInfo(sc) {
     const tgt = f.g && (bz.room.hosts || []).find((h) => h.mac === f.g);
     if (tgt) { const r = xrayTurn(f, tgt, f.h); line = "FIND → " + (tgt.name || tgt.ip) + " · " + r.dist.toFixed(1) + " m · " + xrayHint(r.turn, r.dist) + " · heading " + Math.round(f.h) + "°"; }
     line += (f.s || []).length ? " · IN VIEW: " + f.s.map((s) => s.l + " " + s.d.toFixed(1) + " m").join(", ") : " · nothing known in view";
-    return { time: clock(bz.at) + " · " + mmss(bz.at - t0) + " / " + mmss(t1 - t0), line, hot: false };
+    if (f.e) line += " · SOMEONE MOVING " + xrayBearing(f, { x: f.e[0], y: f.e[1] }).dist.toFixed(1) + " m from the phone";
+    return { time: clock(bz.at) + " · " + mmss(bz.at - t0) + " / " + mmss(t1 - t0), line, hot: !!f.e };
   }
-  return { time: "LIVE", line: "the room as the sensor nodes see it now — pick a phone view or a room clip to replay it. Drag to turn, scroll to zoom.", hot: false };
+  const moving = (sc.nodes || []).filter((n) => n.state === "motion").map((n) => n.node.toUpperCase() + " " + Math.round(n.score)), stillNow = (sc.nodes || []).filter((n) => n.state !== "motion" && n.breath > 0).length;
+  const who = moving.length ? "MOVEMENT NOW · " + moving.join(" · ") : stillNow ? "someone keeping still" : (sc.nodes || []).length ? "nobody sensed right now" : "no sensor nodes are reporting";
+  return { time: "LIVE", line: who + (sc.people ? " · ≈ " + sc.people + (sc.people === 1 ? " person" : " people") : "") + " — pick a phone view or a room clip to replay it. Drag to turn, scroll to zoom.", hot: moving.length > 0 };
 }
 function bzDraw() {
   const sc = bzScene(); danceDraw($("#bzStage"), sc, bz.cam, performance.now());
@@ -139,7 +143,10 @@ $("#bzLive").onclick = () => { bz.live = !bz.live; bz.playing = false; bzButtons
 $("#bzSonar").onclick = () => { if (bz.kind === "clip") bdOpen(bz.id); };
 $("#bzClose").onclick = bzClose;
 danceOrbit($("#bzStage"), bz.cam, () => { if (!bz.loop) bzDraw(); });
-setInterval(() => { if (currentDeck() === "braindance" && bz.kind === "phone" && bz.live && !document.hidden) bzMore(); }, 700); // a live view keeps up between the slower list refreshes
+setInterval(async () => { // a live phone view and the live room keep up between the slower list refreshes
+  if (currentDeck() !== "braindance" || document.hidden) return;
+  if (bz.kind === "phone" && bz.live) bzMore(); else if (!bz.kind) { const v = await get("/api/sonar"); if (v && !bz.kind) bz.room = v; }
+}, 700);
 
 MOD_DECKS.braindance = bzLoad;
 Object.assign(DECK_WORDS, { braindance: "braindance", "brain dance": "braindance", bd: "braindance", recordings: "braindance", "phone views": "braindance", "phone view": "braindance" });

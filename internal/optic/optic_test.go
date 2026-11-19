@@ -57,7 +57,15 @@ func TestAddCleansAndLimits(t *testing.T) {
 	if got := r.Trail("10.0.0.5", 0)[1]; len(got.Seen) != 1 || got.Seen[0].Label != "AP" {
 		t.Fatalf("what was in view should be worked out on arrival: %+v", got)
 	}
-	if got := r.Trail("10.0.0.5", now.UnixMilli()); len(got) != 1 {
+	r.Add("10.0.0.5", "pixel", Frame{Presence: &[2]float64{9, 9}}, append(things, Thing{Kind: "presence", Label: "PRESENCE", X: 0.3, Y: 0.4}), now.Add(600*time.Millisecond))
+	fr := r.Trail("10.0.0.5", 0)
+	if p := fr[2].Presence; p == nil || p[0] != 0.3 || p[1] != 0.4 {
+		t.Fatalf("where the movement was should come from the console's map, not the phone: %v", p)
+	}
+	if fr[1].Presence != nil {
+		t.Fatalf("no movement, no presence: %v", fr[1].Presence)
+	}
+	if got := r.Trail("10.0.0.5", now.UnixMilli()); len(got) != 2 {
 		t.Fatalf("since should return only newer frames, got %d", len(got))
 	}
 	for i := 0; i < maxFrames+50; i++ {

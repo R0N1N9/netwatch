@@ -48,6 +48,9 @@ func TestDanceSceneHasThePlanAndWhereTheMovementWas(t *testing.T) {
 	if len(est) != 50 || est[0] != nil || est[49] == nil {
 		t.Fatalf("est should be null while nothing moved and set once it did: first %v last %v (n=%d)", est[0], est[49], len(est))
 	}
+	if n := v["people"].([]int); n[0] != 0 || n[49] != 1 {
+		t.Errorf("head count should follow the movement: first %d last %d", n[0], n[49])
+	}
 	if p := est[49]; p[0] < 0.2 || p[0] > 0.8 || p[1] != 0 {
 		t.Errorf("movement on the AP–node link should be placed between them, got %v", *p)
 	}

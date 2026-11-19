@@ -38,13 +38,13 @@ function danceClipScene(clip, i) {
   const smp = clip.samples[i] || { n: [] }, trail = [];
   for (let k = Math.max(0, i - 45); k <= i; k++) { const e = clip.est[k]; if (e) trail.push({ x: e[0], y: e[1] }); }
   const e = clip.est[i];
-  return { layout: clip.layout || {}, walls: clip.walls || [], nodes: (smp.n || []).map((q) => ({ node: q.n, state: q.s, score: q.v, breath: q.b || 0 })), hosts: [], est: e ? { x: e[0], y: e[1] } : null, trail: e ? trail : [] };
+  return { layout: clip.layout || {}, walls: clip.walls || [], nodes: (smp.n || []).map((q) => ({ node: q.n, state: q.s, score: q.v, breath: q.b || 0 })), hosts: [], est: e ? { x: e[0], y: e[1] } : null, trail: e ? trail : [], people: (clip.people || [])[i] || 0 };
 }
 
 // Draw a scene:
 //   layout {name: {x, y}} ("@ap" is the access point), walls [{a, b}],
 //   nodes [{node, state, score, breath}], hosts [{name, x, y, hot}],
-//   est {x, y} or null, trail [{x, y}],
+//   est {x, y} or null (where movement is), trail [{x, y}], people (rough head count),
 //   phone {x, y, heading, fov, seen: [{x, y}], path: [{x, y}], label}
 // now is a clock in milliseconds for the pulsing parts.
 function danceDraw(c, scene, cam, now) {
@@ -101,7 +101,16 @@ function danceDraw(c, scene, cam, now) {
     const p = lay[n.node]; if (!p) return;
     const hot = n.state === "motion", color = hot ? C.red : n.state === "offline" ? "rgba(189,249,255,0.35)" : C.green;
     if (hot) ring(p.x, p.y, 0.06 + 0.1 * pulse, null, "rgba(255,84,73,0.8)", 1.5);
-    pillar(p.x, p.y, 0.23, color, String(n.node).toUpperCase() + (hot ? " · " + Math.round(n.score) : n.breath > 0 ? " · STILL " + Math.round(n.breath) + "/MIN" : ""), 4);
+    pillar(p.x, p.y, 0.23, color, String(n.node).toUpperCase() + (hot ? " · " + Math.round(n.score) : ""), 4);
+    if (ap && n.breath > 0 && !hot) { // someone keeping still on this link: breathing was found, so they are drawn seated between the two ends
+      const sx = (ap.x + p.x) / 2, sy = (ap.y + p.y) / 2;
+      ring(sx, sy, 0.07 + 0.02 * pulse, "rgba(94,246,255,0.12)", "rgba(94,246,255,0.7)", 1.2);
+      tall.push({ d: P(sx, sy, 0)[2], draw: () => {
+        const feet = P(sx, sy, 0), neck = P(sx, sy, 0.2), head = P(sx, sy, 0.25);
+        g.shadowColor = C.cyan; g.shadowBlur = 12; line(feet, neck, C.cyan, 4); g.fillStyle = C.cyan; g.beginPath(); g.arc(head[0], head[1], 4.5, 0, 6.2832); g.fill(); g.shadowBlur = 0;
+        label(head, "STILL · " + Math.round(n.breath) + "/MIN", C.cyan, -10);
+      } });
+    }
   });
   (scene.hosts || []).forEach((h) => pillar(h.x, h.y, 0.16, h.hot ? C.red : C.cyan, String(h.name || h.ip || ""), h.hot ? 5 : 3));
   if (scene.est) {
@@ -115,6 +124,10 @@ function danceDraw(c, scene, cam, now) {
   }
   if (ph) pillar(ph.x, ph.y, 0.3, "#ffffff", ph.label || "PHONE", 5);
   tall.sort((a, b) => a.d - b.d).forEach((t) => t.draw());
+  if (scene.people > 0) { // the rough head count SONAR gives, in the corner
+    g.font = "700 " + (fs + 2) + "px Rajdhani, system-ui, sans-serif"; g.textAlign = "left"; g.fillStyle = scene.est ? C.red : C.cyan;
+    g.fillText("≈ " + scene.people + (scene.people === 1 ? " PERSON" : " PEOPLE") + (scene.est ? " · MOVING" : " · STILL"), 10, fs + 10);
+  }
 }
 
 // Drag to turn the room, drag up and down to tilt it, wheel or pinch-free zoom.

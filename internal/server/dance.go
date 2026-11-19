@@ -42,7 +42,8 @@ func (s *Server) danceList() map[string]any {
 
 // danceScene is one clip ready to draw: its samples, the room as it was drawn
 // when the clip was cut (or as it is now, for clips saved before the plan was
-// kept), and where the movement was at each sample (null when nothing moved).
+// kept), where the movement was at each sample (null when nothing moved) and
+// the rough head count at each sample.
 func (s *Server) danceScene(id string) (map[string]any, bool) {
 	c, ok := s.bd.Load(id)
 	if !ok {
@@ -60,17 +61,19 @@ func (s *Server) danceScene(id string) (map[string]any, bool) {
 		walls = s.wallSegs()
 	}
 	est := make([]*[2]float64, len(c.Samples))
+	people := make([]int, len(c.Samples))
 	for i, smp := range c.Samples {
 		nodes := make([]sonar.NodeState, 0, len(smp.Nodes))
 		for _, n := range smp.Nodes {
 			nodes = append(nodes, sonar.NodeState{Node: n.Node, State: n.State, Score: n.Score, Breath: n.Breath, DistM: n.DistM})
 		}
+		people[i] = sonar.People(nodes, lay)
 		if p, ok := sonar.Estimate(nodes, lay); ok {
 			est[i] = &[2]float64{math.Round(p.X*1000) / 1000, math.Round(p.Y*1000) / 1000}
 		}
 	}
 	return map[string]any{"id": c.ID, "name": c.Name, "start": c.Start, "end": c.End, "peak": c.Peak, "auto": c.Auto,
-		"layout": lay, "walls": walls, "planThen": planThen, "samples": c.Samples, "est": est}, true
+		"layout": lay, "walls": walls, "planThen": planThen, "samples": c.Samples, "est": est, "people": people}, true
 }
 
 func (s *Server) handleDanceScene(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +192,7 @@ func (s *Server) handleOpticTrail(w http.ResponseWriter, r *http.Request) {
 	since, _ := strconv.ParseInt(q.Get("since"), 10, 64)
 	v := s.sonarView()
 	writeJSON(w, map[string]any{"phone": q.Get("phone"), "frames": s.opt.Trail(q.Get("phone"), since),
-		"layout": v["layout"], "walls": v["walls"], "nodes": v["nodes"], "hosts": v["hosts"], "est": v["est"], "fov": optic.FOV})
+		"layout": v["layout"], "walls": v["walls"], "nodes": v["nodes"], "hosts": v["hosts"], "est": v["est"], "people": v["people"], "fov": optic.FOV})
 }
 
 // demoOptic walks a sample phone round the demo room so the BRAINDANCE deck

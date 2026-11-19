@@ -628,7 +628,10 @@ compare. Press **START**.
   and any movement, which you turn and tilt by dragging. Under it is the list
   of **recordings** (the console's SONAR clips): tap one and it plays in the
   same model, with a figure where the movement was, a play/pause button, a
-  slider to scrub and a speed button. Clips are played from the console; the
+  slider to scrub and a speed button. People are drawn exactly as in the
+  console's [BRAINDANCE deck](#braindance): a red figure where someone is
+  moving, a seated cyan one where someone is keeping still, and a rough head
+  count in the corner — live (about every second) and in recordings. Clips are played from the console; the
   phone stores nothing.
 
   ![BD on a phone](screens/phone-bd.jpg)
@@ -676,8 +679,27 @@ the room — drag to turn and tilt it, scroll to zoom:
   redraw the room. **↗ SONAR** replays the same clip in the SONAR deck's 3-D
   room instead.
 
-With nothing open the deck shows the live room. If a phone is sharing when
-you open the deck, it is shown straight away.
+With nothing open the deck shows the live room, refreshed about every second.
+If a phone is sharing when you open the deck, it is shown straight away.
+
+**People in the model.** Every view — live room, room clip and phone view, on
+the desktop and on the phone — shows what SONAR knows about people, the same
+way the SONAR deck does:
+
+- a red **figure** labelled PRESENCE where movement is placed, with a short
+  trail behind it, and the links it is disturbing turning red;
+- a smaller cyan **seated figure** labelled STILL with a breathing rate, on a
+  link where someone is keeping still;
+- a **head count** in the top-left corner (*≈ 2 PEOPLE · MOVING*), and the
+  same in the line under the model.
+
+In a phone view the figure is where movement was at that moment of the
+recording, and the line says how far it was from the phone. Three things to
+know: there is **one** movement figure even when the count says two people —
+it is placed at the blend of the disturbed links, so with two people moving it
+sits between them; the head count is rough (links pointing the same way from
+the access point are counted as one person); and a position is only as good
+as where you placed the nodes on the map.
 
 The walls are the ones **you draw** in SONAR's floor-plan tool (or the plain
 square if you have drawn none). NetWatch does not work out walls or furniture

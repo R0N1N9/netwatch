@@ -54,6 +54,9 @@ type Frame struct {
 	Mode    string  `json:"m"`           // the tab that was open: alerts | find | xray | dance
 	Target  string  `json:"g,omitempty"` // the device being looked for in FIND
 	Seen    []Seen  `json:"s,omitempty"`
+	// Presence is where SONAR placed movement in the room at that moment, if
+	// anything was moving. Like Seen it is filled in by the console, never by the phone.
+	Presence *[2]float64 `json:"e,omitempty"`
 }
 
 // Summary describes one phone's trail.
@@ -149,6 +152,12 @@ func (r *Recorder) Add(phone, name string, f Frame, things []Thing, now time.Tim
 		f.Target = ""
 	}
 	f.Seen = InView(f.X, f.Y, f.Heading, things)
+	f.Presence = nil
+	for _, th := range things {
+		if th.Kind == "presence" {
+			f.Presence = &[2]float64{th.X, th.Y}
+		}
+	}
 	t.name, t.last = name, now
 	t.frames = append(t.frames, f)
 	if len(t.frames) > maxFrames {

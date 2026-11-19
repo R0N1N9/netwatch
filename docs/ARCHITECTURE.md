@@ -37,7 +37,7 @@ step.
 | `audit` | Read-only host inspection: listeners, start-up entries, connections, process lineage, EICAR string. |
 | `sonar` | CSI presence engine, breathing, activity, ranging, radio location, room geometry, sleep log, simulator. |
 | `braindance` | Rolling buffer of the presence field and the clip library. A clip carries the node layout and the walls as drawn when it was cut. |
-| `optic` | Phone views: a capped, in-memory trail per phone of where it stood and faced, and the geometry that works out which known things were inside its field of view. Only numbers are accepted from the phone; labels come from the console's own map. |
+| `optic` | Phone views: a capped, in-memory trail per phone of where it stood and faced, where SONAR placed movement at that moment, and the geometry that works out which known things were inside its field of view. Only numbers are accepted from the phone; labels come from the console's own map. |
 | `hostwatch` | USB watch, typing-rate rule, daily surface snapshots and diff, screen lock. |
 | `sysmon` | CPU and memory of this machine. |
 | `drill` | The detector fire drill. |
@@ -91,7 +91,7 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/sonar/ingest` | Accept sensor frames over HTTP (UDP is the normal path). |
 | `/api/sonar/arm`, `/layout`, `/map`, `/sleep` | Arm, save node positions, save walls and tripwires, read the respiration log. |
 | `/api/braindance`, `/save`, `/rec`, `/clip`, `/delete` | List, save, record, load and delete clips. |
-| `/api/braindance/scene?id=` | A clip ready to draw: samples, layout, walls (the clip's own, or today's for older clips) and the movement estimate for each sample. |
+| `/api/braindance/scene?id=` | A clip ready to draw: samples, layout, walls (the clip's own, or today's for older clips) the movement estimate and the rough head count for each sample. |
 | `/api/optic` · `/api/optic/trail?phone=&since=` | Phone views: `GET` lists them, `POST` `forget` drops one (or `*`); the trail is one phone's frames plus the room as it is now. |
 | `/api/about` | Build stamp, the binary's path, the checkout it was built in and the data directory, for the UPDATE card. |
 | `/api/usb`, `/api/surface`, `/api/drill`, `/api/lock` | USB list, surface diff, fire drill, lock the screen. |

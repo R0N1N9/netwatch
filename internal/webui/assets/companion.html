@@ -133,7 +133,7 @@ async function sensorsOn() { // compass access needs a tap on iPhones; harmless 
 function showTab(name) {
   [["alerts", "tabA"], ["find", "tabF"], ["xr", "tabX"], ["bd", "tabB"]].forEach(([sec, tab]) => { $("#" + sec).hidden = sec !== name; $("#" + tab).className = sec === name ? "on" : ""; });
   clearInterval(xr.timer); clearInterval(fd.timer); clearInterval(bd.timer);
-  if (name === "bd") { bdList(); bdLive(); bd.timer = setInterval(() => { bdList(); bdLive(); }, 2500); bd.last = performance.now(); requestAnimationFrame(bdFrame); }
+  if (name === "bd") { bdList(); bdLive(); let n = 0; bd.timer = setInterval(() => { bdLive(); if (++n % 4 === 0) bdList(); }, 700); bd.last = performance.now(); requestAnimationFrame(bdFrame); }
   if (name === "xr") { sensorsOn(); xr.timer = setInterval(xrPoll, 500); xrPoll(); }
   if (name === "find") { sensorsOn(); fd.timer = setInterval(fdPoll, 700); fdPoll(); }
 }
@@ -150,13 +150,18 @@ const q = (path) => path + (path.includes("?") ? "&" : "?") + "code=" + encodeUR
 function bdScene() {
   if (bd.clip) return danceClipScene(bd.clip, danceIndex(bd.times, bd.clip.start + bd.pos));
   const v = bd.live || {};
-  return { layout: v.layout || {}, walls: v.walls || [], nodes: v.nodes || [], hosts: v.hosts || [], est: v.est && v.est.ok ? v.est : null, phone: bd.share ? { x: xr.pose.x, y: xr.pose.y, heading: xr.pose.heading, label: "YOU" } : null };
+  return { layout: v.layout || {}, walls: v.walls || [], nodes: v.nodes || [], hosts: v.hosts || [], est: v.est && v.est.ok ? v.est : null, people: v.people || 0, phone: bd.share ? { x: xr.pose.x, y: xr.pose.y, heading: xr.pose.heading, label: "YOU" } : null };
 }
 function bdDraw() {
   const sc = bdScene(); danceDraw($("#bdStage"), sc, bd.cam, performance.now());
-  if (!bd.clip) return;
+  if (!bd.clip) { // the live room: say whether anyone is sensed
+    if (!bd.live) return;
+    const still = (sc.nodes || []).some((n) => n.state !== "motion" && n.breath > 0);
+    $("#bdTime").textContent = "LIVE · " + (sc.est ? "MOVEMENT" : still ? "someone keeping still" : (sc.nodes || []).length ? "nobody sensed" : "no sensor nodes reporting") + (sc.people ? " · ≈ " + sc.people + (sc.people === 1 ? " person" : " people") : "") + " · drag to turn";
+    $("#bdTime").className = sc.est ? "hot" : ""; return;
+  }
   $("#bdSeek").value = Math.round((bd.pos / bd.dur) * 1000);
-  $("#bdTime").textContent = new Date(bd.clip.start + bd.pos).toLocaleTimeString("en-GB") + " · " + mmss(bd.pos) + " / " + mmss(bd.dur) + (sc.est ? " · MOVEMENT" : "");
+  $("#bdTime").textContent = new Date(bd.clip.start + bd.pos).toLocaleTimeString("en-GB") + " · " + mmss(bd.pos) + " / " + mmss(bd.dur) + (sc.est ? " · MOVEMENT" : "") + (sc.people ? " · ≈ " + sc.people + (sc.people === 1 ? " person" : " people") : "");
   $("#bdTime").className = sc.est ? "hot" : "";
 }
 function bdFrame(now) {
