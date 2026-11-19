@@ -18,6 +18,13 @@
 // If the access point is an 802.11mc (FTM) responder, the node also measures
 // its distance to it every couple of seconds and includes it as dist_cm.
 //
+// The board's own RGB light shows what it is doing:
+//   blinking blue    joining your Wi-Fi
+//   steady green     joined and streaming (it goes dark after 30 seconds, then
+//                    gives one faint green blink every ten seconds)
+//   blinking red     cannot join: wrong password, or the network is 5 GHz only
+//   blinking purple  it has no settings: flash it from NetWatch
+//
 // STATUS: compiles with ESP-IDF v5.3.2 in CI, but has NOT yet run on
 // hardware. Expect to find problems the first time a board boots it.
 
@@ -37,6 +44,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "led_strip.h"
 #include "lwip/sockets.h"
 #include "nvs_flash.h"
 #include "ping/ping_sock.h"
@@ -63,6 +71,59 @@ static const char *TAG = "csi_node";
 static char s_node_name[24] = "node";
 #define NODE_NAME s_node_name
 static struct sockaddr_in s_dst; // where frames go: the NetWatch console
+
+// ---- status light ----
+// ESP32-S3-DevKitC-1 boards carry one addressable RGB LED, on GPIO48 (v1.0) or
+// GPIO38 (v1.1). Both pins are driven; a board with no LED is unaffected.
+#define STATUS_LED_GPIO_A 48
+#define STATUS_LED_GPIO_B 38
+enum { LED_JOINING, LED_ONLINE, LED_CANNOT_JOIN, LED_NO_SETTINGS };
+static led_strip_handle_t s_led[2];
+static volatile int s_led_state = LED_JOINING;
+static volatile int s_wifi_fails;
+static volatile int64_t s_online_us;
+static bool s_have_settings;
+
+static void led_set(uint8_t r, uint8_t g, uint8_t b) {
+    for (int i = 0; i < 2; i++) {
+        if (s_led[i]) {
+            led_strip_set_pixel(s_led[i], 0, r, g, b);
+            led_strip_refresh(s_led[i]);
+        }
+    }
+}
+
+static void led_task(void *arg) {
+    const int pins[2] = {STATUS_LED_GPIO_A, STATUS_LED_GPIO_B};
+    for (int i = 0; i < 2; i++) {
+        led_strip_config_t cfg = {.strip_gpio_num = pins[i], .max_leds = 1, .led_pixel_format = LED_PIXEL_FORMAT_GRB, .led_model = LED_MODEL_WS2812};
+        led_strip_rmt_config_t rmt = {.resolution_hz = 10 * 1000 * 1000};
+        if (led_strip_new_rmt_device(&cfg, &rmt, &s_led[i]) != ESP_OK) {
+            s_led[i] = NULL;
+        }
+    }
+    for (int tick = 0;; tick++) {
+        bool on = (tick / 3) % 2 == 0; // about three blinks a second
+        switch (s_led_state) {
+        case LED_ONLINE:
+            if (esp_timer_get_time() - s_online_us < 30000000) {
+                led_set(0, 24, 0);
+            } else {
+                led_set(0, tick % 66 == 0 ? 12 : 0, 0); // dark, with a heartbeat
+            }
+            break;
+        case LED_CANNOT_JOIN:
+            led_set(on ? 40 : 0, 0, 0);
+            break;
+        case LED_NO_SETTINGS:
+            led_set(on ? 24 : 0, 0, on ? 24 : 0);
+            break;
+        default:
+            led_set(0, 0, on ? 40 : 0);
+        }
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
+}
 
 // ---- settings written by NetWatch when it flashes the board ----
 // NetWatch stores a small text block in the "nwcfg" partition:
@@ -95,6 +156,7 @@ static void load_config(void) {
         ESP_LOGW(TAG, "no settings from NetWatch on this board; using the ones compiled in");
         return;
     }
+    s_have_settings = true;
     blob[512] = 0;
     cfg_value(blob + 6, "ssid", s_cfg_ssid, sizeof(s_cfg_ssid));
     cfg_value(blob + 6, "pass", s_cfg_pass, sizeof(s_cfg_pass));
@@ -384,9 +446,15 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
         return;
     }
     if (base == WIFI_EVENT && (id == WIFI_EVENT_STA_START || id == WIFI_EVENT_STA_DISCONNECTED)) {
+        if (id == WIFI_EVENT_STA_DISCONNECTED && ++s_wifi_fails >= 3 && s_led_state != LED_NO_SETTINGS) {
+            s_led_state = LED_CANNOT_JOIN;
+        }
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *ev = (ip_event_got_ip_t *)data;
+        s_wifi_fails = 0;
+        s_online_us = esp_timer_get_time();
+        s_led_state = LED_ONLINE;
         start_csi();
         start_gateway_ping(ev->ip_info.gw);
     }
@@ -400,6 +468,10 @@ void app_main(void) {
     snprintf(s_cfg_name, sizeof(s_cfg_name), "%s", NODE_NAME_FIXED);
     s_cfg_port = NETWATCH_PORT;
     load_config();
+    if (!s_have_settings && strcmp(WIFI_SSID, "your-ssid") == 0) {
+        s_led_state = LED_NO_SETTINGS; // nothing from NetWatch and nothing filled in by hand
+    }
+    xTaskCreate(led_task, "status_led", 3072, NULL, 2, NULL);
     s_dst.sin_family = AF_INET;
     s_dst.sin_port = htons(s_cfg_port);
     inet_pton(AF_INET, s_cfg_host, &s_dst.sin_addr);
