@@ -26,6 +26,7 @@ function selectDeck(name) {
   else $("#reticle").hidden = true;
   if (name === "grid") setTimeout(() => { initGlobe(); if (globe && globe.resize) globe.resize(); loadGlobe(); }, 40);
   if (name === "ar") renderARTags();
+  if (name === "sonar") bdRefresh();
   if (name === "sonar") setTimeout(() => { if (!sonarMode) setSonarMode(sonarPref()); sonarResize(); }, 40);
 }
 function currentDeck() { return document.querySelector(".tab.active").dataset.deck; }
@@ -35,7 +36,9 @@ async function post(path, body) {
   try {
     const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    return await r.json();
+    const j = await r.json();
+    if (j && j.ok === false && j.error) status(j.error);
+    return j;
   } catch (e) {
     status("offline: " + e.message);
     return null;
@@ -64,6 +67,7 @@ function render() {
   $("#segMeta").textContent = `${m.iface || "--"} · ${m.subnet || "--"}`;
   $("#statusText").textContent = replay ? "REPLAY" : m.sweeping ? "SCANNING" : (m.watching ? "WATCH ACTIVE" : "IDLE");
   if (m.copilot) $("#cpBackend").textContent = m.copilot;
+  renderGate(m.gate);
   const dot = $("#statusDot"); dot.className = "dot" + (threats() > 0 ? " crit" : m.sweeping ? " warn" : "");
 
   $("#hostCount").textContent = STATE.devices.length;
@@ -148,6 +152,7 @@ function selectDevice(ip) {
   $("#btnTrust").textContent = d && d.trusted ? "◈ UNTRUST" : "◈ TRUST";
   $("#bwTarget").innerHTML = d ? "target: <b>" + esc(d.ip) + "</b> " + (d.hostname ? "(" + esc(d.hostname) + ")" : "") : "no host selected";
   fillTarget(d);
+  $("#gateSet").disabled = !d || d.self || d.gateway;
   $("#btnQuarantine").disabled = !d || d.self || d.gateway || d.quarantined;
   $("#btnRelease").disabled = !d || !d.quarantined;
   renderDevices();
@@ -394,6 +399,7 @@ const KILLCHAIN = [
     { side: "red", ttl: "Beacon-profile brief", att: "T1071", type: "info", info: ["Beacons = periodic low-jitter callbacks on app-layer protocols / odd ports / DNS tunnels.", "PLANNING ONLY — no C2 implant is generated. Hunt for it with the BLUE tools."] },
     { side: "blue", ttl: "Established peers", att: "T1071", type: "api", endpoint: "/api/kc/connections", btn: "HUNT" },
     { side: "blue", ttl: "Non-standard listeners", att: "T1571", type: "api", endpoint: "/api/kc/listeners", btn: "AUDIT" },
+    { side: "blue", ttl: "Process lineage", att: "T1071", type: "api", endpoint: "/api/kc/lineage", btn: "TRACE" },
   ]},
   { name: "ACTIONS", attck: "T1041 · T1048 · T1486", actions: [
     { side: "red", ttl: "Exfil scenario brief", att: "T1041", type: "info", info: ["Exfil over C2 channel, over alternate protocol (DNS/ICMP), or to cloud storage.", "PLANNING ONLY. Detect it below by watching large/odd outbound flows."] },
@@ -450,6 +456,7 @@ const ATTACK = [
     { side: "red", ttl: "Beacon-profile brief", att: "T1071", type: "info", info: ["Periodic low-jitter callbacks, non-standard ports, DNS tunnels.", "PLANNING ONLY — no implant is generated."] },
     { side: "blue", ttl: "Established peers", att: "T1071", type: "api", endpoint: "/api/kc/connections", btn: "HUNT" },
     { side: "blue", ttl: "Non-standard listeners", att: "T1571", type: "api", endpoint: "/api/kc/listeners", btn: "AUDIT" },
+    { side: "blue", ttl: "Process lineage", att: "T1071", type: "api", endpoint: "/api/kc/lineage", btn: "TRACE" },
   ]},
   { name: "EXFIL", attck: "TA0010", actions: [
     { side: "red", ttl: "Exfil-channel brief", att: "T1041", type: "info", info: ["Over the C2 channel, an alternate protocol (DNS/ICMP), or cloud storage.", "PLANNING ONLY."] },
@@ -579,11 +586,11 @@ function mkDot(pos, color, r) {
   m.position.copy(pos); return m;
 }
 async function loadGlobe() {
-  if (!globe) return;
   const res = await post("/api/globe");
   const pts = (res && res.points) || [];
-  while (globe.dyn.children.length) globe.dyn.remove(globe.dyn.children[0]);
+  if (globe) while (globe.dyn.children.length) globe.dyn.remove(globe.dyn.children[0]);
   pts.forEach((p) => {
+    if (!globe) return; // no WebGL: the egress list below still works
     const sus = !p.sni || p.port === 8443 || p.port === 9001;
     const col = sus ? 0xff2e4d : 0x00e5ff;
     const pos = latLon(p.lat, p.lon, 1.02);
@@ -594,16 +601,19 @@ async function loadGlobe() {
     globe.dyn.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 })));
   });
   $("#globeMeta").textContent = pts.length + " egress nodes";
-  renderGlobeList(pts);
+  const lin = await get("/api/lineage"), owners = {};
+  ((lin && lin.conns) || []).forEach((c) => { (owners[c.remote] = owners[c.remote] || []).push(c.comm + " · pid " + c.pid); });
+  renderGlobeList(pts, owners);
 }
-function renderGlobeList(pts) {
+function renderGlobeList(pts, owners) {
   const list = $("#globeList"); list.innerHTML = "";
   if (!pts.length) { list.appendChild(el("div", "empty", "no external connections")); return; }
   pts.slice().sort((a, b) => b.bytes - a.bytes).forEach((p) => {
     const sus = !p.sni || p.port === 8443;
     const n = el("div", "gnode" + (sus ? " sus" : ""));
     n.innerHTML = '<span class="d">' + esc(p.dst) + ":" + esc(p.port) + '</span><span class="r">' + esc(p.region) + " · " + fmtBytes(p.bytes) + "</span>" +
-      '<span class="s">' + (p.sni ? esc(p.sni) : "⚠ no SNI — opaque egress") + "</span>";
+      '<span class="s">' + (p.sni ? esc(p.sni) : "⚠ no SNI — opaque egress") + "</span>" +
+      ((owners || {})[p.dst + ":" + p.port] ? '<span class="p">← ' + esc(owners[p.dst + ":" + p.port].join(", ")) + "</span>" : "");
     list.appendChild(n);
   });
 }
@@ -886,6 +896,8 @@ window.addEventListener("resize", drawScrubMarks);
 
 // ================= SONAR: Wi-Fi CSI presence field =================
 let sonarState = { nodes: [], armed: false }, sonarPos = {}, sonarDrag = null;
+let liveSonar = sonarState, sonarShown = {}, layoutSynced = false, layoutSent = 0;
+const dance = { clips: [], recSince: 0, play: null };
 try { sonarPos = JSON.parse(localStorage.getItem("nw.sonarPos") || "{}"); } catch (_) { sonarPos = {}; }
 function sonarXY(name, idx, total) {
   if (!sonarPos[name]) {
@@ -908,7 +920,8 @@ function sonarDraw(t) {
   // sweep rings from the access point
   for (let k = 0; k < 3; k++) { const r = ((t * 0.12 + k / 3) % 1) * S * 1.1; x.strokeStyle = "rgba(29,255,161," + (0.22 * (1 - r / (S * 1.1))) + ")"; x.lineWidth = 2; x.beginPath(); x.arc(ap[0], ap[1], r, 0, 6.283); x.stroke(); }
   nodes.forEach((n, i) => {
-    const np = P(sonarXY(n.node, i, nodes.length));
+    const shown = sonarNodePos(n, i, nodes.length); sonarShown[n.node] = shown;
+    const np = P(shown);
     const hot = n.state === "motion", k = Math.min(1, n.score / 100);
     const dx = np[0] - ap[0], dy = np[1] - ap[1], len = Math.hypot(dx, dy), ang = Math.atan2(dy, dx);
     // the sensed zone is the ellipse around the AP-to-node link
@@ -925,7 +938,8 @@ function sonarDraw(t) {
     x.fillStyle = col; x.shadowColor = col; x.shadowBlur = 18;
     x.beginPath(); x.moveTo(np[0], np[1] - 16); x.lineTo(np[0] + 16, np[1]); x.lineTo(np[0], np[1] + 16); x.lineTo(np[0] - 16, np[1]); x.closePath(); x.fill(); x.shadowBlur = 0;
     x.font = "600 26px Rajdhani, sans-serif"; x.fillStyle = "#bdf9ff"; x.fillText(n.node.toUpperCase(), np[0] + 24, np[1] - 4);
-    x.font = "20px ui-monospace, monospace"; x.fillStyle = col; x.fillText(n.state.toUpperCase() + (n.state === "offline" ? "" : " · " + Math.round(n.score)), np[0] + 24, np[1] + 22);
+    x.font = "20px ui-monospace, monospace"; x.fillStyle = col; x.fillText(n.state.toUpperCase() + (n.state === "offline" ? "" : " · " + Math.round(n.score)) + (n.distM ? " · " + n.distM.toFixed(1) + " m" : ""), np[0] + 24, np[1] + 22);
+    if (n.breath) { x.fillStyle = "#ffb84a"; x.fillText("RESP " + n.breath + "/min — someone still", np[0] + 24, np[1] + 46); }
   });
   // estimated position of the movement, and where it has been
   if (sonarTrail.length) {
@@ -960,9 +974,9 @@ function sonarRenderList() {
     const row = el("div", "snode " + n.state);
     const tr = n.trace || [];
     const pts = tr.map((v, i) => (i / Math.max(1, tr.length - 1) * 120).toFixed(1) + "," + (19 - Math.min(100, v) / 100 * 18).toFixed(1)).join(" ");
-    row.innerHTML = '<div class="top"><span class="nm">' + esc(n.node.toUpperCase()) + '</span><span class="badge ' + (n.state === "motion" ? "bad" : "") + '">' + esc(n.state.toUpperCase()) + '</span><span class="sc">' + Math.round(n.score) + "</span></div>" +
+    row.innerHTML = '<div class="top"><span class="nm">' + esc(n.node.toUpperCase()) + '</span><span class="badge ' + (n.state === "motion" ? "bad" : "") + '">' + esc(n.state.toUpperCase()) + "</span>" + (n.breath ? '<span class="badge resp">RESP ' + esc(n.breath) + "/MIN</span>" : "") + '<span class="sc">' + Math.round(n.score) + "</span></div>" +
       '<div class="bar"><i style="width:' + Math.min(100, n.score) + '%"></i></div>' +
-      '<div class="meta2"><span>RSSI ' + esc(n.rssi) + " dBm · " + esc(n.fps) + ' fps</span><svg viewBox="0 0 120 20"><polyline fill="none" stroke="' + (n.state === "motion" ? "#ff5449" : "#1dffa1") + '" stroke-width="1.2" points="' + pts + '"/></svg></div>';
+      '<div class="meta2"><span>' + (n.rssi == null ? "recorded" : "RSSI " + esc(n.rssi) + " dBm · " + esc(n.fps) + " fps") + (n.distM ? " · " + esc(n.distM.toFixed(1)) + " m" : "") + '</span><svg viewBox="0 0 120 20"><polyline fill="none" stroke="' + (n.state === "motion" ? "#ff5449" : "#1dffa1") + '" stroke-width="1.2" points="' + pts + '"/></svg></div>';
     list.appendChild(row);
   });
 }
@@ -970,10 +984,26 @@ async function sonarPoll() {
   const visible = currentDeck() === "sonar";
   if (!visible && !audioOn) return;
   const r = await get("/api/sonar"); if (!r) return;
+  liveSonar = r;
+  if (!layoutSynced) { // adopt the server's room map once, or seed it with ours
+    layoutSynced = true;
+    if (r.layout && Object.keys(r.layout).length) sonarPos = Object.assign({}, r.layout);
+  }
+  if (dance.play) return;
   sonarState = r;
   const est = sonarEstimate();
   if (est) { sonarTrail.push(est); if (sonarTrail.length > 36) sonarTrail.shift(); } else if (sonarTrail.length) sonarTrail.splice(0, 2);
   if (visible) sonarRenderList();
+  if (visible && Object.keys(sonarPos).length !== layoutSent) pushLayout();
+}
+function pushLayout() { layoutSent = Object.keys(sonarPos).length; post("/api/sonar/layout", { layout: sonarPos }); }
+// A node that reports a Wi-Fi range sits at that distance from the access point; you choose the bearing.
+function sonarNodePos(n, i, total) {
+  const base = sonarXY(n.node, i, total);
+  if (!n.distM) return base;
+  const ap = sonarXY("@ap", 0, 1), dx = base.x - ap.x, dy = base.y - ap.y, len = Math.hypot(dx, dy) || 1;
+  const r = n.distM / S3;
+  return { x: ap.x + (len > 0.001 ? dx / len : 1) * r, y: ap.y + (len > 0.001 ? dy / len : 0) * r };
 }
 $("#sonarArm").addEventListener("click", async () => { await post("/api/sonar/arm", { armed: !sonarState.armed }); sonarPoll(); });
 (function sonarPointer() {
@@ -981,11 +1011,12 @@ $("#sonarArm").addEventListener("click", async () => { await post("/api/sonar/ar
   const norm = (e) => { const r = c.getBoundingClientRect(), S = Math.min(r.width, r.height) / 2; return { x: (e.clientX - r.left - r.width / 2) / S, y: (e.clientY - r.top - r.height / 2) / S }; };
   c.addEventListener("pointerdown", (e) => {
     const m = norm(e); let best = null, bd = 0.09;
-    Object.keys(sonarPos).forEach((k) => { const d = Math.hypot(sonarPos[k].x - m.x, sonarPos[k].y - m.y); if (d < bd) { bd = d; best = k; } });
+    if (dance.play) return;
+    Object.keys(sonarPos).forEach((k) => { const at = sonarShown[k] || sonarPos[k], d = Math.hypot(at.x - m.x, at.y - m.y); if (d < bd) { bd = d; best = k; } });
     if (best) { sonarDrag = best; c.setPointerCapture(e.pointerId); }
   });
   c.addEventListener("pointermove", (e) => { if (sonarDrag) sonarPos[sonarDrag] = norm(e); });
-  c.addEventListener("pointerup", () => { if (sonarDrag) { sonarDrag = null; try { localStorage.setItem("nw.sonarPos", JSON.stringify(sonarPos)); } catch (_) {} } });
+  c.addEventListener("pointerup", () => { if (sonarDrag) { sonarDrag = null; try { localStorage.setItem("nw.sonarPos", JSON.stringify(sonarPos)); } catch (_) {} pushLayout(); } });
 })();
 
 // ---- SONAR: where is the movement? a score-weighted blend of the disturbed links ----
@@ -995,7 +1026,7 @@ function sonarEstimate() {
   let wx = 0, wy = 0, w = 0;
   nodes.forEach((n, i) => {
     if (n.state !== "motion") return;
-    const q = sonarXY(n.node, i, nodes.length);
+    const q = sonarNodePos(n, i, nodes.length);
     wx += (ap.x + q.x) / 2 * n.score; wy += (ap.y + q.y) / 2 * n.score; w += n.score;
   });
   return w > 0 ? { x: wx / w, y: wy / w } : null;
@@ -1070,7 +1101,7 @@ function sonar3dRender(t) {
   const sig = nodes.map((n) => n.node).join("|");
   if (sig !== s3.sig) { s3.sig = sig; while (R.dyn.children.length) R.dyn.remove(R.dyn.children[0]); s3.objs = {}; nodes.forEach((n) => { s3.objs[n.node] = sonar3dNode(n.node); R.dyn.add(s3.objs[n.node].g); }); }
   nodes.forEach((n, i) => {
-    const o = s3.objs[n.node], q = sonarXY(n.node, i, nodes.length);
+    const o = s3.objs[n.node], q = sonarNodePos(n, i, nodes.length);
     const N = new THREE.Vector3(q.x * S3, H, q.y * S3);
     const hot = n.state === "motion", k = Math.min(1, n.score / 100), pulse = hot ? 0.55 + 0.45 * Math.sin(t * 9) : 1;
     const col = n.state === "offline" ? 0x43727e : hot ? 0xff5449 : n.state === "calibrating" ? 0xffb84a : 0x1dffa1;
@@ -1080,7 +1111,7 @@ function sonar3dRender(t) {
     [o.zone, o.wire].forEach((m) => { m.position.copy(mid); m.rotation.y = -Math.atan2(dz, dx); m.scale.set(len / 2 + 0.3, 0.6 + (hot ? k * 0.4 : 0), 0.55 + len * 0.07 + (hot ? k * 0.45 : 0)); m.material.color.setHex(hot ? 0xff5449 : 0x1dffa1); });
     o.zone.material.opacity = hot ? 0.14 + 0.26 * k * pulse : (n.state === "clear" ? 0.07 : 0.03);
     o.wire.material.opacity = hot ? 0.45 : 0.14;
-    const text = n.node.toUpperCase() + " · " + n.state.toUpperCase() + (n.state === "offline" ? "" : " " + Math.round(n.score));
+    const text = n.node.toUpperCase() + " · " + n.state.toUpperCase() + (n.state === "offline" ? "" : " " + Math.round(n.score)) + (n.breath ? " · RESP " + n.breath : "");
     if (text !== o.text) { if (o.label) o.g.remove(o.label); o.text = text; o.label = textSprite(text, "#" + col.toString(16).padStart(6, "0")); o.g.add(o.label); }
     o.label.position.set(N.x + 0.35, N.y + 0.45, N.z);
   });
@@ -1106,6 +1137,95 @@ document.querySelectorAll(".sonar-mode .hs-btn").forEach((b) => b.addEventListen
   setSonarMode(b.dataset.mode);
   if (!(b.dataset.mode === "3d" && s3.failed)) { try { localStorage.setItem("nw.sonarMode", sonarMode); } catch (_) {} }
 }));
+
+// ================= BRAINDANCE: record the presence field, replay it later =================
+const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return String((s / 60) | 0).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+async function bdRefresh() {
+  const r = await get("/api/braindance"); if (!r) return;
+  dance.clips = r.clips || []; dance.recSince = r.recordingSince || 0;
+  $("#bdMeta").textContent = "buffer " + mmss(r.bufferSec * 1000) + (r.stored ? " · on disk" : " · memory only");
+  const rec = $("#bdRec");
+  rec.classList.toggle("on", !!dance.recSince);
+  rec.textContent = dance.recSince ? "■ STOP " + mmss(Date.now() - dance.recSince) : "● REC";
+  const list = $("#bdList"); list.innerHTML = "";
+  if (!dance.clips.length) { list.appendChild(el("div", "sonar-help", "No clips yet. Record one, or save the last minute.")); return; }
+  dance.clips.forEach((c) => {
+    const row = el("div", "bdclip" + (dance.play && dance.play.clip.id === c.id ? " playing" : ""));
+    const info = el("div");
+    info.appendChild(el("div", "nm", c.name));
+    info.appendChild(el("div", "sub", new Date(c.start).toLocaleString("en-GB") + " · " + mmss(c.end - c.start) + " · peak " + Math.round(c.peak) + (c.auto ? " · auto" : "")));
+    const play = el("button", null, "▶"), del = el("button", "del", "✕");
+    play.title = "replay this clip"; del.title = "delete this clip";
+    play.addEventListener("click", () => bdOpen(c.id));
+    del.addEventListener("click", async () => { if (dance.play && dance.play.clip.id === c.id) bdExit(); await post("/api/braindance/delete", { id: c.id }); bdRefresh(); });
+    row.appendChild(info); row.appendChild(play); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+$("#bdRec").addEventListener("click", async () => { await post("/api/braindance/rec", { on: !dance.recSince }); bdRefresh(); });
+$("#bdSave").addEventListener("click", async () => { const r = await post("/api/braindance/save", { lastSec: 60 }); if (r && r.ok) status("clip saved: " + r.clip.name); bdRefresh(); });
+
+async function bdOpen(id) {
+  const clip = await get("/api/braindance/clip?id=" + encodeURIComponent(id));
+  if (!clip || !clip.samples || clip.samples.length < 2) { status("that clip could not be loaded"); return false; }
+  if (dance.play) bdExit();
+  const livePos = sonarPos;
+  if (clip.layout && Object.keys(clip.layout).length) sonarPos = Object.assign({}, livePos, clip.layout);
+  // where the movement was at each recorded instant
+  const frames = clip.samples.map((smp) => ({ t: smp.t, nodes: smp.n.map((q) => ({ node: q.n, state: q.s, score: q.v, breath: q.b || 0, distM: q.d || 0, trace: [] })) }));
+  const path = frames.map((f) => { sonarState = { nodes: f.nodes }; return sonarEstimate(); });
+  dance.play = { clip, frames, path, livePos, pos: 0, dur: clip.end - clip.start, playing: true, speed: 1, last: performance.now(), idx: -1 };
+  document.querySelector(".sonar-map").classList.add("replaying");
+  $("#bdPlayer").hidden = false; $("#bdTag").hidden = false;
+  $("#bdTag").textContent = "BRAINDANCE · " + clip.name;
+  $("#bdPlay").textContent = "❚❚";
+  selectDeck("sonar"); bdRefresh();
+  return true;
+}
+function bdExit() {
+  if (!dance.play) return;
+  sonarPos = dance.play.livePos; dance.play = null;
+  sonarState = liveSonar; sonarTrail = [];
+  document.querySelector(".sonar-map").classList.remove("replaying");
+  $("#bdPlayer").hidden = true; $("#bdTag").hidden = true; $("#bdThen").textContent = "";
+  sonarRenderList(); bdRefresh();
+}
+// Advance the replay; called every animation frame while a clip is open.
+function bdTick() {
+  const pl = dance.play; if (!pl) return;
+  const now = performance.now();
+  if (pl.playing) { pl.pos += (now - pl.last) * pl.speed; if (pl.pos >= pl.dur) { pl.pos = pl.dur; pl.playing = false; $("#bdPlay").textContent = "▶"; } }
+  pl.last = now;
+  const tAbs = pl.clip.start + pl.pos;
+  let idx = 0; while (idx < pl.frames.length - 1 && pl.frames[idx + 1].t <= tAbs) idx++;
+  $("#bdSeek").value = Math.round(pl.pos / pl.dur * 1000);
+  $("#bdTime").textContent = new Date(tAbs).toLocaleTimeString("en-GB") + " · " + mmss(pl.pos) + " / " + mmss(pl.dur);
+  if (idx === pl.idx) return;
+  pl.idx = idx;
+  sonarState = { nodes: pl.frames[idx].nodes, armed: liveSonar.armed, demo: liveSonar.demo, listening: liveSonar.listening };
+  sonarTrail = pl.path.slice(Math.max(0, idx - 60), idx + 1).filter(Boolean);
+  if (!pl.path[idx]) sonarTrail = []; // nothing was moving at this instant
+  sonarRenderList();
+  // what the network looked like at that moment, if the console still remembers it
+  let then = null; hist.forEach((hh) => { if (hh.ts <= tAbs) then = hh; });
+  $("#bdThen").textContent = then && hist.length && tAbs <= hist[hist.length - 1].ts + 60000 ? "NETWORK THEN · " + then.hosts + " hosts · " + then.alerts + " alerts" + (then.crit ? " · " + then.crit + " critical" : "") : "";
+}
+$("#bdPlay").addEventListener("click", () => { const pl = dance.play; if (!pl) return; if (pl.pos >= pl.dur) pl.pos = 0; pl.playing = !pl.playing; pl.last = performance.now(); $("#bdPlay").textContent = pl.playing ? "❚❚" : "▶"; });
+$("#bdSeek").addEventListener("input", (e) => { const pl = dance.play; if (!pl) return; pl.pos = (+e.target.value) / 1000 * pl.dur; pl.idx = -1; });
+$("#bdSpeed").addEventListener("click", () => { const pl = dance.play; if (!pl) return; pl.speed = pl.speed === 1 ? 2 : pl.speed === 2 ? 4 : pl.speed === 4 ? 0.5 : 1; $("#bdSpeed").textContent = pl.speed + "×"; });
+$("#bdExit").addEventListener("click", bdExit);
+
+// ================= PRESENCE GATE =================
+function renderGate(g) {
+  g = g || { enabled: false, open: true };
+  const st = $("#gateState");
+  st.className = "gate-state" + (g.enabled ? (g.open ? " open" : " shut") : "");
+  st.textContent = !g.enabled ? "no key set — controls are always available" : g.open ? "key " + g.key + " is on the network — controls unlocked" : "key " + g.key + " is away — trust and BLACKWALL are locked";
+  $("#gateClear").hidden = !g.enabled;
+  document.body.classList.toggle("gated", g.enabled && !g.open);
+}
+$("#gateSet").addEventListener("click", async () => { if (selectedIP) await post("/api/gate", { ip: selectedIP }); });
+$("#gateClear").addEventListener("click", async () => { await post("/api/gate", { ip: "" }); });
 
 // ================= COMMANDS: typed or spoken =================
 const DECK_WORDS = { watchtower: "netwatch", watch: "netwatch", breach: "breach", "kill chain": "killchain", killchain: "killchain", "attack": "attack", "att&ck": "attack", mitre: "attack", grid: "grid", globe: "grid", ar: "ar", optic: "ar", sonar: "sonar" };
@@ -1136,6 +1256,13 @@ async function runCommand(text) {
   if (/^(go )?live$/.test(t)) { goLive(); return "Back to live."; }
   if ((m = t.match(/^(?:rewind|go back)\s+(\d+)\s+min/))) { const target = Date.now() - (+m[1]) * 60000; let i = 0; hist.forEach((h, k) => { if (h.ts <= target) i = k; }); await scrubTo(i); return "Replaying " + m[1] + " minutes ago."; }
   if ((m = t.match(/^(disarm|arm)(?: the)? sonar$/))) { await post("/api/sonar/arm", { armed: m[1] === "arm" }); sonarPoll(); return "SONAR " + (m[1] === "arm" ? "armed." : "disarmed."); }
+  if (/^(start recording|record)$/.test(t)) { await post("/api/braindance/rec", { on: true }); bdRefresh(); return "Recording the presence field."; }
+  if (/^(stop recording|stop)$/.test(t)) { const r = await post("/api/braindance/rec", { on: false }); bdRefresh(); return r && r.ok ? "Saved clip " + r.clip.name + "." : "I was not recording."; }
+  if (/^save (the )?(last minute|clip)$/.test(t)) { const r = await post("/api/braindance/save", { lastSec: 60 }); bdRefresh(); return r && r.ok ? "Saved the last minute as " + r.clip.name + "." : "Nothing to save yet."; }
+  if (/^(play|replay)( the)? (last|latest) clip$/.test(t)) { await bdRefresh(); if (!dance.clips.length) return "There are no clips."; return (await bdOpen(dance.clips[0].id)) ? "Replaying " + dance.clips[0].name + "." : "That clip could not be loaded."; }
+  if (/^(exit|stop) (replay|braindance)$/.test(t)) { bdExit(); return "Back to the live field."; }
+  if ((m = t.match(/^set key(?: to)?\s+(.+)$/))) { const d = findDevice(m[1]); if (!d) return "No host matches " + m[1] + "."; const r = await post("/api/gate", { ip: d.ip }); return r && r.ok ? (d.hostname || d.ip) + " is now the presence key." : "Could not set the key."; }
+  if (/^clear key$/.test(t)) { const r = await post("/api/gate", { ip: "" }); return r && r.ok ? "Presence key removed." : "The key device has to be present to remove it."; }
   if (/^(audio on|unmute)$/.test(t)) { setAudio(true); return "Spatial audio on."; }
   if (/^(audio off|mute)$/.test(t)) { setAudio(false); return "Spatial audio off."; }
   return null;
@@ -1197,7 +1324,7 @@ function onNewAlerts(snap) {
 }
 
 // test hooks (also handy from the browser console)
-window.netwatch = { sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
+window.netwatch = { dance, bdOpen, bdExit, sonarNodes: () => sonarState.nodes, sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
 
 // ---------- boot ----------
 initNeural();
@@ -1211,7 +1338,9 @@ setTimeout(loadHistory, 900);
 setInterval(loadHistory, 10000);
 setInterval(sonarPoll, 400);
 sysPoll(); setInterval(sysPoll, 1500);
+setInterval(() => { if (currentDeck() === "sonar") bdRefresh(); }, 2000);
 (function sonarLoop() {
+  bdTick();
   if (currentDeck() === "sonar") { const t = performance.now() / 1000; if (sonarMode === "3d") sonar3dRender(t); else sonarDraw(t); }
   requestAnimationFrame(sonarLoop);
 })();

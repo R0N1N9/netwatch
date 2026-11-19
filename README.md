@@ -178,6 +178,25 @@ top-down view for arranging the access point and nodes. It falls back to 2D on
 its own when the browser has no WebGL. The position estimate is a score-weighted
 blend of the disturbed links — a rough guide, not a measurement.
 
+Also on this deck:
+
+- **Braindance** — SONAR keeps a rolling ~50-minute buffer of the presence
+  field. **REC** records a clip, **SAVE LAST 60s** keeps what just happened,
+  and while SONAR is armed a clip is cut automatically around each movement.
+  Replay a clip in the 2D or 3D room view with seek and 0.5–4× speed; the room
+  layout is saved with it, and if the console still has network history for
+  that moment it shows the host and alert counts alongside. Clips are JSON
+  files under `~/.local/share/netwatch/braindance` (change with `--data-dir`).
+  They are a record of when people moved through your space — keep them
+  private, and tell the people you live or work with that it's running.
+- **Breathing** — on a link with no movement the engine looks for a steady
+  9–30 cycles-per-minute ripple and reports it as `RESP n/min`: someone is
+  there but still. Experimental, and so far only exercised on simulated data.
+- **Wi-Fi ranging** — if your access point supports 802.11mc FTM, each node
+  measures its distance to it and the map places the node at that range (you
+  set the bearing by dragging). Without FTM the nodes stay where you put them.
+
+
 ```bash
 netwatch gui --sonar-udp 0.0.0.0:5566     # listen for nodes on your LAN (off by default)
 ```
@@ -216,6 +235,13 @@ points at another Ollama host, `NETWATCH_LLM=off` forces the built-in rules.
 - **Spatial audio** — AUDIO ON plays each new alert from a direction: SONAR
   nodes from where you placed them on the map, hosts from a fixed bearing per
   address. Use headphones.
+- **Presence key** — on the BLACKWALL tab, pick a device (your phone, say) as
+  the key. While it is off the network the server refuses trust and BLACKWALL
+  actions. It recognises the key by MAC address, so treat it as a convenience
+  lock rather than strong authentication.
+- **Process lineage** — the GRID list names the program on this machine behind
+  each connection, and KILL CHAIN / ATT&CK have a "Process lineage" trace.
+  Connections owned by other users need root to attribute.
 - **Time scrubber** — drag the bar above the ticker to replay the console's
   recent past (ticks mark alerts; red is critical). Controls lock while
   replaying; LIVE returns to the present. History is kept in memory only.

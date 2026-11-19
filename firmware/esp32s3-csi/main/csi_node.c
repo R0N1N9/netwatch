@@ -3,7 +3,10 @@
 // Joins your Wi-Fi, pings the gateway ~25 times a second so the access point
 // keeps sending frames back, reads the Channel State Information of those
 // frames, and streams the per-subcarrier amplitudes to NetWatch over UDP as
-//   {"node":"node-A","rssi":-51,"amp":[12.0,13.4,...]}
+//   {"node":"node-A","rssi":-51,"amp":[12.0,13.4,...],"dist_cm":412}
+//
+// If the access point is an 802.11mc (FTM) responder, the node also measures
+// its distance to it every couple of seconds and includes it as dist_cm.
 //
 // STATUS: written against the ESP-IDF v5 API but NOT yet compiled or run on
 // hardware. Treat it as a starting point and expect to fix small things.
@@ -46,6 +49,9 @@ static const char *TAG = "csi_node";
 static QueueHandle_t s_queue;
 static uint8_t s_ap_bssid[6];
 static int64_t s_last_us;
+static uint8_t s_ap_channel;
+static bool s_ap_ftm;                 // access point advertises FTM responder support
+static volatile uint32_t s_dist_cm;   // latest FTM range, 0 = none yet
 
 // Runs in the Wi-Fi task: keep it short, just copy amplitudes into the queue.
 static void csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
@@ -85,7 +91,12 @@ static void sender_task(void *arg) {
         for (int i = 0; i < s.n && len < (int)sizeof(json) - 16; i++) {
             len += snprintf(json + len, sizeof(json) - len, i ? ",%.1f" : "%.1f", s.amp[i]);
         }
-        len += snprintf(json + len, sizeof(json) - len, "]}");
+        uint32_t dist = s_dist_cm;
+        if (dist > 0) {
+            len += snprintf(json + len, sizeof(json) - len, "],\"dist_cm\":%u}", (unsigned)dist);
+        } else {
+            len += snprintf(json + len, sizeof(json) - len, "]}");
+        }
         sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
     }
 }
@@ -107,6 +118,9 @@ static void start_csi(void) {
     wifi_ap_record_t ap;
     if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
         memcpy(s_ap_bssid, ap.bssid, 6);
+        s_ap_channel = ap.primary;
+        s_ap_ftm = ap.ftm_responder;
+        ESP_LOGI(TAG, "access point FTM responder: %s", s_ap_ftm ? "yes" : "no (ranging disabled)");
     }
     wifi_csi_config_t cfg = {
         .lltf_en = true,           // legacy long training field: 64 subcarriers
@@ -123,7 +137,30 @@ static void start_csi(void) {
     ESP_LOGI(TAG, "CSI streaming to %s:%d as %s", NETWATCH_HOST, NETWATCH_PORT, NODE_NAME);
 }
 
+// Ask the access point for a range every two seconds (needs an FTM-capable AP).
+static void ftm_task(void *arg) {
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        if (!s_ap_ftm) {
+            continue;
+        }
+        wifi_ftm_initiator_cfg_t cfg = {.frm_count = 16, .burst_period = 2, .channel = s_ap_channel};
+        memcpy(cfg.resp_mac, s_ap_bssid, 6);
+        esp_wifi_ftm_initiate_session(&cfg);
+    }
+}
+
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_FTM_REPORT) {
+        wifi_event_ftm_report_t *ev = (wifi_event_ftm_report_t *)data;
+        if (ev->status == FTM_STATUS_SUCCESS) {
+            s_dist_cm = ev->dist_est; // centimetres
+        }
+        // NOTE: the report-entry handling differs between ESP-IDF releases. On
+        // some versions you must free(ev->ftm_report_data) here; on newer ones
+        // you fetch entries with esp_wifi_ftm_get_report(). Check your version.
+        return;
+    }
     if (base == WIFI_EVENT && (id == WIFI_EVENT_STA_START || id == WIFI_EVENT_STA_DISCONNECTED)) {
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
@@ -151,5 +188,6 @@ void app_main(void) {
 
     s_queue = xQueueCreate(8, sizeof(csi_sample_t));
     xTaskCreate(sender_task, "csi_sender", 4096, NULL, 5, NULL);
+    xTaskCreate(ftm_task, "ftm_ranger", 3072, NULL, 4, NULL);
     ESP_ERROR_CHECK(esp_wifi_start());
 }

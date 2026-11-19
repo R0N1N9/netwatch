@@ -148,6 +148,14 @@ MK.4</div>
               <button class="btn" id="btnRelease" disabled>⊚ RELEASE</button>
             </div>
           </div>
+          <div class="gate">
+            <div class="micro">PRESENCE KEY</div>
+            <div class="gate-state" id="gateState">no key set — controls are always available</div>
+            <div class="gate-row">
+              <button class="btn" id="gateSet" disabled>⚿ USE SELECTED AS KEY</button>
+              <button class="btn" id="gateClear" hidden>CLEAR KEY</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -249,6 +257,14 @@ MK.4</div>
         <div class="ghud-meta" id="sonarMeta">— nodes</div>
       </div>
       <div class="sonar-hint" id="sonarHint">drag the access point and nodes to match your room</div>
+      <div class="bd-tag" id="bdTag" hidden>BRAINDANCE · REPLAY</div>
+      <div class="bd-player" id="bdPlayer" hidden>
+        <button class="hs-btn on" id="bdPlay">❚❚</button>
+        <input type="range" id="bdSeek" min="0" max="1000" value="0" aria-label="clip position" />
+        <span class="bd-time" id="bdTime">00:00 / 00:00</span>
+        <button class="hs-btn" id="bdSpeed">1×</button>
+        <button class="hs-btn" id="bdExit">✕ EXIT</button>
+      </div>
     </div>
     <div class="panel grow" style="--accent: var(--green)">
       <div class="panel-head"><span>SENSOR MESH</span><span class="meta" id="sonarSrc">wi-fi csi</span></div>
@@ -257,6 +273,15 @@ MK.4</div>
         <span class="sonar-note" id="sonarArmNote">disarmed — movement is shown, no alerts raised</span>
       </div>
       <div class="panel-body" id="sonarList"></div>
+      <div class="bd">
+        <div class="bd-head"><span class="micro cy">▚▚ BRAINDANCE // RECORDINGS</span><span class="micro" id="bdMeta">buffer —</span></div>
+        <div class="btn-row">
+          <button class="btn danger" id="bdRec">● REC</button>
+          <button class="btn" id="bdSave">⤓ SAVE LAST 60s</button>
+        </div>
+        <div class="bd-then" id="bdThen"></div>
+        <div class="bd-list" id="bdList"></div>
+      </div>
     </div>
   </main>
 

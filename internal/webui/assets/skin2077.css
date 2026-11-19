@@ -285,3 +285,34 @@ body.replay .btn-row, body.replay .field { opacity: 0.35; pointer-events: none; 
 .ram i.off { background: transparent; border: 1px solid rgba(94, 246, 255, 0.28); box-shadow: none; }
 .ram i.hot { background: linear-gradient(180deg, #ff9a92, #ff5449); box-shadow: 0 0 8px rgba(255, 84, 73, 0.6); }
 .ram i { transition: background 0.3s, box-shadow 0.3s; }
+
+/* ---------- braindance: recordings + replay ---------- */
+.bd { flex: 0 0 auto; max-height: 46%; display: flex; flex-direction: column; border-top: 1px solid rgba(255, 84, 73, 0.45); min-height: 0; }
+.bd-head { display: flex; justify-content: space-between; padding: 8px 12px 0; }
+.bd-list { overflow-y: auto; padding: 0 12px 10px; min-height: 0; }
+.bd-then { font-family: var(--mono); font-size: 11px; color: var(--amber); padding: 0 12px 6px; }
+.bdclip { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 6px 8px; margin-bottom: 6px; background: rgba(8, 24, 42, 0.7); border: 1px solid rgba(94, 246, 255, 0.22); }
+.bdclip.playing { border-color: var(--amber); box-shadow: inset 0 0 14px rgba(255, 184, 74, 0.2); }
+.bdclip .nm { font-size: 15px; font-weight: 600; color: var(--cyan-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bdclip .sub { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.bdclip button { cursor: pointer; font-family: var(--ui); font-size: 12px; font-weight: 700; background: transparent; color: var(--cyan); border: 1px solid var(--cyan); padding: 2px 9px; }
+.bdclip button.del { color: var(--dim); border-color: var(--dim); }
+#bdRec.on { background: var(--red); color: #1a0504; animation: riskpulse 1s ease-in-out infinite; }
+.bd-player { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; z-index: 3;
+  background: rgba(20, 12, 4, 0.88); border: 1px solid var(--amber); }
+.bd-player[hidden], .bd-tag[hidden] { display: none; }
+.bd-player input { flex: 1; accent-color: #ffb84a; }
+.bd-time { font-family: var(--mono); font-size: 12px; color: var(--amber); min-width: 150px; text-align: center; }
+.bd-tag { position: absolute; top: 46px; left: 14px; z-index: 3; font-size: 12px; font-weight: 700; letter-spacing: 0.18em; color: #1a1204; background: var(--amber); padding: 1px 12px; }
+.sonar-map.replaying { border-color: var(--amber); }
+.sonar-map.replaying .sonar-hint { display: none; }
+.badge.resp { border-color: var(--amber); color: var(--amber); }
+
+/* ---------- presence gate ---------- */
+.gate { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255, 84, 73, 0.35); }
+.gate-state { font-size: 14px; color: var(--fg); margin: 4px 0 10px; }
+.gate-state.open { color: var(--green); } .gate-state.shut { color: var(--red); }
+.gate-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.gate-row .btn[hidden] { display: none; }
+body.gated #btnQuarantine, body.gated #btnRelease, body.gated #btnTrust { opacity: 0.3; pointer-events: none; }
+.gnode .p { grid-column: 1 / -1; font-size: 10.5px; color: var(--amber); }

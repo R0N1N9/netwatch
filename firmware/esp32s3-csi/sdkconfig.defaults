@@ -1,3 +1,6 @@
 # CSI capture must be enabled in the Wi-Fi driver.
 CONFIG_ESP_WIFI_CSI_ENABLED=y
 CONFIG_FREERTOS_HZ=1000
+# Wi-Fi time-of-flight ranging (only used when the access point supports FTM).
+CONFIG_ESP_WIFI_FTM_ENABLE=y
+CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT=y
