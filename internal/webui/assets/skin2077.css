@@ -216,3 +216,7 @@ body.glitch .fx-grain { opacity: 0.4; }
 .att-flow { row-gap: 5px; }
 .att-flow .kc-node .nm { font-size: 13px; letter-spacing: 0.06em; }
 .att-flow .kc-node .num { font-size: 9px; }
+
+/* brand: one word, NET in the soft grey-cyan, WATCH in the integrity red */
+.brand .word .net { color: var(--cyan-soft); text-shadow: none; }
+.brand .word .watch { color: var(--red); }
