@@ -23,6 +23,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -32,6 +33,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_partition.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -39,7 +41,7 @@
 #include "nvs_flash.h"
 #include "ping/ping_sock.h"
 
-// ---- edit these ----
+// ---- only needed if you flash by hand; NetWatch writes these for you when it flashes a board ----
 #define WIFI_SSID      "your-ssid"
 #define WIFI_PASSWORD  "your-password"
 #define NODE_NAME_FIXED ""              // leave empty and each board names itself after its hardware address
@@ -60,6 +62,77 @@ typedef struct {
 static const char *TAG = "csi_node";
 static char s_node_name[24] = "node";
 #define NODE_NAME s_node_name
+static struct sockaddr_in s_dst; // where frames go: the NetWatch console
+
+// ---- settings written by NetWatch when it flashes the board ----
+// NetWatch stores a small text block in the "nwcfg" partition:
+//   NWCFG1\nssid=...\npass=...\nhost=...\nport=5566\nname=...\n
+// If it is not there (the board was flashed by hand), the defines above are used.
+static char s_cfg_ssid[33], s_cfg_pass[65], s_cfg_host[40], s_cfg_name[24];
+static int s_cfg_port;
+
+static void cfg_value(const char *blob, const char *key, char *out, size_t cap) {
+    char find[16];
+    snprintf(find, sizeof(find), "\n%s=", key);
+    const char *p = strstr(blob, find);
+    if (!p) {
+        return;
+    }
+    p += strlen(find);
+    size_t n = strcspn(p, "\n");
+    if (n >= cap) {
+        n = cap - 1;
+    }
+    memcpy(out, p, n);
+    out[n] = 0;
+}
+
+static void load_config(void) {
+    static char blob[513];
+    char port[8] = "";
+    const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "nwcfg");
+    if (!part || esp_partition_read(part, 0, blob, 512) != ESP_OK || strncmp(blob, "NWCFG1\n", 7) != 0) {
+        ESP_LOGW(TAG, "no settings from NetWatch on this board; using the ones compiled in");
+        return;
+    }
+    blob[512] = 0;
+    cfg_value(blob + 6, "ssid", s_cfg_ssid, sizeof(s_cfg_ssid));
+    cfg_value(blob + 6, "pass", s_cfg_pass, sizeof(s_cfg_pass));
+    cfg_value(blob + 6, "host", s_cfg_host, sizeof(s_cfg_host));
+    cfg_value(blob + 6, "name", s_cfg_name, sizeof(s_cfg_name));
+    cfg_value(blob + 6, "port", port, sizeof(port));
+    if (atoi(port) > 0) {
+        s_cfg_port = atoi(port);
+    }
+    ESP_LOGI(TAG, "settings from NetWatch: network \"%s\", console %s:%d", s_cfg_ssid, s_cfg_host, s_cfg_port);
+}
+
+// Every 15 seconds, ask the network where NetWatch is. If the console's
+// address changes (a new DHCP lease), the node follows it without reflashing.
+static void discover_task(void *arg) {
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    int yes = 1;
+    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
+    struct timeval tv = {.tv_sec = 2};
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    char msg[64], reply[64];
+    for (;;) {
+        struct sockaddr_in all = {.sin_family = AF_INET, .sin_port = htons(s_cfg_port), .sin_addr.s_addr = htonl(INADDR_BROADCAST)};
+        int len = snprintf(msg, sizeof(msg), "{\"hello\":\"%s\"}", NODE_NAME);
+        sendto(sock, msg, len, 0, (struct sockaddr *)&all, sizeof(all));
+        struct sockaddr_in from;
+        socklen_t flen = sizeof(from);
+        int n = recvfrom(sock, reply, sizeof(reply) - 1, 0, (struct sockaddr *)&from, &flen);
+        if (n > 0) {
+            reply[n] = 0;
+            if (strstr(reply, "netwatch") && from.sin_addr.s_addr != s_dst.sin_addr.s_addr) {
+                s_dst.sin_addr = from.sin_addr;
+                ESP_LOGI(TAG, "NetWatch found at %s", inet_ntoa(from.sin_addr));
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(15000));
+    }
+}
 static QueueHandle_t s_queue;
 static uint8_t s_ap_bssid[6];
 static int64_t s_last_us;
@@ -177,8 +250,6 @@ static void sniff_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
 // Sends the overheard-device table once a second.
 static void seen_task(void *arg) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    struct sockaddr_in dst = {.sin_family = AF_INET, .sin_port = htons(NETWATCH_PORT)};
-    inet_pton(AF_INET, NETWATCH_HOST, &dst.sin_addr);
     static char json[1400];
     static seen_t copy[MAX_SEEN];
     static ap_t aps[MAX_APS];
@@ -202,7 +273,7 @@ static void seen_task(void *arg) {
         }
         len += snprintf(json + len, sizeof(json) - len, "]}");
         if (n > 0) {
-            sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
+            sendto(sock, json, len, 0, (struct sockaddr *)&s_dst, sizeof(s_dst));
         }
 
         // access points and disconnect frames go in their own small datagram
@@ -218,15 +289,13 @@ static void seen_task(void *arg) {
         }
         len += snprintf(json + len, sizeof(json) - len, "]}");
         if (n > 0 || deauth > 0) {
-            sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
+            sendto(sock, json, len, 0, (struct sockaddr *)&s_dst, sizeof(s_dst));
         }
     }
 }
 
 static void sender_task(void *arg) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    struct sockaddr_in dst = {.sin_family = AF_INET, .sin_port = htons(NETWATCH_PORT)};
-    inet_pton(AF_INET, NETWATCH_HOST, &dst.sin_addr);
 
     static char json[1024];
     csi_sample_t s;
@@ -244,7 +313,7 @@ static void sender_task(void *arg) {
         } else {
             len += snprintf(json + len, sizeof(json) - len, "]}");
         }
-        sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
+        sendto(sock, json, len, 0, (struct sockaddr *)&s_dst, sizeof(s_dst));
     }
 }
 
@@ -287,7 +356,7 @@ static void start_csi(void) {
     esp_wifi_set_promiscuous_filter(&filt);
     esp_wifi_set_promiscuous_rx_cb(sniff_cb);
     esp_wifi_set_promiscuous(true);
-    ESP_LOGI(TAG, "CSI streaming to %s:%d as %s", NETWATCH_HOST, NETWATCH_PORT, NODE_NAME);
+    ESP_LOGI(TAG, "CSI streaming to %s:%d as %s", s_cfg_host, s_cfg_port, NODE_NAME);
 }
 
 // Ask the access point for a range every two seconds (needs an FTM-capable AP).
@@ -325,8 +394,17 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
 
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
-    if (NODE_NAME_FIXED[0]) {
-        snprintf(s_node_name, sizeof(s_node_name), "%s", NODE_NAME_FIXED);
+    snprintf(s_cfg_ssid, sizeof(s_cfg_ssid), "%s", WIFI_SSID);
+    snprintf(s_cfg_pass, sizeof(s_cfg_pass), "%s", WIFI_PASSWORD);
+    snprintf(s_cfg_host, sizeof(s_cfg_host), "%s", NETWATCH_HOST);
+    snprintf(s_cfg_name, sizeof(s_cfg_name), "%s", NODE_NAME_FIXED);
+    s_cfg_port = NETWATCH_PORT;
+    load_config();
+    s_dst.sin_family = AF_INET;
+    s_dst.sin_port = htons(s_cfg_port);
+    inet_pton(AF_INET, s_cfg_host, &s_dst.sin_addr);
+    if (s_cfg_name[0]) {
+        snprintf(s_node_name, sizeof(s_node_name), "%s", s_cfg_name);
     } else {
         uint8_t mac[6];
         esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -342,7 +420,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL));
 
-    wifi_config_t wc = {.sta = {.ssid = WIFI_SSID, .password = WIFI_PASSWORD}};
+    wifi_config_t wc = {0};
+    snprintf((char *)wc.sta.ssid, sizeof(wc.sta.ssid), "%s", s_cfg_ssid);
+    snprintf((char *)wc.sta.password, sizeof(wc.sta.password), "%s", s_cfg_pass);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // power save would starve the CSI stream
@@ -351,5 +431,6 @@ void app_main(void) {
     xTaskCreate(sender_task, "csi_sender", 4096, NULL, 5, NULL);
     xTaskCreate(ftm_task, "ftm_ranger", 3072, NULL, 4, NULL);
     xTaskCreate(seen_task, "seen_sender", 4096, NULL, 4, NULL);
+    xTaskCreate(discover_task, "discover", 3072, NULL, 3, NULL);
     ESP_ERROR_CHECK(esp_wifi_start());
 }

@@ -4,3 +4,6 @@ CONFIG_FREERTOS_HZ=1000
 # Wi-Fi time-of-flight ranging (only used when the access point supports FTM).
 CONFIG_ESP_WIFI_FTM_ENABLE=y
 CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT=y
+# A small extra partition holds the settings NetWatch writes at flash time.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

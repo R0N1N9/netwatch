@@ -14,6 +14,7 @@
 // led_strip_config_t changed between component versions; expect to adjust.
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -23,13 +24,14 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_partition.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "led_strip.h"
 #include "lwip/sockets.h"
 #include "nvs_flash.h"
 
-// ---- edit these ----
+// ---- Wi-Fi details are only needed here if you flash by hand; NetWatch writes them when it flashes the board ----
 #define WIFI_SSID     "your-ssid"
 #define WIFI_PASSWORD "your-password"
 #define LIGHT_PORT    5577
@@ -41,6 +43,49 @@ static led_strip_handle_t s_strip;
 static volatile uint8_t s_r = 20, s_g = 20, s_b = 20;
 static volatile int s_pulse = 0;            // 0 steady, 1 breathe, 2 flash
 static volatile int64_t s_last_us = 0;
+
+// ---- settings written by NetWatch when it flashes the board ----
+// NetWatch stores a small text block in the "nwcfg" partition:
+//   NWCFG1\nssid=...\npass=...\nhost=...\nport=5566\nname=...\n
+// If it is not there (the board was flashed by hand), the defines above are used.
+static char s_cfg_ssid[33], s_cfg_pass[65], s_cfg_host[40], s_cfg_name[24];
+static int s_cfg_port;
+
+static void cfg_value(const char *blob, const char *key, char *out, size_t cap) {
+    char find[16];
+    snprintf(find, sizeof(find), "\n%s=", key);
+    const char *p = strstr(blob, find);
+    if (!p) {
+        return;
+    }
+    p += strlen(find);
+    size_t n = strcspn(p, "\n");
+    if (n >= cap) {
+        n = cap - 1;
+    }
+    memcpy(out, p, n);
+    out[n] = 0;
+}
+
+static void load_config(void) {
+    static char blob[513];
+    char port[8] = "";
+    const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "nwcfg");
+    if (!part || esp_partition_read(part, 0, blob, 512) != ESP_OK || strncmp(blob, "NWCFG1\n", 7) != 0) {
+        ESP_LOGW(TAG, "no settings from NetWatch on this board; using the ones compiled in");
+        return;
+    }
+    blob[512] = 0;
+    cfg_value(blob + 6, "ssid", s_cfg_ssid, sizeof(s_cfg_ssid));
+    cfg_value(blob + 6, "pass", s_cfg_pass, sizeof(s_cfg_pass));
+    cfg_value(blob + 6, "host", s_cfg_host, sizeof(s_cfg_host));
+    cfg_value(blob + 6, "name", s_cfg_name, sizeof(s_cfg_name));
+    cfg_value(blob + 6, "port", port, sizeof(port));
+    if (atoi(port) > 0) {
+        s_cfg_port = atoi(port);
+    }
+    ESP_LOGI(TAG, "settings from NetWatch: network \"%s\"", s_cfg_ssid);
+}
 
 // Reads the integer after "key": in a small JSON object. No allocation, no recursion.
 static int field(const char *json, const char *key, int fallback) {
@@ -54,7 +99,7 @@ static int field(const char *json, const char *key, int fallback) {
 
 static void udp_task(void *arg) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    struct sockaddr_in me = {.sin_family = AF_INET, .sin_port = htons(LIGHT_PORT), .sin_addr.s_addr = htonl(INADDR_ANY)};
+    struct sockaddr_in me = {.sin_family = AF_INET, .sin_port = htons(LIGHT_PORT), .sin_addr.s_addr = htonl(INADDR_ANY)}; // the light always listens on LIGHT_PORT
     bind(sock, (struct sockaddr *)&me, sizeof(me));
     static char buf[256];
     for (;;) {
@@ -102,6 +147,10 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
 
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
+    snprintf(s_cfg_ssid, sizeof(s_cfg_ssid), "%s", WIFI_SSID);
+    snprintf(s_cfg_pass, sizeof(s_cfg_pass), "%s", WIFI_PASSWORD);
+    s_cfg_port = LIGHT_PORT;
+    load_config();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
@@ -109,7 +158,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_wifi_init(&init));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL));
-    wifi_config_t wc = {.sta = {.ssid = WIFI_SSID, .password = WIFI_PASSWORD}};
+    wifi_config_t wc = {0};
+    snprintf((char *)wc.sta.ssid, sizeof(wc.sta.ssid), "%s", s_cfg_ssid);
+    snprintf((char *)wc.sta.password, sizeof(wc.sta.password), "%s", s_cfg_pass);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());

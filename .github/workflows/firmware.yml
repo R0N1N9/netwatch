@@ -1,0 +1,60 @@
+# Builds the two ESP32-S3 firmware projects whenever they change, and puts the
+# resulting images where the NetWatch binary embeds them, so the console can
+# flash a board without ESP-IDF being installed on your machine.
+name: firmware
+
+on:
+  push:
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: esp32s3-csi
+            image: sonar-node
+          - dir: esp32-light
+            image: threat-light
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32s3
+          path: firmware/${{ matrix.dir }}
+          command: idf.py build && cd build && esptool.py --chip esp32s3 merge_bin -o ${{ matrix.image }}.bin @flash_args
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.image }}
+          path: firmware/${{ matrix.dir }}/build/${{ matrix.image }}.bin
+          if-no-files-found: error
+
+  publish:
+    # Commit the freshly built images next to the Go code that embeds them.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+      - name: Commit the images
+        run: |
+          mkdir -p internal/forge/firmware
+          cp built/sonar-node/sonar-node.bin built/threat-light/threat-light.bin internal/forge/firmware/
+          git config user.name "netwatch-firmware-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add internal/forge/firmware
+          if git diff --cached --quiet; then echo "images unchanged"; exit 0; fi
+          git commit -m "Firmware images built from ${GITHUB_SHA::7} [skip ci]"
+          git push
