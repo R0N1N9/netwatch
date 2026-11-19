@@ -822,6 +822,7 @@ can read your alerts and the SONAR view over your network.
 
 | Symptom | Likely cause |
 |---|---|
+| "address already in use" when starting | NetWatch is already running (an old copy keeps serving the old build). Stop it with `pkill -x netwatch`, then start again; or use `--addr 127.0.0.1:7980`. |
 | "permission denied opening raw socket" | Run the `setcap` command above, or use `--demo`. |
 | Quarantine fails | The binary lacks `cap_net_admin`, or `nft` is not installed. |
 | SONAR shows "no nodes reporting" | The console was not started with `--sonar-udp`, a firewall is blocking UDP 5566, or the boards are pointed at the wrong IP. |

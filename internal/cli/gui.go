@@ -51,6 +51,13 @@ var guiCmd = &cobra.Command{
 		srv.CompanionAddr = guiComp
 		srv.DataDir = guiData
 		url := "http://" + guiAddr
+		// Check the address is free before anything else, so a second copy says so plainly
+		// instead of opening the browser on the first one and then failing.
+		if probe, err := net.Listen("tcp", guiAddr); err != nil {
+			return fmt.Errorf("cannot use %s: %v\n\nNetWatch is probably already running. Stop the old one first:\n    pkill -x netwatch\n(add sudo if it was started with sudo), or run this one on another port:\n    netwatch gui --addr 127.0.0.1:7980", guiAddr, err)
+		} else {
+			probe.Close()
+		}
 
 		fmt.Println(theme.Banner())
 		fmt.Println()
