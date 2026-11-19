@@ -31,6 +31,7 @@
 
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -41,7 +42,8 @@
 // ---- edit these ----
 #define WIFI_SSID      "your-ssid"
 #define WIFI_PASSWORD  "your-password"
-#define NODE_NAME      "node-A"          // unique per board
+#define NODE_NAME_FIXED ""              // leave empty and each board names itself after its hardware address
+                                        // (node-a1b2), so the same build can be flashed onto every board
 #define NETWATCH_HOST  "192.168.1.50"    // machine running: netwatch gui --sonar-udp 0.0.0.0:5566
 #define NETWATCH_PORT  5566
 #define FRAME_GAP_US   40000             // ~25 frames per second
@@ -56,6 +58,8 @@ typedef struct {
 } csi_sample_t;
 
 static const char *TAG = "csi_node";
+static char s_node_name[24] = "node";
+#define NODE_NAME s_node_name
 static QueueHandle_t s_queue;
 static uint8_t s_ap_bssid[6];
 static int64_t s_last_us;
@@ -321,6 +325,14 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
 
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
+    if (NODE_NAME_FIXED[0]) {
+        snprintf(s_node_name, sizeof(s_node_name), "%s", NODE_NAME_FIXED);
+    } else {
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        snprintf(s_node_name, sizeof(s_node_name), "node-%02x%02x", mac[4], mac[5]);
+    }
+    ESP_LOGI(TAG, "this board reports as %s", s_node_name);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();

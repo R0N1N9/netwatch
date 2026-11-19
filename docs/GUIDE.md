@@ -628,18 +628,32 @@ These watch the machine NetWatch runs on.
 The node firmware is in `firmware/esp32s3-csi`. **It has not yet been compiled
 or run on a board**; expect small fixes on first build.
 
-1. Install ESP-IDF v5 using Espressif's guide for Linux.
-2. In `main/csi_node.c`, set your Wi-Fi name and password, a unique
-   `NODE_NAME` per board, and the IP address of the machine running NetWatch.
-3. Flash each board:
+1. Install ESP-IDF v5 using Espressif's "Get Started" guide for Linux, and
+   load it into your shell (`. ~/esp/esp-idf/export.sh`).
+2. In `main/csi_node.c`, set your Wi-Fi name and password and the IP address of
+   the machine running NetWatch. Leave `NODE_NAME_FIXED` empty: each board then
+   names itself after its hardware address (`node-a1b2`), so one build fits
+   every board.
+3. Build once:
 
    ```bash
    cd firmware/esp32s3-csi && idf.py set-target esp32s3
    ```
 
    ```bash
-   idf.py build flash monitor
+   idf.py build
    ```
+
+   Then plug in one board at a time and flash it (the port is usually
+   `/dev/ttyACM0` or `/dev/ttyUSB0`; your user needs to be in the `dialout`
+   group):
+
+   ```bash
+   idf.py -p /dev/ttyACM0 flash monitor
+   ```
+
+   The monitor prints the name the board reports as. `Ctrl+]` leaves it. If a
+   board is not detected, hold its BOOT button while plugging it in.
 
 4. Start the console listening on your LAN:
 
