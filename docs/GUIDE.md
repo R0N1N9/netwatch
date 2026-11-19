@@ -693,9 +693,14 @@ The board's own RGB light tells the same story, with or without the console:
 | Blinking red | Cannot join: wrong password, or the network is 5 GHz only. |
 | Blinking purple | It has no settings: flash it from NetWatch. |
 
-The light is driven on GPIO48 and GPIO38, where the two revisions of
-Espressif's DevKitC-1 have it. On another make of board it may stay dark; the
-console's ONLINE step is then the thing to go by. During the flash itself the
+At power-up the light flashes **red, green, blue** once as a self-test. The
+light is driven on GPIO48 and GPIO38, where the two revisions of Espressif's
+DevKitC-1 have it. If you never see that self-test, your board's RGB light is
+not connected to those pins — on some boards (those with ports marked **COM**
+and **USB**) it only works once a solder jumper marked **RGB** is bridged —
+and the console's ONLINE step is the thing to go by. A small red light that
+is simply on whenever the board has power is the power light; it means
+nothing more than that. During the flash itself the
 firmware is not running, so only the board's small TX/RX lights (if it has
 them) flicker.
 
@@ -778,6 +783,13 @@ The console also accepts Bluetooth advertisements in the same datagram, as
 firmware here does not scan Bluetooth, so nothing sends them yet.
 
 ### The threat light
+
+A bare board works as a small threat light: the firmware shows the colour on
+the board's own RGB light as well as on a strip (given the board's light is
+wired — see the self-test note above). Flash it with **THREAT LIGHT** in
+**＋ ADD A NODE**, find its address (it appears in Watchtower as a new host),
+and enter `that-address:5577` in REFLEX → AMBIENT THREAT LIGHT. Until NetWatch
+is sending to it, it shows a faint white.
 
 `firmware/esp32-light` is a second, small project: an ESP32 with a WS2812 LED
 strip that listens on UDP port 5577 and shows the colour NetWatch sends. Edit

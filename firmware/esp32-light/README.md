@@ -13,5 +13,8 @@ THREAT LIGHT, which also writes your Wi-Fi details.
 2. `idf.py set-target esp32s3` (or your board), then `idf.py build flash monitor`.
 3. The board logs its address. Enter it in the REFLEX deck as `ip:5577` and press SET, then TEST.
 
+No strip? The board's own RGB light shows the same colour (if it is wired to
+GPIO48 or GPIO38). At power-up everything flashes red, green, blue once.
+
 NetWatch sends one small UDP datagram a second; nothing is sent back. If
 NetWatch stops, the strip dims to a faint white after ten seconds.
