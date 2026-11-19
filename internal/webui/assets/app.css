@@ -63,8 +63,7 @@ html, body {
   clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
 }
 .brand { font-weight: 800; letter-spacing: 0.14em; font-size: 18px; display: flex; align-items: center; gap: 10px; }
-.brand .net { color: var(--fg); }
-.brand .watch { color: var(--yellow); text-shadow: 0 0 10px rgba(252,238,10,0.6); }
+.brand .word { color: var(--red); text-shadow: 0 0 10px rgba(255,46,77,0.6); }
 .brand .bug { color: var(--red); animation: flicker 4s infinite; }
 @keyframes flicker { 0%,96%,100%{opacity:1} 97%{opacity:0.3} 98%{opacity:1} 99%{opacity:0.5} }
 
@@ -212,8 +211,8 @@ html, body {
 @keyframes blink { 50% { opacity: 0; } }
 
 /* glitch title */
-.brand .net, .brand .watch { position: relative; }
-.brand:hover .watch { animation: glitch 0.3s steps(2) 2; }
+.brand .word { position: relative; }
+.brand:hover .word { animation: glitch 0.3s steps(2) 2; }
 @keyframes glitch { 0%{transform:translate(0)} 25%{transform:translate(-2px,1px); text-shadow:2px 0 var(--red),-2px 0 var(--cyan)} 50%{transform:translate(2px,-1px)} 75%{transform:translate(-1px,-1px)} }
 
 /* panel corner data-tags (ambient busy-HUD) */

@@ -13,8 +13,10 @@ One binary, multiple **decks**:
 | Deck | Stance | Status |
 |------|--------|--------|
 | **Watchtower** | Defensive — watch the segment, guard the wall | ✅ working (GUI + TUI) |
-| **Netrunner** | Offensive — authorized recon & lab testing | 🟡 recon seed (scope-locked) |
-| **RUView** | Spatial — fuse ESP32-S3 sensors into a live 3D map | 🔭 scaffold |
+| **Breach** | Offensive — authorized recon & lab testing | 🟡 recon seed (scope-locked) |
+| **Kill Chain** | Purple team — Lockheed-Martin kill chain | ✅ working |
+| **ATT&CK** | Purple team — MITRE ATT&CK tactics (TA0043→TA0040) | ✅ working |
+| **SONAR** | Spatial awareness — ESP32-S3 sensor mesh → 3D presence map | 🔭 scaffold |
 
 > **Scope & ethics.** NetWatch is for **defense, your own networks, lab
 > environments, CTFs, and engagements you are authorized to perform**. The
@@ -82,10 +84,18 @@ Defensive situational awareness for your LAN, rendered as a neon command deck.
   protected from accidental lockout.
 - **VITALS** — live counts: hosts, new, threats, trusted.
 
-## The Netrunner deck (recon seed)
+## The Breach deck (recon seed)
 
 Authorized, lab-scoped recon. **PROBE** runs a concurrent TCP-connect scan of a
 target across common + IoT ports — and **refuses any non-private address**.
+
+## The ATT&CK deck (purple team)
+
+The same structure as Kill Chain, over the **MITRE ATT&CK** taxonomy: the 14
+Enterprise tactics (Reconnaissance → Impact) as a two-row matrix, each with
+red (authorized/lab) + blue (detection/audit) actions mapped to ATT&CK technique
+IDs and the shared OPS console. Red stays assessment + safe test artifacts +
+planning briefs — no weaponization.
 
 ## The Kill Chain deck (purple team)
 
@@ -173,7 +183,7 @@ internal/
   ice/        ICE engine: sweep-diff detectors (ARP-spoof, new-device)
   blackwall/  nftables quarantine (atomic rebuild of one dedicated table)
   copilot/    AI daemon — heuristic now, LLM-pluggable via the Copilot interface
-  offensive/  Netrunner recon — scope-locked TCP-connect scan
+  offensive/  Breach recon — scope-locked TCP-connect scan
   audit/      blue-team host introspection (listeners, persistence, peers, EICAR)
   passive/    live capture + flow table + analyzers (OS fp, JA3, DNS/DGA, beacon)
   anomaly/    online behavioral-anomaly model (per-device z-score baselines)
@@ -208,7 +218,7 @@ desktop app.
 - [ ] LLM backend (local model / API) behind the Copilot interface.
 - [ ] Agentic response: reason about a confirmed threat → propose/execute BLACKWALL (human-in-the-loop).
 
-**Netrunner deck — offensive (authorized)**
+**Breach deck — offensive (authorized)**
 - [x] Scope-locked TCP-connect port/service scan.
 - [ ] CIDR ranges, service banners, OS hints.
 - [ ] Traffic masking / VPN (WireGuard) integration.

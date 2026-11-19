@@ -27,14 +27,15 @@ MK.4</div>
 
 <div id="app">
   <header class="hud-top">
-    <div class="brand"><span class="net">NET</span><span class="watch">WATCH</span><span class="bug">_</span></div>
+    <div class="brand"><span class="word">NETWATCH</span><span class="bug">_</span></div>
     <nav class="tabs">
       <div class="tab active" data-deck="netwatch">WATCHTOWER</div>
-      <div class="tab" data-deck="netrunner">NETRUNNER</div>
+      <div class="tab" data-deck="breach">BREACH</div>
       <div class="tab" data-deck="killchain">KILL&nbsp;CHAIN</div>
+      <div class="tab" data-deck="attack">ATT&amp;CK</div>
       <div class="tab" data-deck="grid">GRID</div>
       <div class="tab" data-deck="ar">AR</div>
-      <div class="tab" data-deck="ruview">RUVIEW</div>
+      <div class="tab" data-deck="sonar">SONAR</div>
     </nav>
     <div class="spacer"></div>
     <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">WATCH ACTIVE</span></div>
@@ -141,11 +142,11 @@ MK.4</div>
     </section>
   </main>
 
-  <!-- NETRUNNER DECK (offensive) -->
-  <main class="deck" data-deck="netrunner" hidden>
+  <!-- BREACH DECK (offensive recon) -->
+  <main class="deck" data-deck="breach" hidden>
     <section class="col" style="grid-column: 1 / -1">
       <div class="panel grow" style="--accent: var(--yellow)">
-        <div class="panel-head"><span>NETRUNNER // RECON &amp; INTRUSION (AUTHORIZED)</span><span class="meta">scope-locked</span></div>
+        <div class="panel-head"><span>BREACH // RECON &amp; INTRUSION (AUTHORIZED)</span><span class="meta">scope-locked</span></div>
         <div class="field">
           <input id="scanTarget" placeholder="target — ip / cidr you own or are authorized to test" autocomplete="off" />
           <button class="btn warn" id="btnScan">⌁ PROBE</button>
@@ -170,6 +171,24 @@ MK.4</div>
         <div class="panel-body" id="kcOpsLog"></div>
         <div class="field">
           <input id="kcTarget" placeholder="lab target for red ops — ip you own / are authorized to test" autocomplete="off" />
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ATT&CK DECK (MITRE matrix) -->
+  <main class="deck kc" data-deck="attack" hidden>
+    <div class="kc-flow att-flow" id="attFlow"></div>
+    <div class="kc-grid">
+      <div class="panel grow" style="--accent: var(--red)">
+        <div class="panel-head"><span id="attStageTitle">SELECT A TACTIC</span><span class="meta" id="attAttck">MITRE ATT&amp;CK</span></div>
+        <div class="panel-body" id="attStageBody"></div>
+      </div>
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>OPS CONSOLE</span><span class="meta">purple team · authorized</span></div>
+        <div class="panel-body" id="attOpsLog"></div>
+        <div class="field">
+          <input id="attTarget" placeholder="lab target for red ops — ip you own / are authorized to test" autocomplete="off" />
         </div>
       </div>
     </div>
@@ -205,12 +224,12 @@ MK.4</div>
     </div>
   </main>
 
-  <!-- RUVIEW DECK (3D spatial) -->
-  <main class="deck" data-deck="ruview" hidden>
+  <!-- SONAR DECK (spatial awareness) -->
+  <main class="deck" data-deck="sonar" hidden>
     <div class="coming">
-      <h2>RU<span class="glitch">VIEW</span></h2>
-      <p>ESP32-S3 SENSOR MESH · 3D SPATIAL MAP</p>
-      <p style="opacity:0.6">// uplink pending — hardware integration //</p>
+      <h2>SO<span class="glitch">NAR</span></h2>
+      <p>SPATIAL AWARENESS · ESP32-S3 SENSOR MESH · 3D PRESENCE MAP</p>
+      <p style="opacity:0.6">// RF trilateration uplink pending — hardware integration //</p>
     </div>
   </main>
 

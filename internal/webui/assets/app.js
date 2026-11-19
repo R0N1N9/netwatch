@@ -205,7 +205,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 function cycleDeck() {
-  const order = ["netwatch", "netrunner", "killchain", "grid", "ar", "ruview"];
+  const order = ["netwatch", "breach", "killchain", "attack", "grid", "ar", "sonar"];
   const cur = document.querySelector(".tab.active").dataset.deck;
   selectDeck(order[(order.indexOf(cur) + 1) % order.length]);
 }
@@ -385,69 +385,131 @@ const KILLCHAIN = [
     { side: "blue", ttl: "Exfil watch (public peers)", att: "T1048", type: "api", endpoint: "/api/kc/connections", btn: "WATCH" },
   ]},
 ];
-let kcStage = 0;
-function kcCoverage(st) {
-  const api = st.actions.filter((a) => a.type === "api").length;
-  return Math.round((api / st.actions.length) * 100);
-}
-function renderKcFlow() {
-  const flow = $("#kcFlow");
-  flow.innerHTML = "";
-  KILLCHAIN.forEach((st, i) => {
-    const n = el("div", "kc-node" + (i === kcStage ? " active" : ""));
-    n.innerHTML = '<div class="num">0' + (i + 1) + '</div><div class="nm">' + st.name + '</div><div class="cov"><i style="width:' + kcCoverage(st) + '%"></i></div>';
-    n.addEventListener("click", () => { kcStage = i; renderKcFlow(); renderKcStage(); });
-    flow.appendChild(n);
-  });
-}
-function renderKcStage() {
-  const st = KILLCHAIN[kcStage];
-  const title = (kcStage + 1) + " · " + st.name;
-  $("#kcStageTitle").textContent = title;
-  $("#kcAttck").textContent = "ATT&CK " + st.attck;
-  const body = $("#kcStageBody");
-  body.innerHTML = "";
-  [["red", "◢ RED · OFFENSE (authorized/lab)"], ["blue", "◤ BLUE · DEFENSE"]].forEach(([side, label]) => {
-    const acts = st.actions.filter((a) => a.side === side);
-    if (!acts.length) return;
-    const sec = el("div", "kc-sec " + side);
-    sec.appendChild(el("h4", null, label));
-    acts.forEach((a) => {
-      const row = el("div", "kc-tech");
-      const ttl = el("span", "ttl", a.ttl);
-      const att = el("span", "att", a.att);
-      const btn = el("button", "go" + (a.type === "info" ? " info" : ""), a.btn || "INFO");
-      btn.addEventListener("click", () => runKc(a));
-      row.appendChild(ttl); row.appendChild(att); row.appendChild(btn);
-      sec.appendChild(row);
+const ATTACK = [
+  { name: "RECON", attck: "TA0043", actions: [
+    { side: "red", ttl: "Active scanning", att: "T1595", type: "api", endpoint: "/api/scan", needsTarget: true, btn: "PROBE" },
+    { side: "blue", ttl: "Scan detection (ICE)", att: "DS0029", type: "info", info: ["ICE flags ARP floods and port-scan fan-out against you.", "Watch the WATCHTOWER intrusion log."] },
+  ]},
+  { name: "RES DEV", attck: "TA0042", actions: [
+    { side: "red", ttl: "Capability test (EICAR)", att: "T1588", type: "api", endpoint: "/api/kc/eicar", btn: "BUILD" },
+    { side: "blue", ttl: "AV / EDR validation", att: "DS0013", type: "info", info: ["Drop the benign EICAR string — a healthy scanner must quarantine it."] },
+  ]},
+  { name: "ACCESS", attck: "TA0001", actions: [
+    { side: "red", ttl: "Public-facing service probe", att: "T1190", type: "api", endpoint: "/api/scan", needsTarget: true, btn: "PROBE" },
+    { side: "blue", ttl: "Exposed-surface audit", att: "DS0009", type: "api", endpoint: "/api/kc/listeners", btn: "AUDIT" },
+  ]},
+  { name: "EXEC", attck: "TA0002", actions: [
+    { side: "red", ttl: "Execution test (EICAR)", att: "T1204", type: "api", endpoint: "/api/kc/eicar", btn: "BUILD" },
+    { side: "blue", ttl: "Process-exec monitoring", att: "DS0009", type: "info", info: ["Watch new process trees, interpreters spawning shells, LOLBins.", "Pair with the persistence audit to catch what survives."] },
+  ]},
+  { name: "PERSIST", attck: "TA0003", actions: [
+    { side: "red", ttl: "Autostart vector brief", att: "T1547", type: "info", info: ["Vectors: systemd, cron/@reboot, shell rc, autostart, rc.local.", "Use the BLUE audit to list what exists on this host now."] },
+    { side: "blue", ttl: "Persistence audit (host)", att: "T1543", type: "api", endpoint: "/api/kc/persistence", btn: "AUDIT" },
+  ]},
+  { name: "PRIVESC", attck: "TA0004", actions: [
+    { side: "red", ttl: "Priv-esc surface brief", att: "T1548", type: "info", info: ["Surfaces: SUID/SGID binaries, sudo misconfig, writable units, stale kernels.", "PLANNING ONLY — no exploit is launched."] },
+    { side: "blue", ttl: "Service / owner audit", att: "DS0009", type: "api", endpoint: "/api/kc/listeners", btn: "AUDIT" },
+  ]},
+  { name: "EVASION", attck: "TA0005", actions: [
+    { side: "red", ttl: "Evasion technique brief", att: "T1070", type: "info", info: ["Timestomping, log clearing, masquerading, disabling tooling.", "PLANNING ONLY."] },
+    { side: "blue", ttl: "Log-integrity brief", att: "DS0017", type: "info", info: ["Ship logs off-host, watch for gaps, alert on auditd/journald tampering."] },
+  ]},
+  { name: "CREDS", attck: "TA0006", actions: [
+    { side: "red", ttl: "Credential-vector brief", att: "T1110", type: "info", info: ["Brute force, OS credential stores, in-memory secrets.", "PLANNING ONLY — NetWatch does not dump or crack credentials."] },
+    { side: "blue", ttl: "Auth-failure monitoring", att: "DS0002", type: "info", info: ["Alert on auth spikes, impossible travel, first use of a credential."] },
+  ]},
+  { name: "DISCOVERY", attck: "TA0007", actions: [
+    { side: "red", ttl: "Host sweep (ARP)", att: "T1046", type: "api", endpoint: "/api/sweep", btn: "RUN" },
+    { side: "red", ttl: "Service discovery", att: "T1046", type: "api", endpoint: "/api/scan", needsTarget: true, btn: "PROBE" },
+    { side: "blue", ttl: "Established peers", att: "T1018", type: "api", endpoint: "/api/kc/connections", btn: "HUNT" },
+  ]},
+  { name: "LATERAL", attck: "TA0008", actions: [
+    { side: "red", ttl: "Lateral-movement brief", att: "T1021", type: "info", info: ["Remote services (SSH/SMB/RDP), pass-the-hash, remote exec.", "PLANNING ONLY."] },
+    { side: "blue", ttl: "Peer / listener audit", att: "T1021", type: "api", endpoint: "/api/kc/connections", btn: "HUNT" },
+  ]},
+  { name: "COLLECT", attck: "TA0009", actions: [
+    { side: "red", ttl: "Collection-target brief", att: "T1005", type: "info", info: ["Local files, clipboard, screen capture, staging directories.", "PLANNING ONLY."] },
+    { side: "blue", ttl: "Data-staging brief", att: "DS0022", type: "info", info: ["Watch for large archives in temp/staging and unusual read bursts."] },
+  ]},
+  { name: "C2", attck: "TA0011", actions: [
+    { side: "red", ttl: "Beacon-profile brief", att: "T1071", type: "info", info: ["Periodic low-jitter callbacks, non-standard ports, DNS tunnels.", "PLANNING ONLY — no implant is generated."] },
+    { side: "blue", ttl: "Established peers", att: "T1071", type: "api", endpoint: "/api/kc/connections", btn: "HUNT" },
+    { side: "blue", ttl: "Non-standard listeners", att: "T1571", type: "api", endpoint: "/api/kc/listeners", btn: "AUDIT" },
+  ]},
+  { name: "EXFIL", attck: "TA0010", actions: [
+    { side: "red", ttl: "Exfil-channel brief", att: "T1041", type: "info", info: ["Over the C2 channel, an alternate protocol (DNS/ICMP), or cloud storage.", "PLANNING ONLY."] },
+    { side: "blue", ttl: "Egress watch (public peers)", att: "T1048", type: "api", endpoint: "/api/kc/connections", btn: "WATCH" },
+  ]},
+  { name: "IMPACT", attck: "TA0040", actions: [
+    { side: "red", ttl: "Impact-scenario brief", att: "T1486", type: "info", info: ["Encryption for impact, inhibit recovery, service/DoS, defacement.", "PLANNING ONLY — NetWatch performs no destructive action."] },
+    { side: "blue", ttl: "Resilience brief", att: "DS0022", type: "info", info: ["Offline/immutable backups, egress rate alerts, recovery drills."] },
+  ]},
+];
+
+// shared chain renderer (KILL CHAIN + ATT&CK). ids: {flow,title,attck,body,ops,target,taxon}
+function makeChain(model, ids) {
+  let stage = 0;
+  const cov = (st) => Math.round(st.actions.filter((a) => a.type === "api").length / st.actions.length * 100);
+  function renderFlow() {
+    const flow = $(ids.flow); flow.innerHTML = "";
+    model.forEach((st, i) => {
+      const n = el("div", "kc-node" + (i === stage ? " active" : ""));
+      n.innerHTML = '<div class="num">' + (i + 1 < 10 ? "0" : "") + (i + 1) + '</div><div class="nm">' + st.name + '</div><div class="cov"><i style="width:' + cov(st) + '%"></i></div>';
+      n.addEventListener("click", () => { stage = i; renderFlow(); renderStage(); });
+      flow.appendChild(n);
     });
-    body.appendChild(sec);
-  });
-  scramble($("#kcStageTitle"), title, 450);
-}
-async function runKc(a) {
-  if (a.type === "info") { opLog(a.side, a.ttl, a.info); return; }
-  if (a.endpoint === "/api/sweep") { await post("/api/sweep"); opLog(a.side, a.ttl, ["sweep dispatched → results populate the NETWATCH deck"]); return; }
-  let body = {};
-  if (a.needsTarget) {
-    const t = $("#kcTarget").value.trim();
-    if (!t) { opLog(a.side, a.ttl, ["⚠ enter a lab target (an IP you own / are authorized to test) in the field below"]); return; }
-    body = { target: t };
   }
-  const bodyEl = opLog(a.side, a.ttl, ["▌ executing…"]);
-  const res = await post(a.endpoint, body);
-  bodyEl.textContent = (res && res.lines ? res.lines : ["no response / backend offline"]).join("\n");
+  function renderStage() {
+    const st = model[stage];
+    const title = (stage + 1) + " · " + st.name;
+    $(ids.title).textContent = title;
+    $(ids.attck).textContent = (ids.taxon || "ATT&CK ") + st.attck;
+    const body = $(ids.body); body.innerHTML = "";
+    [["red", "◢ RED · OFFENSE (authorized/lab)"], ["blue", "◤ BLUE · DEFENSE"]].forEach(([side, label]) => {
+      const acts = st.actions.filter((a) => a.side === side);
+      if (!acts.length) return;
+      const sec = el("div", "kc-sec " + side);
+      sec.appendChild(el("h4", null, label));
+      acts.forEach((a) => {
+        const row = el("div", "kc-tech");
+        row.appendChild(el("span", "ttl", a.ttl));
+        row.appendChild(el("span", "att", a.att));
+        const btn = el("button", "go" + (a.type === "info" ? " info" : ""), a.btn || "INFO");
+        btn.addEventListener("click", () => run(a));
+        row.appendChild(btn);
+        sec.appendChild(row);
+      });
+      body.appendChild(sec);
+    });
+    scramble($(ids.title), title, 450);
+  }
+  async function run(a) {
+    if (a.type === "info") { log(a.side, a.ttl, a.info); return; }
+    if (a.endpoint === "/api/sweep") { await post("/api/sweep"); log(a.side, a.ttl, ["sweep dispatched → results populate the WATCHTOWER deck"]); return; }
+    let body = {};
+    if (a.needsTarget) {
+      const t = $(ids.target).value.trim();
+      if (!t) { log(a.side, a.ttl, ["⚠ enter a lab target (an IP you own / are authorized to test) in the field below"]); return; }
+      body = { target: t };
+    }
+    const bodyEl = log(a.side, a.ttl, ["▌ executing…"]);
+    const res = await post(a.endpoint, body);
+    bodyEl.textContent = (res && res.lines ? res.lines : ["no response / backend offline"]).join("\n");
+  }
+  function log(side, head, lines) {
+    const box = $(ids.ops);
+    const op = el("div", "op" + (side === "red" ? " red" : ""));
+    op.appendChild(el("span", "ohead", "▸ " + head + "  ·  " + new Date().toLocaleTimeString("en-GB")));
+    const bodyEl = el("div", "obody");
+    bodyEl.textContent = (lines || []).join("\n");
+    op.appendChild(bodyEl);
+    box.insertBefore(op, box.firstChild);
+    return bodyEl;
+  }
+  return { init() { renderFlow(); renderStage(); } };
 }
-function opLog(side, head, lines) {
-  const log = $("#kcOpsLog");
-  const op = el("div", "op" + (side === "red" ? " red" : ""));
-  op.appendChild(el("span", "ohead", "▸ " + head + "  ·  " + new Date().toLocaleTimeString("en-GB")));
-  const bodyEl = el("div", "obody");
-  bodyEl.textContent = (lines || []).join("\n");
-  op.appendChild(bodyEl);
-  log.insertBefore(op, log.firstChild);
-  return bodyEl;
-}
+const killchainDeck = makeChain(KILLCHAIN, { flow: "#kcFlow", title: "#kcStageTitle", attck: "#kcAttck", body: "#kcStageBody", ops: "#kcOpsLog", target: "#kcTarget" });
+const attackDeck = makeChain(ATTACK, { flow: "#attFlow", title: "#attStageTitle", attck: "#attAttck", body: "#attStageBody", ops: "#attOpsLog", target: "#attTarget", taxon: "TACTIC " });
 
 // keep reticle glued to the selected row while the device list scrolls
 document.addEventListener("DOMContentLoaded", () => {
@@ -750,7 +812,7 @@ function initNeural() {
 initNeural();
 runBoot();
 initTicker();
-renderKcFlow();
-renderKcStage();
+killchainDeck.init();
+attackDeck.init();
 connect();
 setTimeout(() => { if (!live) loadMock(); }, 600);

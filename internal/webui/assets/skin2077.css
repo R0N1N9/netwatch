@@ -56,9 +56,8 @@ body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-event
 
 /* ---------- header + tabs ---------- */
 .hud-top { background: transparent; border: 0; border-bottom: 1px solid rgba(255, 84, 73, 0.45); clip-path: none; padding: 4px 6px 8px; }
-.brand { font-size: 24px; font-weight: 700; letter-spacing: 0.16em; gap: 6px; }
-.brand .net { color: var(--cyan-soft); }
-.brand .watch { color: var(--yellow); }
+.brand { font-size: 24px; font-weight: 700; letter-spacing: 0.18em; gap: 4px; }
+.brand .word { color: var(--red); text-shadow: 0 0 14px rgba(255,84,73,0.55); }
 .tab { font-family: var(--ui); font-size: 14px; font-weight: 600; letter-spacing: 0.14em; color: var(--dim);
   background: rgba(7, 21, 36, 0.6); border: 1px solid rgba(94, 246, 255, 0.18); padding: 3px 16px; }
 .tab:hover { color: var(--cyan-soft); border-color: var(--line); }
@@ -212,3 +211,8 @@ body.glitch .fx-grain { opacity: 0.4; }
 .ghud-title { font-size: 16px; font-weight: 600; }
 .coming h2 { font-size: 40px; font-weight: 700; }
 .empty { font-size: 14px; }
+
+/* ---------- ATT&CK deck: 14 tactics as a 2-row matrix ---------- */
+.att-flow { row-gap: 5px; }
+.att-flow .kc-node .nm { font-size: 13px; letter-spacing: 0.06em; }
+.att-flow .kc-node .num { font-size: 9px; }
