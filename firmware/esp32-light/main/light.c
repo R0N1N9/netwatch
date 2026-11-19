@@ -9,6 +9,9 @@
 //
 // Set the light's address (this board's IP and LIGHT_PORT) in the REFLEX deck.
 //
+// The board's own RGB light shows the same colour, so it works without a
+// strip. At power-up everything flashes red, green, blue once as a self-test.
+//
 // STATUS: compiles with ESP-IDF v5.3.2 and the espressif/led_strip component
 // (v2.x) in CI, but has NOT yet run on hardware.
 
@@ -39,6 +42,11 @@
 
 static const char *TAG = "nw-light";
 static led_strip_handle_t s_strip;
+// The board's own RGB light mirrors the strip, so a bare board works as a small
+// threat light. DevKitC-1 style boards have it on GPIO48 (v1.0) or GPIO38 (v1.1).
+#define ONBOARD_GPIO_A 48
+#define ONBOARD_GPIO_B 38
+static led_strip_handle_t s_onboard[2];
 static volatile uint8_t s_r = 20, s_g = 20, s_b = 20;
 static volatile int s_pulse = 0;            // 0 steady, 1 breathe, 2 flash
 static volatile int64_t s_last_us = 0;
@@ -118,9 +126,24 @@ static void show(uint8_t r, uint8_t g, uint8_t b, float level) {
         led_strip_set_pixel(s_strip, i, (uint32_t)(r * level), (uint32_t)(g * level), (uint32_t)(b * level));
     }
     led_strip_refresh(s_strip);
+    for (int i = 0; i < 2; i++) {
+        if (s_onboard[i]) {
+            led_strip_set_pixel(s_onboard[i], 0, (uint32_t)(r * level * 0.5f), (uint32_t)(g * level * 0.5f), (uint32_t)(b * level * 0.5f));
+            led_strip_refresh(s_onboard[i]);
+        }
+    }
 }
 
 static void draw_task(void *arg) {
+    // Power-up self-test: red, green, blue. If you never see this on the board
+    // itself, its RGB light is not wired to GPIO48/38 (some boards need a solder
+    // jumper marked "RGB" bridged).
+    show(255, 0, 0, 0.5f);
+    vTaskDelay(pdMS_TO_TICKS(350));
+    show(0, 255, 0, 0.5f);
+    vTaskDelay(pdMS_TO_TICKS(350));
+    show(0, 0, 255, 0.5f);
+    vTaskDelay(pdMS_TO_TICKS(350));
     for (;;) {
         int64_t now = esp_timer_get_time();
         float t = now / 1e6f, level = 0.6f;
@@ -168,6 +191,13 @@ void app_main(void) {
     led_strip_config_t strip = {.strip_gpio_num = STRIP_GPIO, .max_leds = STRIP_LEDS, .led_pixel_format = LED_PIXEL_FORMAT_GRB, .led_model = LED_MODEL_WS2812};
     led_strip_rmt_config_t rmt = {.resolution_hz = 10 * 1000 * 1000};
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip, &rmt, &s_strip));
+    const int pins[2] = {ONBOARD_GPIO_A, ONBOARD_GPIO_B};
+    for (int i = 0; i < 2; i++) {
+        led_strip_config_t one = {.strip_gpio_num = pins[i], .max_leds = 1, .led_pixel_format = LED_PIXEL_FORMAT_GRB, .led_model = LED_MODEL_WS2812};
+        if (led_strip_new_rmt_device(&one, &rmt, &s_onboard[i]) != ESP_OK) {
+            s_onboard[i] = NULL;
+        }
+    }
 
     xTaskCreate(udp_task, "light_udp", 4096, NULL, 5, NULL);
     xTaskCreate(draw_task, "light_draw", 4096, NULL, 4, NULL);

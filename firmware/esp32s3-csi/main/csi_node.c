@@ -102,6 +102,15 @@ static void led_task(void *arg) {
             s_led[i] = NULL;
         }
     }
+    // Power-up self-test: red, green, blue. If you never see this, the board's
+    // RGB light is not wired to GPIO48/38 (some boards need a solder jumper
+    // marked "RGB" bridged), and the colours below will not show either.
+    led_set(40, 0, 0);
+    vTaskDelay(pdMS_TO_TICKS(350));
+    led_set(0, 40, 0);
+    vTaskDelay(pdMS_TO_TICKS(350));
+    led_set(0, 0, 40);
+    vTaskDelay(pdMS_TO_TICKS(350));
     for (int tick = 0;; tick++) {
         bool on = (tick / 3) % 2 == 0; // about three blinks a second
         switch (s_led_state) {
