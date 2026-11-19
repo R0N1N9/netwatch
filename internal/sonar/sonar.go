@@ -19,10 +19,11 @@ import (
 
 // Frame is one CSI sample from a node: the amplitude of each subcarrier.
 type Frame struct {
-	Node   string    `json:"node"`
-	RSSI   int       `json:"rssi"`
-	Amp    []float64 `json:"amp"`
-	DistCM float64   `json:"dist_cm,omitempty"` // Wi-Fi FTM range to the access point, if the node measured one
+	Node   string     `json:"node"`
+	RSSI   int        `json:"rssi"`
+	Amp    []float64  `json:"amp"`
+	DistCM float64    `json:"dist_cm,omitempty"` // Wi-Fi FTM range to the access point, if the node measured one
+	Seen   []Sighting `json:"seen,omitempty"`    // other devices this node overheard, with signal strength
 }
 
 // NodeState is the current reading for one node.
@@ -38,6 +39,7 @@ type NodeState struct {
 	DistM      float64 `json:"distM"`      // measured range to the access point (0 = not measured)
 	Breath     float64 `json:"breath"`     // breaths per minute while the link is otherwise still (0 = none found)
 	BreathConf float64 `json:"breathConf"` // spectral peak over the band median
+	Activity   string  `json:"activity"`   // empty | still | minor | moving | walking | fall?
 }
 
 const (
@@ -78,6 +80,14 @@ type node struct {
 	lastBreath time.Time
 	breath     float64
 	bConf      float64
+
+	ratio       float64   // smoothed turbulence over baseline
+	motionStart time.Time // start of the current movement
+	runPeak     float64
+	lastRunDur  time.Duration // the most recent finished movement
+	lastRunPeak float64
+	lastRunEnd  time.Time
+	fallFlagged bool
 }
 
 // Engine tracks every reporting node.
@@ -87,6 +97,10 @@ type Engine struct {
 
 	// OnMotion fires on the rising edge of a motion event (called without the lock).
 	OnMotion func(node string, score float64)
+	// OnFall fires when a short, violent movement is followed by stillness.
+	OnFall func(node string)
+
+	radios radioBook
 }
 
 // New returns an empty engine.
@@ -94,7 +108,16 @@ func New() *Engine { return &Engine{nodes: map[string]*node{}} }
 
 // Ingest folds one frame into the node's state.
 func (e *Engine) Ingest(f Frame, now time.Time) {
-	if f.Node == "" || len(f.Node) > 32 || len(f.Amp) < 8 || len(f.Amp) > 512 {
+	if f.Node == "" || len(f.Node) > 32 {
+		return
+	}
+	if len(f.Seen) > 0 {
+		if len(f.Seen) > 64 {
+			f.Seen = f.Seen[:64]
+		}
+		e.radios.add(f.Node, f.Seen, now)
+	}
+	if len(f.Amp) < 8 || len(f.Amp) > 512 {
 		return
 	}
 	var sum float64
@@ -114,7 +137,7 @@ func (e *Engine) Ingest(f Frame, now time.Time) {
 		norm[i] = a / mean
 	}
 
-	var fire bool
+	var fire, fell bool
 	var fireScore float64
 
 	e.mu.Lock()
@@ -157,11 +180,20 @@ func (e *Engine) Ingest(f Frame, now time.Time) {
 			}
 		default:
 			r := v / math.Max(n.baseline, 1e-6)
+			n.ratio = n.ratio*0.8 + r*0.2
 			if !n.motion && r > enterAt {
+				n.motionStart, n.runPeak, n.fallFlagged = now, r, false
 				n.motion, fire = true, true
 				n.slow, n.slowT, n.breath, n.bConf = nil, nil, 0, 0 // movement swamps breathing; start over
 			} else if n.motion && r < exitAt {
 				n.motion = false
+				n.lastRunDur, n.lastRunPeak, n.lastRunEnd = now.Sub(n.motionStart), n.runPeak, now
+			}
+			if n.motion && r > n.runPeak {
+				n.runPeak = r
+			}
+			if !n.fallFlagged && n.fallLike(now) {
+				n.fallFlagged, fell = true, true
 			}
 			if r < exitAt { // adapt slowly, and only while calm
 				n.baseline = n.baseline*0.98 + v*0.02
@@ -177,11 +209,14 @@ func (e *Engine) Ingest(f Frame, now time.Time) {
 			}
 		}
 	}
-	cb := e.OnMotion
+	cb, cbFall := e.OnMotion, e.OnFall
 	e.mu.Unlock()
 
 	if fire && cb != nil {
 		cb(f.Node, fireScore)
+	}
+	if fell && cbFall != nil {
+		cbFall(f.Node)
 	}
 }
 
@@ -210,6 +245,7 @@ func (e *Engine) Snapshot(now time.Time) []NodeState {
 		default:
 			st.State = "clear"
 		}
+		st.Activity = n.activity(now, st.State)
 		out = append(out, st)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Node < out[j].Node })
@@ -237,6 +273,36 @@ func (e *Engine) ListenUDP(ctx context.Context, addr string) error {
 			e.Ingest(f, time.Now())
 		}
 	}
+}
+
+// fallLike: a brief, violent movement that has been followed by a few seconds of stillness.
+func (n *node) fallLike(now time.Time) bool {
+	return !n.motion && !n.lastRunEnd.IsZero() &&
+		n.lastRunDur < 3200*time.Millisecond && n.lastRunPeak >= 6 && // the 1.6 s window stretches a burst
+		now.Sub(n.lastRunEnd) >= 4*time.Second && now.Sub(n.lastRunEnd) < 15*time.Second
+}
+
+// activity names what the link is seeing. These are heuristics on turbulence
+// over time, not a trained classifier.
+func (n *node) activity(now time.Time, state string) string {
+	switch state {
+	case "offline", "calibrating":
+		return ""
+	case "motion":
+		if now.Sub(n.motionStart) >= 3500*time.Millisecond {
+			return "walking"
+		}
+		return "moving"
+	}
+	switch {
+	case n.fallLike(now):
+		return "fall?"
+	case n.breath > 0:
+		return "still"
+	case n.ratio > 1.25:
+		return "minor"
+	}
+	return "empty"
 }
 
 // slowAdd averages frames into a 5 Hz series and looks for breathing in it.

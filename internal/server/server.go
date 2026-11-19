@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -22,7 +23,9 @@ import (
 	"github.com/r0n1n9/netwatch/internal/blackwall"
 	"github.com/r0n1n9/netwatch/internal/braindance"
 	"github.com/r0n1n9/netwatch/internal/copilot"
+	"github.com/r0n1n9/netwatch/internal/drill"
 	"github.com/r0n1n9/netwatch/internal/geo"
+	"github.com/r0n1n9/netwatch/internal/hostwatch"
 	"github.com/r0n1n9/netwatch/internal/ice"
 	"github.com/r0n1n9/netwatch/internal/model"
 	"github.com/r0n1n9/netwatch/internal/netif"
@@ -74,6 +77,15 @@ type Server struct {
 	// presence gate: sensitive controls need the key device on the network
 	gateMAC  string
 	gateName string
+
+	// room: floor plan walls and tripwires drawn on the SONAR map
+	walls   []sonar.Wire
+	wires   []sonar.Wire
+	wireHit map[string]time.Time
+
+	sleep   *sonar.SleepLog
+	moves   map[string]int // movement onsets this minute, per node
+	surface hostwatch.SurfaceStore
 }
 
 type histEntry struct {
@@ -95,6 +107,9 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 		lastPresence: map[string]time.Time{},
 		layout:       map[string]braindance.Point{},
 		bd:           braindance.New(""),
+		wireHit:      map[string]time.Time{},
+		moves:        map[string]int{},
+		sleep:        sonar.OpenSleepLog(""),
 		autoEvery:    autoEvery,
 		demo:         demo,
 		trusted:      map[string]bool{},
@@ -103,6 +118,7 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 	}
 	s.mon = passive.NewMonitor(info.Iface, info.IP, s.emitAlert)
 	s.son.OnMotion = s.onPresence
+	s.son.OnFall = s.onFall
 	return s
 }
 
@@ -153,6 +169,18 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, map[string]any{"ok": true, "lines": s.lineageLines()})
 	})
 	mux.HandleFunc("/api/gate", s.handleGate)
+	mux.HandleFunc("/api/sonar/map", s.handleSonarMap)
+	mux.HandleFunc("/api/sonar/sleep", s.handleSleep)
+	mux.HandleFunc("/api/lock", s.handleLock)
+	mux.HandleFunc("/api/usb", s.handleUSB)
+	mux.HandleFunc("/api/surface", s.handleSurface)
+	mux.HandleFunc("/api/drill", s.handleDrill)
+	mux.HandleFunc("/api/kc/surface", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"ok": true, "lines": s.surfaceLines()})
+	})
+	mux.HandleFunc("/api/kc/drill", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"ok": true, "lines": drill.Lines(drill.Run())})
+	})
 	return mux
 }
 
@@ -161,10 +189,19 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 	go s.sys.Run(ctx)
 	if !s.demo && s.DataDir != "" {
 		s.bd = braindance.New(filepath.Join(s.DataDir, "braindance"))
+		s.sleep = sonar.OpenSleepLog(filepath.Join(s.DataDir, "sleep.json"))
+		s.surface.Dir = filepath.Join(s.DataDir, "surface")
+		s.loadRoom()
+	}
+	if !s.demo {
+		go hostwatch.WatchUSB(ctx, hostwatch.SysUSB, s.onUSB, s.onFastKeys)
 	}
 	go s.recordLoop(ctx)
+	go s.minuteLoop(ctx)
+	go s.dailyLoop(ctx)
 	if s.demo {
 		s.loadDemo()
+		s.demoRoom() // after the sample hosts exist, so yesterday's snapshot includes them
 		go s.sonarDemo(ctx)
 	} else {
 		if s.SonarAddr != "" {
@@ -614,6 +651,7 @@ func (s *Server) handleHistoryAt(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) onPresence(node string, score float64) {
 	s.mu.Lock()
+	s.moves[node]++
 	armed := s.sonarArmed
 	recent := time.Since(s.lastPresence[node]) < 30*time.Second
 	if armed && !recent {
@@ -627,19 +665,6 @@ func (s *Server) onPresence(node string, score float64) {
 		Time: time.Now(), Severity: model.SevWarn, Kind: "presence", Source: node,
 		Message: fmt.Sprintf("SONAR armed: movement detected on the %s link (turbulence %.0f/100)", node, score),
 	})
-}
-
-func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	armed := s.sonarArmed
-	s.mu.Unlock()
-	layout := make(map[string]braindance.Point, len(s.layout))
-	s.mu.Lock()
-	for k, v := range s.layout {
-		layout[k] = v
-	}
-	s.mu.Unlock()
-	writeJSON(w, map[string]any{"armed": armed, "listening": s.SonarAddr, "demo": s.demo, "layout": layout, "nodes": s.son.Snapshot(time.Now())})
 }
 
 func (s *Server) handleSonarIngest(w http.ResponseWriter, r *http.Request) {
@@ -683,6 +708,7 @@ func (s *Server) sonarDemo(ctx context.Context) {
 	sims := []*sonar.Sim{sonar.NewSim("node-A", 1), sonar.NewSim("node-B", 2), sonar.NewSim("node-C", 3)}
 	sims[0].DistM, sims[1].DistM, sims[2].DistM = 3.4, 4.1, 2.6
 	sims[2].BreathBPM = 15 // someone sitting still on the node-C link
+	rng, tick := rand.New(rand.NewSource(5)), 0
 	t := time.NewTicker(40 * time.Millisecond)
 	defer t.Stop()
 	start := time.Now()
@@ -703,6 +729,9 @@ func (s *Server) sonarDemo(ctx context.Context) {
 		now := time.Now()
 		for i, sim := range sims {
 			s.son.Ingest(sim.Frame(motion[i]), now)
+		}
+		if tick++; tick%25 == 0 {
+			s.demoRadios(now, rng)
 		}
 	}
 }
@@ -863,6 +892,7 @@ func (s *Server) handleSonarLayout(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.layout = clean
 	s.mu.Unlock()
+	s.saveRoom()
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -874,46 +904,6 @@ func (s *Server) layoutCopy() map[string]braindance.Point {
 		out[k] = v
 	}
 	return out
-}
-
-// recordLoop samples the presence field five times a second into the rolling
-// buffer, and cuts an automatic clip around movement while SONAR is armed.
-func (s *Server) recordLoop(ctx context.Context) {
-	t := time.NewTicker(200 * time.Millisecond)
-	defer t.Stop()
-	var autoStart, lastMotion time.Time
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case now := <-t.C:
-			nodes := s.son.Snapshot(now)
-			if len(nodes) == 0 {
-				continue
-			}
-			sample := braindance.Sample{T: now.UnixMilli()}
-			moving := false
-			for _, n := range nodes {
-				sample.Nodes = append(sample.Nodes, braindance.NodeSample{Node: n.Node, State: n.State, Score: n.Score, Breath: n.Breath, DistM: n.DistM})
-				moving = moving || n.State == "motion"
-			}
-			s.bd.Add(sample)
-
-			s.mu.Lock()
-			armed := s.sonarArmed
-			s.mu.Unlock()
-			if armed && moving {
-				if autoStart.IsZero() {
-					autoStart = now.Add(-5 * time.Second)
-				}
-				lastMotion = now
-			}
-			if !autoStart.IsZero() && (now.Sub(lastMotion) > 5*time.Second || now.Sub(autoStart) > 9*time.Minute) {
-				s.bd.Save("auto · "+autoStart.Add(5*time.Second).Format("15:04:05"), autoStart.UnixMilli(), now.UnixMilli(), s.layoutCopy(), true)
-				autoStart = time.Time{}
-			}
-		}
-	}
 }
 
 func (s *Server) handleBD(w http.ResponseWriter, r *http.Request) {
