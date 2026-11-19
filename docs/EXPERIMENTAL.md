@@ -232,7 +232,7 @@ Candidates, roughly grouped. Move a line into a table above when it lands.
 | 2026-11-19 | FIND on the phone companion (compass arrow to a located device); favicon with a status dot; threat light on a bare board; power-up light self-test |
 | 2026-11-19 | MOBILE deck: QR code and switch for the phone link |
 | 2026-11-19 | Phone page restyled to match the console (boot handshake, threat bar, reticle, glitch) |
-| 2026-11-19 | BRAINDANCE deck; BD tab on the phone (clip playback, SHARE MY VIEW); clips keep their floor plan; FIND's pointer is an arrowhead on the rim of the dial |
+| 2026-11-19 | BRAINDANCE deck; BD tab on the phone (clip playback, SHARE MY VIEW); clips keep their floor plan; FIND's pointer is a notched arrowhead in the middle of the dial |
 | 2026-11-19 | Command bar and VOICE on every deck; the console opens in a window of its own; `update.sh` and the UPDATE card |
 
 ---

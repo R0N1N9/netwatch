@@ -101,7 +101,7 @@ p.note { color: var(--dim); font-size: 13.5px; line-height: 1.45; margin: 8px 0;
 .dial-core { position: absolute; inset: 30px; border-radius: 50%; background: radial-gradient(circle, rgba(29, 255, 161, 0.16), transparent 70%); border: 1px solid rgba(29, 255, 161, 0.3); }
 .dial-core::before, .dial-core::after { content: ""; position: absolute; background: rgba(94, 246, 255, 0.35); }
 .dial-core::before { left: 50%; top: -34px; bottom: -34px; width: 1px; } .dial-core::after { top: 50%; left: -34px; right: -34px; height: 1px; }
-/* an arrowhead on the rim of the dial: it sits on the side to go towards and points that way */
+/* an arrowhead in the middle of the dial, turning in place: the sharp end is the way to go, the notch is the back */
 #fdArrow { position: relative; z-index: 2; width: 178px; height: 178px; color: var(--green); filter: drop-shadow(0 0 10px rgba(29, 255, 161, 0.8)); transition: transform 0.15s linear; }
 #fdCompass.near #fdArrow { color: var(--red); filter: drop-shadow(0 0 12px rgba(255, 84, 73, 0.9)); animation: pulse 0.6s ease-in-out infinite; }
 #fdCompass.near .dial-core { background: radial-gradient(circle, rgba(255, 84, 73, 0.22), transparent 70%); border-color: rgba(255, 84, 73, 0.5); }
