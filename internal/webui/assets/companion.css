@@ -87,11 +87,11 @@ p.note { color: var(--dim); font-size: 13.5px; line-height: 1.45; margin: 8px 0;
 /* ---- FIND: the scan panel ---- */
 .scan-name { font-size: 26px; font-weight: 700; letter-spacing: 0.06em; color: var(--amber); text-shadow: 0 0 12px rgba(255, 184, 74, 0.4); line-height: 1.1; margin: 1px 0 6px; word-break: break-word; }
 .scan-aff { font-family: var(--mono); font-size: 12px; color: var(--soft); margin: 1px 0 8px; }
-#fdTargets { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
-#fdTargets button { padding: 5px 10px 4px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--cyan); background: rgba(7, 21, 36, 0.8); border: 1px solid rgba(94, 246, 255, 0.4); text-align: left; }
-#fdTargets button::before { content: "◈ "; color: var(--red); }
-#fdTargets button.on { background: var(--cyan); color: #04121a; box-shadow: 0 0 14px rgba(94, 246, 255, 0.5); } #fdTargets button.on::before { color: #04121a; }
-#fdTargets button small { display: block; font-family: var(--mono); font-size: 9.5px; font-weight: 400; opacity: 0.75; letter-spacing: 0.04em; }
+#fdTargets, .picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+#fdTargets button, .picks button { padding: 5px 10px 4px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--cyan); background: rgba(7, 21, 36, 0.8); border: 1px solid rgba(94, 246, 255, 0.4); text-align: left; }
+#fdTargets button::before, .picks button::before { content: "◈ "; color: var(--red); }
+#fdTargets button.on, .picks button.on { background: var(--cyan); color: #04121a; box-shadow: 0 0 14px rgba(94, 246, 255, 0.5); } #fdTargets button.on::before, .picks button.on::before { color: #04121a; }
+#fdTargets button small, .picks button small { display: block; font-family: var(--mono); font-size: 9.5px; font-weight: 400; opacity: 0.75; letter-spacing: 0.04em; }
 #fdCompass { text-align: center; padding: 2px 0 8px; }
 #fdDial { position: relative; width: 196px; height: 196px; margin: 0 auto 6px; display: grid; place-items: center; touch-action: none; }
 #fdDial::before, #fdDial::after { content: ""; position: absolute; border-radius: 50%; }
@@ -101,8 +101,9 @@ p.note { color: var(--dim); font-size: 13.5px; line-height: 1.45; margin: 8px 0;
 .dial-core { position: absolute; inset: 30px; border-radius: 50%; background: radial-gradient(circle, rgba(29, 255, 161, 0.16), transparent 70%); border: 1px solid rgba(29, 255, 161, 0.3); }
 .dial-core::before, .dial-core::after { content: ""; position: absolute; background: rgba(94, 246, 255, 0.35); }
 .dial-core::before { left: 50%; top: -34px; bottom: -34px; width: 1px; } .dial-core::after { top: 50%; left: -34px; right: -34px; height: 1px; }
-#fdArrow { position: relative; z-index: 2; font-size: 92px; line-height: 1; color: var(--green); text-shadow: 0 0 24px rgba(29, 255, 161, 0.8); transition: transform 0.15s linear; }
-#fdCompass.near #fdArrow { color: var(--red); text-shadow: 0 0 26px rgba(255, 84, 73, 0.9); animation: pulse 0.6s ease-in-out infinite; }
+/* a long needle: the wide bright head is the way to go, the shaft fades out behind it */
+#fdArrow { position: relative; z-index: 2; width: 178px; height: 178px; color: var(--green); filter: drop-shadow(0 0 10px rgba(29, 255, 161, 0.8)); transition: transform 0.15s linear; }
+#fdCompass.near #fdArrow { color: var(--red); filter: drop-shadow(0 0 12px rgba(255, 84, 73, 0.9)); animation: pulse 0.6s ease-in-out infinite; }
 #fdCompass.near .dial-core { background: radial-gradient(circle, rgba(255, 84, 73, 0.22), transparent 70%); border-color: rgba(255, 84, 73, 0.5); }
 #fdCompass.rough #fdDial::before { border-color: var(--amber); }
 #fdHint { font-size: 22px; font-weight: 700; letter-spacing: 0.16em; color: var(--soft); }
@@ -155,3 +156,12 @@ body.glitch #app { animation: glitch 0.6s steps(2) 1; }
 @keyframes glitch { 0%, 100% { transform: none; filter: none; } 15% { transform: translateX(-7px) skewX(2deg); filter: hue-rotate(-30deg) saturate(2); } 30% { transform: translateX(6px); } 45% { transform: translateY(-4px) skewX(-1.5deg); filter: hue-rotate(25deg); } 70% { transform: translateX(-2px); } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- BD: playback and sharing ---------- */
+#bdStage { display: block; width: 100%; height: 300px; margin: 4px 0 8px; border: 1px solid rgba(94, 246, 255, 0.3); background: radial-gradient(ellipse at 50% 60%, rgba(94, 246, 255, 0.07), transparent 70%), rgba(3, 9, 16, 0.85); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+.bd-bar { align-items: center; } .bd-bar button { flex: 0 0 54px; } .bd-bar input { flex: 1; min-width: 0; accent-color: var(--cyan); }
+#bdTime { font-family: var(--mono); font-size: 11.5px; color: var(--dim); text-align: center; margin: 6px 0 12px; } #bdTime.hot { color: var(--red); }
+.picks { flex-direction: column; } .picks button { width: 100%; }
+#rec { color: var(--red); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; animation: pulse 1s ease-in-out infinite; margin-left: auto; } #rec:not([hidden]) + .pill { margin-left: 0; }
+#rec[hidden] { display: none; }
+#bdShare.on { background: var(--red); border-color: var(--red); color: #1a0504; box-shadow: 0 0 16px rgba(255, 84, 73, 0.5); }

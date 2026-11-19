@@ -37,7 +37,14 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 
-// Clip is a saved recording. Samples is empty in listings.
+// Segment is a wall on the room map.
+type Segment struct {
+	A Point `json:"a"`
+	B Point `json:"b"`
+}
+
+// Clip is a saved recording. Samples is empty in listings. Layout and Walls
+// are the room as it was drawn when the clip was cut.
 type Clip struct {
 	ID      string           `json:"id"`
 	Name    string           `json:"name"`
@@ -46,6 +53,7 @@ type Clip struct {
 	Peak    float64          `json:"peak"`
 	Auto    bool             `json:"auto"`
 	Layout  map[string]Point `json:"layout,omitempty"`
+	Walls   []Segment        `json:"walls,omitempty"`
 	Samples []Sample         `json:"samples,omitempty"`
 }
 
@@ -131,7 +139,7 @@ func (r *Recorder) RecordingSince() int64 {
 }
 
 // StopRec ends the manual recording and saves it as a clip.
-func (r *Recorder) StopRec(name string, now time.Time, layout map[string]Point) (Clip, error) {
+func (r *Recorder) StopRec(name string, now time.Time, layout map[string]Point, walls ...Segment) (Clip, error) {
 	r.mu.Lock()
 	from := r.recStart
 	r.recStart = 0
@@ -139,11 +147,12 @@ func (r *Recorder) StopRec(name string, now time.Time, layout map[string]Point) 
 	if from == 0 {
 		return Clip{}, errors.New("not recording")
 	}
-	return r.Save(name, from, now.UnixMilli(), layout, false)
+	return r.Save(name, from, now.UnixMilli(), layout, false, walls...)
 }
 
 // Save cuts [from, to] (unix ms) out of the rolling buffer into a new clip.
-func (r *Recorder) Save(name string, from, to int64, layout map[string]Point, auto bool) (Clip, error) {
+// walls is the floor plan to keep with it.
+func (r *Recorder) Save(name string, from, to int64, layout map[string]Point, auto bool, walls ...Segment) (Clip, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var cut []Sample
@@ -158,7 +167,7 @@ func (r *Recorder) Save(name string, from, to int64, layout map[string]Point, au
 	if len(cut) > clipCap {
 		cut = cut[len(cut)-clipCap:]
 	}
-	c := Clip{ID: fmt.Sprintf("bd-%d", cut[0].T), Start: cut[0].T, End: cut[len(cut)-1].T, Auto: auto, Layout: layout}
+	c := Clip{ID: fmt.Sprintf("bd-%d", cut[0].T), Start: cut[0].T, End: cut[len(cut)-1].T, Auto: auto, Layout: layout, Walls: walls}
 	for _, existing := range r.clips {
 		if existing.ID == c.ID {
 			return Clip{}, errors.New("a clip starting at that moment already exists")

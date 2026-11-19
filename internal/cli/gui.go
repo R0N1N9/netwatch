@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ var (
 	guiAuto   time.Duration
 	guiDemo   bool
 	guiNoOpen bool
+	guiTab    bool
 	guiSonar  string
 	guiComp   string
 	guiData   string
@@ -75,7 +77,12 @@ var guiCmd = &cobra.Command{
 		fmt.Println()
 
 		if !guiNoOpen {
-			go openBrowser(url)
+			profile := ""
+			if guiData != "" && !guiDemo {
+				profile = filepath.Join(guiData, "window")
+			}
+			how := openConsole(url, profile, guiTab)
+			fmt.Printf("  %s %s\n\n", theme.Label.Render("window:"), theme.Value.Render(how))
 		}
 
 		if err := srv.Run(ctx, guiAddr); err != nil {
@@ -89,16 +96,74 @@ func init() {
 	guiCmd.Flags().StringVar(&guiAddr, "addr", "127.0.0.1:7979", "listen address for the console")
 	guiCmd.Flags().DurationVar(&guiAuto, "auto", 20*time.Second, "auto-sweep interval (0 to disable)")
 	guiCmd.Flags().BoolVar(&guiDemo, "demo", false, "serve sample data instead of live capture (no privileges needed)")
-	guiCmd.Flags().BoolVar(&guiNoOpen, "no-open", false, "do not auto-open the browser")
+	guiCmd.Flags().BoolVar(&guiNoOpen, "no-open", false, "do not open a window or the browser")
+	guiCmd.Flags().BoolVar(&guiTab, "browser", false, "open the console as a tab in your default browser instead of a window of its own")
 	guiCmd.Flags().StringVar(&guiSonar, "sonar-udp", "", "ingest ESP32 CSI frames on this UDP address, e.g. 0.0.0.0:5566 (off by default)")
 	guiCmd.Flags().StringVar(&guiComp, "companion", "", "serve the read-only phone companion over HTTPS on this address, e.g. 0.0.0.0:7443 (off by default)")
 	guiCmd.Flags().StringVar(&guiData, "data-dir", defaultDataDir(), "where clips, the room, logs, the ledger and module settings are stored (empty = memory only)")
 	rootCmd.AddCommand(guiCmd)
 }
 
-func openBrowser(url string) {
+// appBrowsers can show a page in a window of its own, with no tabs and no
+// address bar. Best first: Chrome and Edge also have the speech service the
+// VOICE button needs, which Chromium and Brave are built without.
+var appBrowsers = []struct{ bin, name string }{
+	{"google-chrome-stable", "Google Chrome"}, {"google-chrome", "Google Chrome"},
+	{"microsoft-edge-stable", "Microsoft Edge"}, {"microsoft-edge", "Microsoft Edge"},
+	{"chromium", "Chromium"}, {"chromium-browser", "Chromium"},
+	{"brave-browser", "Brave"}, {"vivaldi-stable", "Vivaldi"},
+}
+
+// findAppBrowser returns the first such browser that look can find. want, if
+// set (NETWATCH_BROWSER), names the one to use.
+func findAppBrowser(want string, look func(string) (string, error)) (path, name string) {
+	if want != "" {
+		if p, err := look(want); err == nil {
+			return p, filepath.Base(want)
+		}
+		return "", ""
+	}
+	for _, b := range appBrowsers {
+		if p, err := look(b.bin); err == nil {
+			return p, b.name
+		}
+	}
+	return "", ""
+}
+
+// windowArgs asks the browser for an application window on url. A profile
+// directory of its own keeps the window separate from everyday browsing: its
+// own entry in the task bar, its own remembered size and microphone permission.
+func windowArgs(url, profile string) []string {
+	args := []string{"--app=" + url, "--class=NetWatch", "--window-size=1500,940", "--no-first-run", "--no-default-browser-check"}
+	if profile != "" {
+		args = append(args, "--user-data-dir="+profile)
+	}
+	return args
+}
+
+// openConsole shows the console: in a window of its own when a browser that
+// can do that is installed, otherwise as a tab in the default browser. It
+// returns a line saying which.
+func openConsole(url, profile string, tab bool) string {
 	time.Sleep(400 * time.Millisecond)
+	if !tab && os.Geteuid() != 0 { // these browsers refuse to start as root
+		if path, name := findAppBrowser(os.Getenv("NETWATCH_BROWSER"), exec.LookPath); path != "" {
+			cmd := exec.Command(path, windowArgs(url, profile)...)
+			if err := cmd.Start(); err == nil {
+				go cmd.Wait()
+				return "its own window (" + name + ") · --browser opens a normal tab instead"
+			}
+		}
+	}
 	_ = exec.Command("xdg-open", url).Start()
+	switch {
+	case tab:
+		return "a tab in your default browser"
+	case os.Geteuid() == 0:
+		return "a tab in your default browser (running as root, so no window of its own)"
+	}
+	return "a tab in your default browser — install Google Chrome, Edge or Chromium and NetWatch opens in a window of its own"
 }
 
 func syntheticInfo() *netif.Info {

@@ -43,6 +43,7 @@ MK.4</div>
         <div class="tab" data-deck="ar">AR</div>
         <div class="tab" data-deck="sonar">SONAR</div>
         <div class="tab" data-deck="mobile">MOBILE</div>
+        <div class="tab" data-deck="braindance">BRAINDANCE</div>
       </div>
       <div class="tab-row">
         <span class="tab-label">MODULES</span>
@@ -61,6 +62,7 @@ MK.4</div>
     <div class="spacer"></div>
     <span class="reh-tag" id="rehTag" hidden>REHEARSAL · synthetic incident</span>
     <span class="hs-stat" id="opStat" hidden title="operator sharpness — see DOJO"><span class="micro cy">OPERATOR</span><b id="opVal">—</b></span>
+    <button class="hs-btn" id="helpBtn" title="how to stop, update and restart NetWatch">⟳ UPDATE</button>
     <button class="hs-btn" id="popDeck" title="open this deck in its own window — handy on a second monitor">⧉ POP OUT</button>
     <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">WATCH ACTIVE</span></div>
     <div class="clock" id="clock">--:--:--</div>
@@ -122,11 +124,6 @@ MK.4</div>
             <span class="micro" id="nlState">SYNAPSE SYNC</span>
             <span class="nl-pct" id="nlPct">98.4%</span>
           </div>
-        </div>
-        <div class="field">
-          <input id="copilotInput" placeholder="ask or command…  e.g. what's weird?  ·  select gateway  ·  switch to sonar" autocomplete="off" />
-          <button class="btn" id="micBtn" title="voice command (V)">◉ VOICE</button>
-          <button class="btn" id="copilotSend">SEND</button>
         </div>
       </div>
     </section>
@@ -643,12 +640,13 @@ MK.4</div>
     </section>
     <section class="col">
       <div class="panel grow" style="--accent: var(--green)">
-        <div class="panel-head"><span>WHAT YOUR PHONE CAN DO</span><span class="meta">read-only · your network only</span></div>
+        <div class="panel-head"><span>WHAT YOUR PHONE CAN DO</span><span class="meta">looks, never touches · your network only</span></div>
         <div class="panel-body">
           <div class="mb-cards">
             <div class="mb-card"><b>ALERTS</b><span>The latest alerts, with a different vibration pattern for each kind, so you can tell them apart in your pocket.</span></div>
             <div class="mb-card"><b>FIND</b><span>Pick a device on your network and a compass arrow and distance lead you to where the sensor nodes place it.</span></div>
             <div class="mb-card"><b>X-RAY</b><span>What SONAR senses — presence, nodes, located devices — drawn over the phone's camera.</span></div>
+            <div class="mb-card"><b>BD</b><span>The live room as a model you can turn, and SONAR's recordings played back in it. <b style="font-size:inherit;letter-spacing:0">SHARE MY VIEW</b> (off until tapped) lets the BRAINDANCE deck replay what the phone was facing.</span></div>
           </div>
           <div class="micro cy" style="margin: 14px 0 6px">▚ GETTING IN</div>
           <ol class="mb-steps">
@@ -657,7 +655,40 @@ MK.4</div>
             <li>The browser warns about the certificate, because NetWatch makes its own. Check the fingerprint if you like, then accept it once.</li>
             <li>Press <b>START</b> on the phone.</li>
           </ol>
-          <div class="m-note">The phone gets a page of its own, served on a separate port. It can read alerts and positions but cannot change anything here, and every request needs the pairing code. The code changes each time NetWatch starts; <b>NEW CODE</b> changes it now and cuts off phones using the old one. If this machine runs a firewall, allow incoming TCP on the port shown.</div>
+          <div class="m-note">The phone gets a page of its own, served on a separate port. It can read alerts, positions and clips but cannot change anything here, and every request needs the pairing code. The only thing it can send is where it is pointing, and only while SHARE MY VIEW is on. The code changes each time NetWatch starts; <b>NEW CODE</b> changes it now and cuts off phones using the old one. If this machine runs a firewall, allow incoming TCP on the port shown.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <main class="deck mod" data-deck="braindance" style="--cols: 0.72fr 1.7fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--amber)">
+        <div class="panel-head"><span>RECORDINGS</span><span class="meta" id="bzMeta">—</span></div>
+        <div class="panel-body">
+          <div class="micro grn">▚▚ PHONE VIEWS · where a paired phone stood and what it faced</div>
+          <div class="bz-list" id="bzPhones"></div>
+          <div class="micro cy" style="margin-top: 10px">▚▚ ROOM CLIPS · what SONAR sensed</div>
+          <div class="bz-list" id="bzClips"></div>
+          <div class="m-note">A phone view is recorded only while <b>SHARE MY VIEW</b> is on in that phone's BD tab. It holds the phone's place on the room map, its heading and tilt, the tab that was open and the device FIND was pointing at — no camera picture, no sound. The last ten minutes per phone are kept in memory and are gone when NetWatch stops; <b>✕</b> forgets one now. Room clips are the SONAR recordings, saved with the floor plan as it was drawn.</div>
+        </div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span id="bzTitle">LIVE ROOM</span><span class="meta" id="bzTime">LIVE</span></div>
+        <div class="bz-stage">
+          <canvas id="bzStage"></canvas>
+          <div class="bz-optic" id="bzOpticBox" hidden><span class="micro grn">▚▚ OPTIC · what was in front of the phone</span><canvas id="bzOptic"></canvas></div>
+          <div class="bz-info" id="bzInfo"></div>
+        </div>
+        <div class="bz-bar idle" id="bzBar">
+          <button class="hs-btn on" id="bzPlay">▶</button>
+          <input type="range" id="bzSeek" min="0" max="1000" value="0" aria-label="position in the recording" />
+          <button class="hs-btn" id="bzSpeed">1×</button>
+          <button class="hs-btn" id="bzLive" hidden title="follow the phone as it moves">● LIVE</button>
+          <button class="hs-btn" id="bzSonar" hidden title="replay this clip in the SONAR room instead">↗ SONAR</button>
+          <button class="hs-btn" id="bzClose" title="back to the live room">✕ CLOSE</button>
         </div>
       </div>
     </section>
@@ -680,11 +711,18 @@ MK.4</div>
     <span class="kh"><i class="kb">T</i>TAGGING</span>
     <span class="kh"><i class="kb">TAB</i>SWITCH DECK</span>
     <span class="kh"><i class="kb">Q</i>HOLD · SCANNER</span>
+    <div class="field cmd-dock" id="cmdDock">
+      <span class="micro cy">DAEMON ▸</span>
+      <input id="copilotInput" placeholder="ask or command…  what's weird?  ·  switch to sonar  ·  how do I update" autocomplete="off" title="ask the Copilot or give a command, from any deck (press / to jump here)" />
+      <button class="btn" id="micBtn" title="voice command (V)">◉ VOICE</button>
+      <button class="btn" id="copilotSend">SEND</button>
+    </div>
     <button class="hs-btn" id="compactBtn" title="hide the gauges and ticker to give the decks more room">▢ COMPACT</button>
     <span class="msg" id="statusLine">deck online</span>
   </footer>
 </div>
 
+<div id="cpToast" hidden title="click to dismiss"></div>
 <div class="fx-scan"></div>
 <div class="fx-vignette"></div>
 <div class="fx-flicker"></div>
@@ -693,6 +731,14 @@ MK.4</div>
   <div class="sc-title">SCANNER <span class="micro" id="scHint">release Q to close · click a host to pin</span></div>
   <div class="sc-hosts" id="scHosts"></div>
   <div class="sc-detail" id="scDetail"></div>
+</div>
+<div id="helpBox" hidden>
+  <div class="rc-card hp-card">
+    <div class="m-row-top"><span class="micro grn">▚▚ UPDATE &amp; RESTART · run these in a terminal</span><span class="spacer"></span><button class="hs-btn" id="helpClose">CLOSE</button></div>
+    <div class="hp-build" id="hpBuild"></div>
+    <div class="hp-body" id="hpBody"></div>
+    <div class="m-note">Updating does not touch your data: the sensor nodes you flashed, the room you drew, clips, the ledger and settings stay in <b id="hpData">the data folder</b>. Boards keep their firmware and find NetWatch again by themselves. Reload this window after NetWatch restarts (Ctrl+R).</div>
+  </div>
 </div>
 <div id="forgeBox" hidden>
   <div class="rc-card fg-card">
@@ -752,7 +798,9 @@ MK.4</div>
 <script src="app.js"></script>
 <script src="senses.js"></script>
 <script src="xray.js"></script>
+<script src="dance.js"></script>
 <script src="reflex.js"></script>
+<script src="optic.js"></script>
 <script src="forge.js"></script>
 <script src="layout.js"></script>
 </body>

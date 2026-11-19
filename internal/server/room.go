@@ -202,7 +202,7 @@ func (s *Server) recordLoop(ctx context.Context) {
 				lastMotion = now
 			}
 			if !autoStart.IsZero() && (now.Sub(lastMotion) > 5*time.Second || now.Sub(autoStart) > 9*time.Minute) {
-				s.bd.Save("auto · "+autoStart.Add(5*time.Second).Format("15:04:05"), autoStart.UnixMilli(), now.UnixMilli(), s.layoutCopy(), true)
+				s.bd.Save("auto · "+autoStart.Add(5*time.Second).Format("15:04:05"), autoStart.UnixMilli(), now.UnixMilli(), s.layoutCopy(), true, s.wallSegs()...)
 				autoStart = time.Time{}
 			}
 		}

@@ -43,6 +43,19 @@ sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
 ./bin/netwatch gui
 ```
 
+The console opens in a window of its own if Chrome, Edge, Chromium or Brave is
+installed, otherwise in your browser.
+
+**Update and restart** — one command stops the running copy, pulls, rebuilds,
+restores the capture rights and starts it again:
+
+```bash
+./update.sh
+```
+
+The same commands, ready to copy, are behind **⟳ UPDATE** in the console's top
+bar. Details: [guide](docs/GUIDE.md#update-and-restart).
+
 ## Decks
 
 | Deck | What it is |
@@ -53,7 +66,8 @@ sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
 | **GRID** | A globe of the public addresses your network talks to, with the local program behind each. |
 | **NETDIVE** | The network as a 3D city you fly through: a tower per host, flows as moving lights, a wall around anything quarantined. |
 | **AR** | Host tags over your camera feed. |
-| **MOBILE** | A QR code that links your phone to a read-only page: alerts by vibration, a compass that points to devices, and X-RAY through its camera. |
+| **MOBILE** | A QR code that links your phone to a page of its own: alerts by vibration, a compass that points to devices, X-RAY through its camera, and clip playback. It can look but not change anything. |
+| **BRAINDANCE** | Replays on a tilted model of the room: what SONAR sensed (room clips) and what a paired phone was facing, if its owner shared that. |
 | **SONAR** | Presence sensing from ESP32-S3 Wi-Fi nodes: a 3D room view, tripwires, located hosts, breathing, and braindance recordings you can replay. |
 
 The second row of tabs holds the modules:
@@ -108,5 +122,7 @@ Google) or point the Copilot at an Ollama host that is not yours. SONAR
 recordings and the respiration log describe when people moved and breathed in
 your space; they are stored locally, and the [guide](docs/GUIDE.md#files-and-privacy)
 says where. PULSE keeps four numbers describing your typing rhythm and never
-records which keys you press. The phone companion is off unless you start it,
+records which keys you press. The phone companion is off unless you start it;
+a phone shares where it is pointing only while its owner switches that on, as
+numbers kept in memory for ten minutes, never pictures or sound;
 and a talking decoy records what a visitor types but never their password.

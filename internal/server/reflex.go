@@ -59,6 +59,7 @@ func (s *Server) reflexRoutes(mux *http.ServeMux) {
 func (s *Server) startReflex(ctx context.Context) {
 	if s.demo {
 		s.demoReflex()
+		s.demoOptic(ctx)
 	}
 	go s.reflexLoop(ctx)
 	if addr := s.CompanionAddr; addr != "" || (s.wantCompanion != "" && !s.demo) {
@@ -112,7 +113,7 @@ func (s *Server) runScene(sc scenes.Scene, cause string) {
 	for _, a := range sc.Actions {
 		switch a {
 		case "clip":
-			if c, err := s.bd.Save("scene · "+sc.Name, now.Add(-30*time.Second).UnixMilli(), now.UnixMilli(), s.layoutCopy(), true); err == nil {
+			if c, err := s.bd.Save("scene · "+sc.Name, now.Add(-30*time.Second).UnixMilli(), now.UnixMilli(), s.layoutCopy(), true, s.wallSegs()...); err == nil {
 				did = append(did, "saved clip "+c.Name)
 			}
 		case "speak":
@@ -194,7 +195,7 @@ func (s *Server) whoBroughtIt(a model.Alert) {
 	if s.bd.BufferSeconds() < 5 {
 		return // no sensor nodes, so there is no room to remember
 	}
-	clip, err := s.bd.Save("new host "+a.Source, a.Time.Add(-60*time.Second).UnixMilli(), a.Time.Add(2*time.Second).UnixMilli(), s.layoutCopy(), true)
+	clip, err := s.bd.Save("new host "+a.Source, a.Time.Add(-60*time.Second).UnixMilli(), a.Time.Add(2*time.Second).UnixMilli(), s.layoutCopy(), true, s.wallSegs()...)
 	if err != nil {
 		return
 	}
@@ -423,7 +424,7 @@ func (s *Server) demoReflex() {
 			return
 		}
 		n := time.Now()
-		if clip, err := s.bd.Save("new host 192.168.1.99 (sample)", n.Add(-18*time.Second).UnixMilli(), n.UnixMilli(), s.layoutCopy(), true); err == nil {
+		if clip, err := s.bd.Save("new host 192.168.1.99 (sample)", n.Add(-18*time.Second).UnixMilli(), n.UnixMilli(), s.layoutCopy(), true, s.wallSegs()...); err == nil {
 			s.mu.Lock()
 			s.ref.clipFor[alertKey(*target)] = clip.ID
 			s.ref.roomFor[alertKey(*target)] = "Sample: movement was sensed in the room 40 s before it joined; the clip is saved."

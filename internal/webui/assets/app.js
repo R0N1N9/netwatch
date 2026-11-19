@@ -189,15 +189,25 @@ async function sendCopilot(viaVoice) {
   const inp = $("#copilotInput"); const q = inp.value.trim(); if (!q) return;
   addCp("user", viaVoice === true ? "OPERATOR · VOICE" : "OPERATOR", q); inp.value = "";
   const cmd = await runCommand(q);
-  if (cmd) { addCp("ai", "DAEMON", cmd); if (viaVoice === true) speak(cmd); return; }
-  const thinking = addCp("ai", "DAEMON", "▌ parsing…");
+  if (cmd) { addCp("ai", "DAEMON", cmd); cpToast(q, cmd); if (viaVoice === true) speak(cmd); return; }
+  const thinking = addCp("ai", "DAEMON", "▌ parsing…"); cpToast(q, "▌ parsing…");
   neuralBusy = true;
   const res = await post("/api/copilot", { query: q });
   setTimeout(() => { neuralBusy = false; }, 900);
   const ans = res && res.answer ? res.answer : "uplink down — backend not reachable.";
-  thinking.querySelector(".body").textContent = ans;
+  thinking.querySelector(".body").textContent = ans; cpToast(q, ans);
   if (viaVoice === true) speak(ans);
 }
+// The command bar sits at the bottom of every deck. Where the Copilot's log is
+// not on screen, the last exchange is shown in a note above the bar instead.
+let cpToastTimer = null;
+function cpToast(q, a, always) {
+  const t = $("#cpToast"), logShown = currentDeck() === "netwatch" && $("#copilotLog").offsetParent !== null && !(document.querySelector(".panel.max") && !document.querySelector(".panel.copilot.max"));
+  if (logShown && !always) { t.hidden = true; return; }
+  t.innerHTML = ""; if (q) t.appendChild(el("div", "q", "› " + q)); t.appendChild(el("div", "a", a)); t.hidden = false;
+  clearTimeout(cpToastTimer); cpToastTimer = setTimeout(() => (t.hidden = true), Math.min(24000, 7000 + String(a).length * 60));
+}
+$("#cpToast").addEventListener("click", () => ($("#cpToast").hidden = true));
 function addCp(who, label, text) {
   const log = $("#copilotLog");
   const m = el("div", "cp-msg " + who);
@@ -223,6 +233,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "s") $("#btnSweep").click();
   if (e.key === "t") $("#btnTrust").click();
   if (e.key === "v") $("#micBtn").click();
+  if (e.key === "/") { e.preventDefault(); $("#copilotInput").focus(); }
   if (e.key === "Tab") { e.preventDefault(); cycleDeck(); }
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     const ips = STATE.devices.map((d) => d.ip); if (!ips.length) return;
@@ -1483,15 +1494,30 @@ function speak(text) {
 }
 (function voice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition, btn = $("#micBtn");
-  if (!SR) { btn.disabled = true; btn.title = "speech recognition is not available in this browser — type commands instead"; return; }
-  const rec = new SR(); rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+  const say = (msg) => { status(msg); cpToast("", msg, true); };
+  if (!SR) { // say why, instead of a dead button
+    btn.classList.add("unavailable"); btn.title = "this browser has no speech recognition";
+    btn.addEventListener("click", () => say("Voice needs a browser that can recognise speech: Google Chrome or Microsoft Edge. Firefox cannot. Typing here does everything voice does."));
+    return;
+  }
+  const why = {
+    "not-allowed": "The microphone is blocked for this page. Allow it (the icon at the left of the address bar, or the window's site settings), then press VOICE again.",
+    "audio-capture": "No microphone was found on this machine.",
+    network: "This browser could not reach its speech service. Chromium and Brave are built without one; Google Chrome and Microsoft Edge have it, and it needs the internet.",
+    "no-speech": "I did not hear anything. Press VOICE and speak.", aborted: "",
+  };
+  why["service-not-allowed"] = why["not-allowed"];
+  const rec = new SR(); rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
   let on = false;
-  rec.onresult = (e) => { $("#copilotInput").value = e.results[0][0].transcript; sendCopilot(true); };
+  rec.onresult = (e) => { // the words appear in the bar as they are heard, and are sent when the phrase is finished
+    const r = e.results[e.results.length - 1]; $("#copilotInput").value = r[0].transcript;
+    if (r.isFinal) sendCopilot(true);
+  };
   rec.onend = () => { on = false; btn.classList.remove("listening"); btn.textContent = "◉ VOICE"; };
-  rec.onerror = (e) => { status("voice: " + e.error); };
+  rec.onerror = (e) => { const m = why[e.error]; if (m !== "") say(m || "Voice stopped: " + e.error); };
   btn.addEventListener("click", () => {
     if (on) { rec.stop(); return; }
-    try { rec.start(); on = true; btn.classList.add("listening"); btn.textContent = "◉ LISTENING"; } catch (_) {}
+    try { rec.start(); on = true; btn.classList.add("listening"); btn.textContent = "◉ LISTENING"; $("#copilotInput").value = ""; } catch (_) {}
   });
 })();
 

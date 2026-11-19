@@ -31,6 +31,7 @@ import (
 	"github.com/r0n1n9/netwatch/internal/model"
 	"github.com/r0n1n9/netwatch/internal/netif"
 	"github.com/r0n1n9/netwatch/internal/offensive"
+	"github.com/r0n1n9/netwatch/internal/optic"
 	"github.com/r0n1n9/netwatch/internal/passive"
 	"github.com/r0n1n9/netwatch/internal/sonar"
 	"github.com/r0n1n9/netwatch/internal/sweep"
@@ -73,7 +74,8 @@ type Server struct {
 
 	// braindance: recordings of the presence field
 	bd      *braindance.Recorder
-	DataDir string // where clips are kept ("" = memory only)
+	opt     *optic.Recorder // what paired phones were looking at (memory only)
+	DataDir string          // where clips are kept ("" = memory only)
 
 	// presence gate: sensitive controls need the key device on the network
 	gateMAC  string
@@ -118,6 +120,7 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 		lastPresence: map[string]time.Time{},
 		layout:       map[string]braindance.Point{},
 		bd:           braindance.New(""),
+		opt:          optic.New(),
 		wireHit:      map[string]time.Time{},
 		moves:        map[string]int{},
 		sleep:        sonar.OpenSleepLog(""),
@@ -180,6 +183,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/braindance/rec", s.handleBDRec)
 	mux.HandleFunc("/api/braindance/clip", s.handleBDClip)
 	mux.HandleFunc("/api/braindance/delete", s.handleBDDelete)
+	mux.HandleFunc("/api/braindance/scene", s.handleDanceScene)
+	mux.HandleFunc("/api/optic", s.handleOptic)
+	mux.HandleFunc("/api/optic/trail", s.handleOpticTrail)
 	mux.HandleFunc("/api/lineage", s.handleLineage)
 	mux.HandleFunc("/api/kc/lineage", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "lines": s.lineageLines()})
@@ -201,6 +207,7 @@ func (s *Server) Handler() http.Handler {
 	s.senseRoutes(mux)
 	s.reflexRoutes(mux)
 	mux.HandleFunc("/api/forge", s.handleForge)
+	mux.HandleFunc("/api/about", s.handleAbout)
 	mux.HandleFunc("/api/mobile", s.handleMobile)
 	mux.HandleFunc("/api/mobile/qr.png", s.handleMobileQR)
 	mux.HandleFunc("/api/finder", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.finderView(r.RemoteAddr)) })
@@ -1005,7 +1012,7 @@ func (s *Server) handleBDSave(w http.ResponseWriter, r *http.Request) {
 		req.LastSec = 60
 	}
 	now := time.Now()
-	c, err := s.bd.Save(req.Name, now.Add(-time.Duration(req.LastSec*float64(time.Second))).UnixMilli(), now.UnixMilli(), s.layoutCopy(), false)
+	c, err := s.bd.Save(req.Name, now.Add(-time.Duration(req.LastSec*float64(time.Second))).UnixMilli(), now.UnixMilli(), s.layoutCopy(), false, s.wallSegs()...)
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1026,7 +1033,7 @@ func (s *Server) handleBDRec(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "recording": true})
 		return
 	}
-	c, err := s.bd.StopRec(req.Name, time.Now(), s.layoutCopy())
+	c, err := s.bd.StopRec(req.Name, time.Now(), s.layoutCopy(), s.wallSegs()...)
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return

@@ -19,6 +19,7 @@
 <div id="app">
   <header>
     <div class="brand"><span>NET</span><i>WATCH</i><b>_</b></div>
+    <span id="rec" hidden title="this phone is sharing its view with the console">● REC</span>
     <div class="pill"><span class="dot"></span><span id="state">NOT STARTED</span></div>
     <span id="clock">--:--:--</span>
   </header>
@@ -26,11 +27,11 @@
     <div class="strip-top"><span class="micro">THREAT LEVEL</span><span id="thrText">—</span></div>
     <div class="segs" id="thrBar"></div>
   </div>
-  <nav><button id="tabA" class="on">ALERTS</button><button id="tabF">FIND</button><button id="tabX">X-RAY</button></nav>
+  <nav><button id="tabA" class="on">ALERTS</button><button id="tabF">FIND</button><button id="tabX">X-RAY</button><button id="tabB">BD</button></nav>
   <main>
     <section id="alerts">
       <button id="start">◉ START</button>
-      <p class="note" id="hint">START connects to your console and turns on vibration. Each kind of alert has its own pattern, so you can tell them apart in your pocket. This page is read-only: it cannot change anything on the console.</p>
+      <p class="note" id="hint">START connects to your console and turns on vibration. Each kind of alert has its own pattern, so you can tell them apart in your pocket. This page cannot change anything on the console.</p>
       <div class="micro cy">ICE // INTRUSION LOG</div>
       <div id="list" style="margin-top:6px"></div>
     </section>
@@ -41,7 +42,7 @@
       <div class="scan-aff" id="fdAff">—</div>
       <div id="fdTargets"></div>
       <div id="fdCompass">
-        <div id="fdDial"><div class="dial-core"></div><div id="fdArrow">▲</div></div>
+        <div id="fdDial"><div class="dial-core"></div><svg id="fdArrow" viewBox="-50 -50 100 100" aria-label="direction to go"><defs><linearGradient id="fdShaft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor"/><stop offset="1" stop-color="currentColor" stop-opacity="0.12"/></linearGradient></defs><rect x="-3.5" y="-14" width="7" height="60" fill="url(#fdShaft)"/><path d="M0,-49 L19,-6 L0,-15 L-19,-6 Z" fill="currentColor"/></svg></div>
         <div id="fdHint">PICK A DEVICE</div>
         <div id="fdDist"></div>
         <div id="fdSub"></div>
@@ -59,6 +60,19 @@
       <div id="xrInfo">X-RAY</div>
       <div class="keys" id="xrBar"><button id="xrCam">CAMERA</button><button id="xrCal">I'M FACING THE ACCESS POINT</button><button id="xrWhere">I'M AT THE DOOR ▾</button></div>
     </section>
+    <section id="bd" hidden>
+      <div class="micro">BRAINDANCE // PLAYBACK</div>
+      <div class="scan-name" id="bdName">LIVE ROOM</div>
+      <div class="scan-aff" id="bdWhen">what the sensor nodes sense right now</div>
+      <canvas id="bdStage"></canvas>
+      <div class="keys bd-bar"><button id="bdPlay">▶</button><input type="range" id="bdSeek" min="0" max="1000" value="0" aria-label="position in the recording" /><button id="bdSpeed">1×</button></div>
+      <div id="bdTime">drag the room to turn and tilt it</div>
+      <div class="micro cy">RECORDINGS</div>
+      <div class="picks" id="bdList"></div>
+      <div class="micro" style="margin-top:14px">SHARE MY VIEW</div>
+      <div class="keys"><button id="bdShare">◉ SHARE MY VIEW: OFF</button></div>
+      <p class="note" id="bdNote">Off unless you switch it on. While it is on, this phone tells your console twice a second where it is on the room map, which way it is facing, how it is tilted, which tab is open and the device FIND is pointing at, so the console's BRAINDANCE deck can replay what you were looking at. No camera picture or sound leaves the phone. The console keeps the last ten minutes in memory and forgets them when it stops.</p>
+    </section>
   </main>
   <div class="ticker"><div id="tick"></div></div>
 </div>
@@ -66,6 +80,7 @@
 <div class="frame"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
 <div id="flash"></div>
 <script src="xray.js"></script>
+<script src="dance.js"></script>
 <script>
 "use strict";
 const code = new URLSearchParams(location.search).get("code") || "";
@@ -116,8 +131,9 @@ async function sensorsOn() { // compass access needs a tap on iPhones; harmless 
   window.addEventListener("deviceorientationabsolute", onOrient); window.addEventListener("deviceorientation", onOrient);
 }
 function showTab(name) {
-  [["alerts", "tabA"], ["find", "tabF"], ["xr", "tabX"]].forEach(([sec, tab]) => { $("#" + sec).hidden = sec !== name; $("#" + tab).className = sec === name ? "on" : ""; });
-  clearInterval(xr.timer); clearInterval(fd.timer);
+  [["alerts", "tabA"], ["find", "tabF"], ["xr", "tabX"], ["bd", "tabB"]].forEach(([sec, tab]) => { $("#" + sec).hidden = sec !== name; $("#" + tab).className = sec === name ? "on" : ""; });
+  clearInterval(xr.timer); clearInterval(fd.timer); clearInterval(bd.timer);
+  if (name === "bd") { bdList(); bdLive(); bd.timer = setInterval(() => { bdList(); bdLive(); }, 2500); bd.last = performance.now(); requestAnimationFrame(bdFrame); }
   if (name === "xr") { sensorsOn(); xr.timer = setInterval(xrPoll, 500); xrPoll(); }
   if (name === "find") { sensorsOn(); fd.timer = setInterval(fdPoll, 700); fdPoll(); }
 }
@@ -125,6 +141,61 @@ const xrOpen = () => showTab("xr");
 $("#tabX").onclick = xrOpen;
 $("#tabA").onclick = () => showTab("alerts");
 $("#tabF").onclick = () => showTab("find");
+$("#tabB").onclick = () => showTab("bd");
+
+// ---- BD: play back what SONAR recorded, and (only if switched on) share what this phone is facing ----
+const bd = { cam: danceCam(), clips: [], clip: null, times: [], live: null, pos: 0, dur: 1, playing: false, speed: 1, last: 0, timer: null, share: false, sent: 0, shareTimer: null, sig: "" };
+const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return String((s / 60) | 0).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+const q = (path) => path + (path.includes("?") ? "&" : "?") + "code=" + encodeURIComponent(code);
+function bdScene() {
+  if (bd.clip) return danceClipScene(bd.clip, danceIndex(bd.times, bd.clip.start + bd.pos));
+  const v = bd.live || {};
+  return { layout: v.layout || {}, walls: v.walls || [], nodes: v.nodes || [], hosts: v.hosts || [], est: v.est && v.est.ok ? v.est : null, phone: bd.share ? { x: xr.pose.x, y: xr.pose.y, heading: xr.pose.heading, label: "YOU" } : null };
+}
+function bdDraw() {
+  const sc = bdScene(); danceDraw($("#bdStage"), sc, bd.cam, performance.now());
+  if (!bd.clip) return;
+  $("#bdSeek").value = Math.round((bd.pos / bd.dur) * 1000);
+  $("#bdTime").textContent = new Date(bd.clip.start + bd.pos).toLocaleTimeString("en-GB") + " · " + mmss(bd.pos) + " / " + mmss(bd.dur) + (sc.est ? " · MOVEMENT" : "");
+  $("#bdTime").className = sc.est ? "hot" : "";
+}
+function bdFrame(now) {
+  if ($("#bd").hidden) return;
+  if (bd.playing && bd.clip) { bd.pos += (now - bd.last) * bd.speed; if (bd.pos >= bd.dur) { bd.pos = bd.dur; bd.playing = false; $("#bdPlay").textContent = "▶"; } }
+  bd.last = now; bdDraw(); requestAnimationFrame(bdFrame);
+}
+async function bdLive() { if (bd.clip) return; try { const r = await fetch(q("/sonar")); if (r.ok) bd.live = await r.json(); } catch (_) {} }
+async function bdList() {
+  try { const r = await fetch(q("/dance")); if (!r.ok) { $("#bdList").innerHTML = '<p class="note">No link (' + r.status + "): check the pairing code.</p>"; return; } bd.clips = (await r.json()).clips || []; } catch (_) { return; }
+  const sig = bd.clips.map((c) => c.id).join() + "#" + (bd.clip ? bd.clip.id : "");
+  if (sig === bd.sig) return; bd.sig = sig;
+  $("#bdList").innerHTML = '<button data-id="" class="' + (bd.clip ? "" : "on") + '">LIVE ROOM<small>what the nodes sense right now</small></button>' + bd.clips.map((c) => '<button data-id="' + esc(c.id) + '" class="' + (bd.clip && bd.clip.id === c.id ? "on" : "") + '">' + esc(c.name) + "<small>" + new Date(c.start).toLocaleString("en-GB") + " · " + mmss(c.end - c.start) + " · peak " + Math.round(c.peak) + "</small></button>").join("") + (bd.clips.length ? "" : '<p class="note">No recordings yet. The console saves one when SONAR is armed and something moves, when a new device joins, or when you press SAVE in its SONAR deck.</p>');
+  $("#bdList").querySelectorAll("button").forEach((b) => (b.onclick = () => bdOpen(b.dataset.id)));
+}
+async function bdOpen(id) {
+  if (!id) { bd.clip = null; bd.playing = false; $("#bdName").textContent = "LIVE ROOM"; $("#bdWhen").textContent = "what the sensor nodes sense right now"; $("#bdTime").textContent = "drag the room to turn and tilt it"; $("#bdTime").className = ""; $("#bdPlay").textContent = "▶"; bd.sig = ""; bdList(); bdLive(); return true; }
+  let clip = null;
+  try { const r = await fetch(q("/dance/clip?id=" + encodeURIComponent(id))); if (r.ok) clip = await r.json(); } catch (_) {}
+  if (!clip || !clip.samples || clip.samples.length < 2) { $("#bdTime").textContent = "that recording could not be loaded"; return false; }
+  bd.clip = clip; bd.times = clip.samples.map((s) => s.t); bd.dur = Math.max(1, clip.end - clip.start); bd.pos = 0; bd.playing = true; bd.last = performance.now();
+  $("#bdName").textContent = clip.name; $("#bdWhen").textContent = new Date(clip.start).toLocaleString("en-GB") + (clip.planThen ? " · floor plan as it was then" : "");
+  $("#bdPlay").textContent = "❚❚"; bd.sig = ""; bdList(); return true;
+}
+$("#bdPlay").onclick = () => { if (!bd.clip) return; if (bd.pos >= bd.dur) bd.pos = 0; bd.playing = !bd.playing; bd.last = performance.now(); $("#bdPlay").textContent = bd.playing ? "❚❚" : "▶"; };
+$("#bdSeek").oninput = (e) => { if (bd.clip) bd.pos = (+e.target.value / 1000) * bd.dur; };
+$("#bdSpeed").onclick = () => { bd.speed = bd.speed === 1 ? 2 : bd.speed === 2 ? 4 : bd.speed === 4 ? 0.5 : 1; $("#bdSpeed").textContent = bd.speed + "×"; };
+danceOrbit($("#bdStage"), bd.cam, bdDraw);
+// Sharing: nothing is sent until this is switched on, and it stops the moment it is switched off.
+function bdSend() {
+  const mode = !$("#find").hidden ? "find" : !$("#xr").hidden ? "xray" : !$("#bd").hidden ? "dance" : "alerts";
+  fetch(q("/view"), { method: "POST", body: JSON.stringify({ x: xr.pose.x, y: xr.pose.y, h: xr.pose.heading, p: xr.pose.pitch, m: mode, g: mode === "find" && fd.target ? fd.target : "" }) })
+    .then((r) => { if (r.ok) { bd.sent++; $("#bdShare").textContent = "◉ SHARING MY VIEW · " + bd.sent + " SENT · TAP TO STOP"; } else $("#bdShare").textContent = "◉ SHARING — NO LINK (" + r.status + ")"; }).catch(() => {});
+}
+function bdShare(on) {
+  bd.share = !!on; clearInterval(bd.shareTimer); $("#rec").hidden = !bd.share; $("#bdShare").className = bd.share ? "on" : "";
+  if (bd.share) { sensorsOn(); bd.shareTimer = setInterval(bdSend, 500); bdSend(); } else $("#bdShare").textContent = "◉ SHARE MY VIEW: OFF";
+}
+$("#bdShare").onclick = () => bdShare(!bd.share);
 
 // ---- FIND: an arrow to a device the sensor nodes have placed ----
 // It shares the X-RAY pose: where you are on the room map and which way you face.
@@ -204,17 +275,17 @@ function glitch() { document.body.classList.add("glitch"); setTimeout(() => docu
 setInterval(() => { $("#clock").textContent = new Date().toLocaleTimeString("en-GB"); }, 1000);
 (function ticker() {
   const hex = (n) => Array.from({ length: n }, () => "0123456789abcdef"[(Math.random() * 16) | 0]).join("");
-  const fill = () => { $("#tick").innerHTML = ["UPLINK <b>" + (code ? "PAIRED" : "NO CODE") + "</b>", "FLOW 0x" + hex(6) + " → 0x" + hex(6), "ICE <b>ARMED</b>", "OPTIC <b>MK.4</b>", "SIG <i>" + hex(8) + "</i>", "READ-ONLY LINK", "LAT " + (8 + Math.random() * 30).toFixed(1) + "ms"].join(" &nbsp;▚&nbsp; "); };
+  const fill = () => { $("#tick").innerHTML = ["UPLINK <b>" + (code ? "PAIRED" : "NO CODE") + "</b>", "FLOW 0x" + hex(6) + " → 0x" + hex(6), "ICE <b>ARMED</b>", "OPTIC <b>MK.4</b>", "SIG <i>" + hex(8) + "</i>", "LINK: LOOK, NOT TOUCH", "LAT " + (8 + Math.random() * 30).toFixed(1) + "ms"].join(" &nbsp;▚&nbsp; "); };
   fill(); setInterval(fill, 26000);
 })();
 (function boot() { // a short handshake, then the console
-  const lines = ["> NEURAL LINK // HANDSHAKE", "> optic driver .......... ok", "> pairing code .......... " + (code ? "present" : "MISSING"), "> channel ............... tls", "> mode .................. read-only", "> JACKED IN"], out = $("#bootLog");
+  const lines = ["> NEURAL LINK // HANDSHAKE", "> optic driver .......... ok", "> pairing code .......... " + (code ? "present" : "MISSING"), "> channel ............... tls", "> mode .................. observe", "> JACKED IN"], out = $("#bootLog");
   segs("#bootBar", 16, 0, "go");
   lines.forEach((l, i) => setTimeout(() => { out.textContent += l + "\n"; segs("#bootBar", 16, Math.round(((i + 1) / lines.length) * 16), "go"); }, 140 + i * 190));
   setTimeout(() => document.body.classList.remove("booting"), 140 + lines.length * 190 + 250);
 })();
 threat([]); segs("#fdSig", 16, 0, "go");
-window.companion = { hapticPattern, felt, xr, fd, start, xrOpen, showTab, fdDraw, fdCalibrate, segs, threat, glitch };
+window.companion = { hapticPattern, felt, xr, fd, bd, start, xrOpen, showTab, fdDraw, fdCalibrate, segs, threat, glitch, bdOpen, bdShare, bdScene };
 </script>
 </body>
 </html>

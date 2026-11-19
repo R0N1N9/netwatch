@@ -11,7 +11,8 @@ that gap is part of the job.
 - Test: `go test ./...` · Vet: `go vet ./...` · Format: `gofmt -l internal/` must print nothing
 - Run with sample data: `./bin/netwatch gui --demo --no-open`
 - The web assets are embedded, so rebuild after editing anything in `internal/webui/assets/`.
-- Check every script in `internal/webui/assets/` (`app.js`, `senses.js`, `reflex.js`, `forge.js`, `layout.js`, `xray.js`) with `node --check` before building.
+- Check every script in `internal/webui/assets/` (`app.js`, `senses.js`, `reflex.js`, `optic.js`, `forge.js`, `layout.js`, `xray.js`, `dance.js`) with `node --check` before building.
+- `update.sh` is what the owner runs to stop, pull, rebuild, `setcap` and restart; keep it and the UPDATE card in `layout.js` in step if those steps change.
 
 ## Documentation is part of every feature
 
@@ -48,7 +49,7 @@ The demo looking good does not make something ✅.
 - The red side of the Kill Chain and ATT&CK decks is assessment, safe test
   artifacts (EICAR) and planning briefs. Do not add exploit, implant,
   credential-theft or evasion tooling.
-- Features that record people (SONAR, braindance, respiration log) stay local,
+- Features that record people (SONAR, braindance, respiration log, phone views) stay local,
   default to off or disarmed, and their docs say plainly what is recorded.
 
 ## Layout
@@ -56,9 +57,9 @@ The demo looking good does not make something ✅.
 See `docs/ARCHITECTURE.md`. Front-end: `index.html`, `app.css` (base),
 `skin2077.css` (the look), `app.js` (the decks and modules), `senses.js` and
 `reflex.js` (later features, hooked in through `EXTRA_COMMANDS`, `ALERT_HOOKS`,
-`RENDER_HOOKS` and `MOD_DECKS`), `xray.js` (shared with `companion.html` and its `companion.css`, the
+`RENDER_HOOKS` and `MOD_DECKS`), `optic.js` (the BRAINDANCE deck), `xray.js` and `dance.js` (shared with `companion.html` and its `companion.css`, the
 phone page served on its own listener; keep its look in step with the console), `layout.js` (compact mode, panel
-expand, pop-out windows). Check layout changes at 1366×768 as well as a large
+expand, pop-out windows, the UPDATE card). The Copilot's input is the command bar in the footer, visible on every deck. Check layout changes at 1366×768 as well as a large
 window: the owner's laptop screen is small. Firmware for the ESP32-S3
 nodes is in `firmware/esp32s3-csi`, and for the LED threat light in
 `firmware/esp32-light`. Both compile in CI (`.github/workflows/firmware.yml`,

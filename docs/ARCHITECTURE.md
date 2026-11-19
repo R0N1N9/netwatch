@@ -19,9 +19,9 @@ step.
 
 | Package | Responsibility |
 |---|---|
-| `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
-| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener; `forge.go` flashes boards and starts the node listener at run time. |
-| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `forge.js`, `layout.js`, `xray.js`, `companion.html`, `companion.css`, vendored three.js and fonts). |
+| `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. `gui` also opens the console: a Chromium-family browser's application window with its own profile if one is installed, otherwise the default browser. |
+| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener; `dance.go` serves clips ready to draw and takes and replays phone views; `forge.go` flashes boards and starts the node listener at run time; `about.go` tells the UPDATE card where this copy lives. |
+| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `optic.js`, `forge.js`, `layout.js`, `xray.js`, `dance.js`, `companion.html`, `companion.css`, vendored three.js and fonts). |
 | `model` | Shared types: `Device`, `Alert`, `Severity`. |
 | `netif` | Finds the interface, subnet and gateway. |
 | `capture` | AF_PACKET raw socket in pure Go; a stub on other systems. |
@@ -36,7 +36,8 @@ step.
 | `offensive` | The scope-locked connect scan. |
 | `audit` | Read-only host inspection: listeners, start-up entries, connections, process lineage, EICAR string. |
 | `sonar` | CSI presence engine, breathing, activity, ranging, radio location, room geometry, sleep log, simulator. |
-| `braindance` | Rolling buffer of the presence field and the clip library. |
+| `braindance` | Rolling buffer of the presence field and the clip library. A clip carries the node layout and the walls as drawn when it was cut. |
+| `optic` | Phone views: a capped, in-memory trail per phone of where it stood and faced, and the geometry that works out which known things were inside its field of view. Only numbers are accepted from the phone; labels come from the console's own map. |
 | `hostwatch` | USB watch, typing-rate rule, daily surface snapshots and diff, screen lock. |
 | `sysmon` | CPU and memory of this machine. |
 | `drill` | The detector fire drill. |
@@ -90,6 +91,9 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/sonar/ingest` | Accept sensor frames over HTTP (UDP is the normal path). |
 | `/api/sonar/arm`, `/layout`, `/map`, `/sleep` | Arm, save node positions, save walls and tripwires, read the respiration log. |
 | `/api/braindance`, `/save`, `/rec`, `/clip`, `/delete` | List, save, record, load and delete clips. |
+| `/api/braindance/scene?id=` | A clip ready to draw: samples, layout, walls (the clip's own, or today's for older clips) and the movement estimate for each sample. |
+| `/api/optic` · `/api/optic/trail?phone=&since=` | Phone views: `GET` lists them, `POST` `forget` drops one (or `*`); the trail is one phone's frames plus the room as it is now. |
+| `/api/about` | Build stamp, the binary's path, the checkout it was built in and the data directory, for the UPDATE card. |
 | `/api/usb`, `/api/surface`, `/api/drill`, `/api/lock` | USB list, surface diff, fire drill, lock the screen. |
 | `/api/kc/*` | The same audits as text lines for the Kill Chain and ATT&CK ops consoles. |
 | `/api/decoy` | `GET` planted decoys and trips; `POST` `port-open`, `port-close`, `file-plant`, `file-remove`, `name-add`, `name-remove`, `test`. |
@@ -112,10 +116,15 @@ Reads are `GET`; actions are `POST` with a JSON body.
 
 The phone companion is a **separate listener** (`--companion`, or switched on
 from the MOBILE deck at run time and remembered; HTTPS, self-signed): `/` (the page), `/companion.css`, `/fonts/*` (the console's typeface),
-`/xray.js`, `/stream?code=` (alerts only), `/sonar?code=` and
+`/xray.js`, `/dance.js`, `/stream?code=` (alerts only), `/sonar?code=`,
 `/finder?code=` (located hosts, the node that hears each loudest, and the
 asking phone's own position if the nodes hear it; also at `/api/finder` on the
-console). Nothing under `/api/` is served there.
+console), `/dance?code=` and `/dance/clip?code=&id=` (the clip library and one
+clip ready to draw). Nothing under `/api/` is served there. The single thing
+a phone can send is `POST /view?code=`: one frame of its own view (position,
+heading, tilt, open tab, FIND target), at most 600 bytes, at most ten a
+second, into `optic`. A target that is not a host the console has placed is
+dropped, and what was "in view" is computed by the console.
 
 Every `POST` handled by `decode()` is refused with 403 if the browser marks it
 cross-site or its `Origin` is not the console's own address.
@@ -179,7 +188,10 @@ cross-site or its `Origin` is not the console's own address.
 - The server can ask open consoles to speak or switch deck through the `cue`
   field of the snapshot; a scene is the only thing that sets it.
 - Anything a phone or other device on the network may reach goes on the
-  companion listener, read-only and behind the pairing code — never on the
-  console's own address.
+  companion listener, behind the pairing code — never on the console's own
+  address. It is read-only except for `/view`, which takes numbers only,
+  stores them in memory and changes nothing else.
+- `dance.js` draws the room for both the console's BRAINDANCE deck and the
+  phone's BD tab; labels are drawn with `fillText`, never as HTML.
 - A rehearsal must never reach a real host or the firewall: actions aimed at
   its host are intercepted in `rehearsalBlackwall`.

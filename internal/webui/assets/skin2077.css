@@ -740,7 +740,47 @@ body.solo-panel .panel.max, body.solo-panel .tpanel.max { inset: 0; box-shadow: 
 .mb-code { font-family: var(--mono); font-size: 34px; letter-spacing: 0.28em; color: var(--green); text-shadow: 0 0 14px rgba(29, 255, 161, 0.5); line-height: 1.1; }
 .mb-off { align-self: center; text-align: center; max-width: 380px; margin-top: 8vh; display: flex; flex-direction: column; gap: 12px; align-items: center; font-size: 14px; }
 .mb-phone { font-size: 90px; line-height: 1; color: var(--dim); }
-.mb-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mb-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .mb-card { border: 1px solid rgba(29, 255, 161, 0.3); border-left: 2px solid var(--green); background: rgba(8, 24, 42, 0.7); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; line-height: 1.4; }
 .mb-card b { font-size: 16px; letter-spacing: 0.12em; color: var(--green); }
 .mb-steps { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; } .mb-steps b { color: var(--cyan); font-weight: 600; }
+
+/* ---------- BRAINDANCE deck ---------- */
+.bz-list { margin-top: 6px; } .bz-list .bdclip { grid-template-columns: 1fr auto auto; } #bzClips .bdclip { grid-template-columns: 1fr auto; }
+.bz-list .bdclip.live { border-color: var(--green); } .bz-list .bdclip.live .sub { color: var(--green); }
+.bz-stage { position: relative; flex: 1; min-height: 0; background: radial-gradient(ellipse at 50% 62%, rgba(94, 246, 255, 0.07), transparent 70%), rgba(3, 9, 16, 0.6); }
+#bzStage { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; } #bzStage:active { cursor: grabbing; }
+.bz-optic { position: absolute; top: 10px; right: 10px; width: min(32%, 360px); border: 1px solid rgba(29, 255, 161, 0.5); background: rgba(3, 9, 16, 0.9); padding: 4px 6px 6px; display: flex; flex-direction: column; gap: 3px; box-shadow: 0 0 18px rgba(29, 255, 161, 0.15); pointer-events: none; }
+.bz-optic[hidden] { display: none; } .bz-optic canvas { width: 100%; aspect-ratio: 16 / 9; display: block; }
+.bz-info { position: absolute; left: 12px; right: 12px; bottom: 8px; font-family: var(--mono); font-size: 12px; line-height: 1.4; color: var(--cyan-soft); background: rgba(5, 2, 3, 0.7); padding: 4px 8px; border-left: 2px solid var(--cyan); pointer-events: none; }
+.bz-info.hot { color: var(--red); border-left-color: var(--red); }
+.bz-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid rgba(94, 246, 255, 0.18); }
+.bz-bar input { flex: 1; min-width: 0; accent-color: #ffb84a; } .bz-bar .hs-btn[hidden] { display: none; }
+.bz-bar.idle > :not(#bzClose) { opacity: 0.3; pointer-events: none; } .bz-bar.idle #bzClose { display: none; }
+
+/* ---------- the command bar: on every deck, pinned to the bottom ---------- */
+.hud-bottom { flex: none; }
+.cmd-dock { flex: 1 1 420px; min-width: 260px; max-width: 900px; margin: 0 auto; padding: 0; gap: 6px; align-items: center; }
+.cmd-dock .micro { flex: none; } .cmd-dock input { min-width: 0; padding: 5px 10px; font-size: 13px; border-color: rgba(255, 43, 214, 0.45); letter-spacing: 0; }
+.cmd-dock input:focus { border-color: var(--magenta); box-shadow: 0 0 12px rgba(255, 43, 214, 0.35); }
+.cmd-dock .btn { padding: 3px 12px; font-size: 12.5px; flex: none; } .cmd-dock .btn.unavailable { opacity: 0.45; }
+.cmd-dock .btn.listening { color: #1a0504; background: var(--red); border-color: var(--red); box-shadow: 0 0 14px rgba(255, 84, 73, 0.6); }
+body.replay .cmd-dock { opacity: 1; pointer-events: auto; }
+.hud-bottom .msg { flex: 0 1 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cpToast { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 60; width: min(760px, calc(100vw - 40px)); max-height: 42vh; overflow-y: auto; cursor: pointer;
+  background: rgba(8, 10, 22, 0.96); border: 1px solid var(--magenta); border-left: 3px solid var(--magenta); box-shadow: 0 0 24px rgba(255, 43, 214, 0.25); padding: 8px 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; }
+#cpToast[hidden] { display: none; } #cpToast .q { color: var(--magenta); margin-bottom: 4px; } #cpToast .a { color: var(--fg); }
+body.solo-panel #cpToast { display: none; }
+@media (max-width: 1850px) { .hud-bottom .kh:nth-child(n+3) { display: none; } }
+@media (max-width: 1500px) { .cmd-dock .micro { display: none; } .hud-bottom .msg { flex-basis: 150px; } .hud-bottom { gap: 12px; } }
+
+/* ---------- UPDATE card ---------- */
+#helpBox { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(5, 2, 3, 0.6); }
+#helpBox[hidden] { display: none; }
+.hp-card { width: min(880px, 94vw); max-height: 88vh; }
+.hp-build { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+.hp-body { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 5px; } .hp-body .micro { margin-top: 8px; }
+.hp-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; background: rgba(3, 9, 16, 0.8); border: 1px solid rgba(94, 246, 255, 0.2); border-left: 2px solid var(--green); padding: 5px 8px; }
+.hp-row code { font-family: var(--mono); font-size: 13px; color: var(--green); word-break: break-all; user-select: all; }
+.hp-row .hp-what { grid-column: 1 / -1; font-size: 12px; color: var(--dim); }
+body.solo #helpBtn { display: none; }

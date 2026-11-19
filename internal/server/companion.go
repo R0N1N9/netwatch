@@ -1,9 +1,11 @@
 package server
 
-// The phone companion: a second, read-only listener for a phone on your own
-// network. It serves one page (haptic alerts and the X-RAY view) over HTTPS
+// The phone companion: a second listener for a phone on your own network. It
+// serves one page (haptic alerts, FIND, X-RAY and clip playback) over HTTPS
 // with a self-signed certificate, and every data request needs the pairing
-// code shown in the REFLEX deck. The console itself stays on localhost.
+// code shown in the MOBILE deck. The phone can change nothing on the console;
+// the one thing it can send is its own view (see dance.go), and only while its
+// owner has switched that on. The console itself stays on localhost.
 
 import (
 	"crypto/ecdsa"
@@ -195,6 +197,27 @@ func (s *Server) companionHandler() http.Handler {
 		}
 		writeJSON(w, s.finderView(r.RemoteAddr))
 	})
+	mux.HandleFunc("/dance.js", file("dance.js", "application/javascript"))
+	mux.HandleFunc("/dance", func(w http.ResponseWriter, r *http.Request) { // the clip library
+		if ok, code := s.paired(r); !ok {
+			http.Error(w, "pairing code required", code)
+			return
+		}
+		writeJSON(w, s.danceList())
+	})
+	mux.HandleFunc("/dance/clip", func(w http.ResponseWriter, r *http.Request) { // one clip, ready to draw
+		if ok, code := s.paired(r); !ok {
+			http.Error(w, "pairing code required", code)
+			return
+		}
+		v, found := s.danceScene(r.URL.Query().Get("id"))
+		if !found {
+			http.Error(w, "no such clip", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, v)
+	})
+	mux.HandleFunc("/view", s.handlePhoneView) // the one thing a phone can send: where it is looking
 	mux.HandleFunc("/sonar", func(w http.ResponseWriter, r *http.Request) {
 		if ok, code := s.paired(r); !ok {
 			http.Error(w, "pairing code required", code)

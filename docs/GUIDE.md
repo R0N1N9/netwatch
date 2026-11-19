@@ -11,7 +11,7 @@ are authorised to do.
 
 - [Install and run](#install-and-run)
 - [The console](#the-console)
-- [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [NETDIVE](#netdive) · [AR](#ar) · [SONAR](#sonar) · [MOBILE](#phone-companion)
+- [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [NETDIVE](#netdive) · [AR](#ar) · [SONAR](#sonar) · [MOBILE](#phone-companion) · [BRAINDANCE](#braindance)
 - [Modules](#modules): [DECOY](#decoy) · [CORTEX](#cortex) · [SPECTRUM](#spectrum) · [ORACLE](#oracle) · [PULSE](#pulse) · [WARD](#ward) · [QUANTUM](#quantum) · [LEDGER](#ledger) · [DOJO](#dojo) · [REFLEX](#reflex) · [Phone companion](#phone-companion)
 - [Commands and voice](#commands-and-voice)
 - [The Copilot and local models](#the-copilot-and-local-models)
@@ -48,7 +48,60 @@ sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
 ./bin/netwatch gui
 ```
 
-The console opens at `http://127.0.0.1:7979`.
+The console opens **in a window of its own** — no tabs, no address bar — when
+Google Chrome, Microsoft Edge, Chromium or Brave is installed (it uses that
+browser's "application window", with a profile of its own kept in the data
+directory, so it is separate from your everyday browsing). If none of them is
+installed it opens as a tab in your default browser instead; Firefox has no
+such window. `--browser` asks for a normal tab, `--no-open` for nothing, and
+the console is always at `http://127.0.0.1:7979` whichever way it opened.
+Chrome or Edge is the better choice if you want [voice](#commands-and-voice).
+
+`make launcher` adds NetWatch to your desktop's application menu (it starts
+with a terminal showing its log; closing that terminal stops NetWatch).
+
+### Update and restart
+
+One command, from the NetWatch folder, stops the running copy, pulls the
+latest code, rebuilds, gives the new build its capture rights and starts it
+again:
+
+```bash
+./update.sh
+```
+
+(`make update` does the same; `./update.sh --no-start` stops after building;
+anything else you add is passed on to `netwatch gui`.) The same steps by hand:
+
+```bash
+pkill -x netwatch
+```
+
+```bash
+git pull
+```
+
+```bash
+make build
+```
+
+```bash
+sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
+```
+
+```bash
+./bin/netwatch gui
+```
+
+`setcap` has to be repeated after every build, because the rights belong to
+the file and a build replaces it. You do not need to remember any of this:
+**⟳ UPDATE** in the console's top bar (or typing `how do I update` in the
+command bar) shows these commands with your real folder filled in and a
+**COPY** button beside each. Updating does not touch your data — boards you
+flashed, the room, clips, the ledger and settings live in the data directory,
+not in the NetWatch folder.
+
+![The UPDATE card](screens/update.jpg)
 
 ### Subcommands
 
@@ -66,9 +119,10 @@ The console opens at `http://127.0.0.1:7979`.
 | `--demo` | off | Sample data; no capture, no firewall changes, no decoys opened or planted, no hosts probed, the screen is never locked. |
 | `--addr` | `127.0.0.1:7979` | Where the console listens. |
 | `--auto` | `20s` | How often to sweep the network (`0` disables). |
-| `--no-open` | off | Do not open the browser. |
+| `--no-open` | off | Do not open a window or the browser. |
+| `--browser` | off | Open the console as a tab in your default browser instead of a window of its own. |
 | `--sonar-udp` | off | Accept sensor frames on this UDP address, e.g. `0.0.0.0:5566`. Not needed once you have flashed a board from the console: NetWatch then listens on its own. |
-| `--companion` | off | Serve the read-only [phone companion](#phone-companion) over HTTPS on this address, e.g. `0.0.0.0:7443`. |
+| `--companion` | off | Serve the [phone companion](#phone-companion) over HTTPS on this address, e.g. `0.0.0.0:7443`. |
 | `--data-dir` | `~/.local/share/netwatch` | Where clips, the room layout, the respiration log, surface snapshots, the ledger and module settings are kept. Empty keeps everything in memory. |
 
 ### Environment
@@ -78,6 +132,7 @@ The console opens at `http://127.0.0.1:7979`.
 | `NETWATCH_LLM` | `off` forces the Copilot's built-in rules. |
 | `NETWATCH_LLM_URL` | Ollama address (default `http://127.0.0.1:11434`). |
 | `NETWATCH_LLM_MODEL` | Model name (default: the first one installed). |
+| `NETWATCH_BROWSER` | The browser to use for the console's own window, e.g. `chromium`, if you do not want the first one NetWatch finds. |
 | `NETWATCH_ESPTOOL` | Full path to `esptool`, if NetWatch cannot find it by itself when flashing a board. |
 
 ---
@@ -86,7 +141,9 @@ The console opens at `http://127.0.0.1:7979`.
 
 ![Watchtower](screens/watchtower.jpg)
 
-- **Top bar** — two rows of tabs (the decks, then the modules), watch status, clock.
+- **Top bar** — two rows of tabs (the decks, then the modules), **⟳ UPDATE**
+  (the commands to stop, update and restart, ready to copy), **⧉ POP OUT**,
+  watch status, clock.
 - **Browser tab icon** — the dot in the middle is green when all is well and
   turns red while a critical alert is unopened, so you can tell from another
   tab or a popped-out window.
@@ -97,8 +154,14 @@ The console opens at `http://127.0.0.1:7979`.
 - **Time scrubber** (above the ticker) — drag back to replay the console's
   recent state. Ticks mark alerts; red is critical. Controls lock while you are
   in the past. **LIVE** returns to now. History is kept in memory only.
-- **Footer** — key hints: `S` sweep, `↑↓` change target, `T` trust, `V` voice,
-  `Tab` next deck, hold `Q` for the scanner.
+- **Command bar** (bottom of the window, on every deck) — type a question
+  or a command and press Enter, or press **◉ VOICE** and say it. `/` jumps to
+  the bar from anywhere, `V` starts voice. On WATCHTOWER the reply appears in
+  the Copilot panel's log; on every other deck it appears in a note just above
+  the bar (click it to dismiss). See [Commands and voice](#commands-and-voice).
+- **Footer** — key hints beside the command bar: `S` sweep, `↑↓` change
+  target; on a wide window also `T` trust, `Tab` next deck, hold `Q` for the
+  scanner.
 - **Fitting your screen** — on a short screen (under about 880 pixels tall)
   the console switches to a **compact** layout by itself: the gauges shrink to
   one line and the ticker is hidden so the decks get the room. **▢ COMPACT** /
@@ -517,7 +580,7 @@ moment. **REPLAY THE LAST 30 MINUTES** shows one on demand. `Esc` closes it.
 
 ![Phone companion](screens/companion.jpg)
 
-A read-only page for your phone. Open the **MOBILE** deck (next to SONAR) and
+A page for your phone that looks but cannot touch. Open the **MOBILE** deck (next to SONAR) and
 press **SWITCH ON THE PHONE LINK**. The deck then shows a **QR code**, the
 address and a six-digit **pairing code**; point the phone's camera at the QR
 code, with the phone on the same network. NetWatch remembers that the link is
@@ -560,19 +623,75 @@ compare. Press **START**.
   where you are, face the access point and tap **I'M FACING THE ACCESS POINT**
   so the compass lines up with your room map. Without a compass, drag to look
   around.
+- **BD** — braindance on the phone. It opens on the **live room**: a tilted
+  model of your floor plan with the access point, the nodes, located devices
+  and any movement, which you turn and tilt by dragging. Under it is the list
+  of **recordings** (the console's SONAR clips): tap one and it plays in the
+  same model, with a figure where the movement was, a play/pause button, a
+  slider to scrub and a speed button. Clips are played from the console; the
+  phone stores nothing.
 
-The companion listener serves that page, the alert stream, the SONAR view and
-the device positions for FIND, and nothing else: the console's controls are not reachable through it, and
-every data request needs the pairing code (ten wrong guesses lock it for a
-minute). The code changes each time NetWatch starts.
+  ![BD on a phone](screens/phone-bd.jpg)
+
+  At the bottom of the BD tab is **SHARE MY VIEW**, which is **off** until you
+  tap it. While it is on (a red **● REC** shows at the top of the page) the
+  phone tells the console, twice a second: where it is on the room map, which
+  way it is facing, how it is tilted, which tab is open, and the device FIND
+  is pointing at. That is everything — **no camera picture and no sound ever
+  leave the phone**. The console works out from its own map what was in front
+  of the phone, keeps the last ten minutes per phone in memory (never on
+  disk), and replays it in the [BRAINDANCE deck](#braindance). Tap again to
+  stop; nothing is sent after that.
+
+The companion listener serves that page, the alert stream, the SONAR view, the
+device positions for FIND and the clips, and nothing else: the console's
+controls are not reachable through it, and every request for data needs the
+pairing code (ten wrong guesses lock it for a minute). The one thing a phone
+can send is its own view, described above, and only while its owner has
+switched that on. The code changes each time NetWatch starts.
+
+---
+
+### BRAINDANCE
+
+![BRAINDANCE deck](screens/braindance-deck.jpg)
+
+The deck after MOBILE. It replays two kinds of recording on a tilted model of
+the room — drag to turn and tilt it, scroll to zoom:
+
+- **Phone views** — what a paired phone was facing. Each phone that has
+  switched on **SHARE MY VIEW** appears in the list (with **● SHARING NOW**
+  while it is still sending). Press **▶**: the model shows the phone, the path
+  it walked, a green wedge for its field of view and lines to whatever was
+  inside it; the **OPTIC** inset redraws that from the phone's own eye level —
+  the same tags its X-RAY tab would have shown, with a heading tape — and the
+  line underneath says what it was doing (*FIND → echo-dot · 4.8 m · straight
+  ahead*) and what was in view. **● LIVE** follows a phone that is still
+  sharing; scrub back or press play to replay. **✕** beside a phone forgets
+  its view at once. Everything else in the room is drawn where it is *now*;
+  only the phone's position, heading and what was in view are from then.
+- **Room clips** — the SONAR recordings (see [SONAR](#sonar)), played here
+  with a figure where the movement was. Each clip is saved with the floor plan
+  as it was drawn at the time, so a clip still shows the old walls after you
+  redraw the room. **↗ SONAR** replays the same clip in the SONAR deck's 3-D
+  room instead.
+
+With nothing open the deck shows the live room. If a phone is sharing when
+you open the deck, it is shown straight away.
+
+The walls are the ones **you draw** in SONAR's floor-plan tool (or the plain
+square if you have drawn none). NetWatch does not work out walls or furniture
+by itself: a handful of Wi-Fi links can tell that something moved between two
+points, not what shape the building is.
 
 ---
 
 ## Commands and voice
 
-The Copilot box is also a command line. Anything it does not recognise is
-passed to the Copilot as a question. **VOICE** (or `V`) accepts the same
-commands by speech and reads the reply aloud.
+The command bar at the bottom of every deck is the Copilot's input. Anything
+it does not recognise as a command is passed to the Copilot as a question.
+**◉ VOICE** (or `V`) accepts the same commands by speech — the words appear in
+the bar as they are heard — and reads the reply aloud.
 
 | Say or type | Effect |
 |---|---|
@@ -586,6 +705,8 @@ commands by speech and reads the reply aloud.
 | `arm sonar` · `disarm sonar` | Arm or disarm SONAR. |
 | `record` · `stop recording` · `save clip` | Braindance recording. |
 | `play last clip` · `exit replay` | Braindance replay. |
+| `braindance` · `replay the phone` · `forget phone views` | Open the BRAINDANCE deck; replay the newest phone view; drop every phone view. |
+| `how do I update` · `restart` · `help` | Show the stop / update / restart commands, ready to copy. |
 | `how many people` | SONAR head count. |
 | `sleep report` | Summary of the respiration log. |
 | `set key <host>` · `clear key` | Presence key. |
@@ -616,8 +737,12 @@ commands by speech and reads the reply aloud.
 | `mobile` · `qr` · `phone link on` · `phone link off` | Open the MOBILE deck and read out the link and pairing code; switch the phone link on or off. |
 | `add a node` · `cancel flash` · `listen for nodes` | Open the board flasher; stop a flash in progress; start accepting sensor nodes. |
 
-Voice uses the browser's speech recognition. In Chrome that sends audio to
-Google; type the commands if you want everything to stay on your machine.
+Voice uses the browser's speech recognition, so it depends on the browser:
+Google Chrome and Microsoft Edge can do it (they send the audio to Google or
+Microsoft to be recognised, and need the internet for that); Chromium and
+Brave are built without the service and report that it cannot be reached;
+Firefox has none. When voice cannot work, pressing VOICE says why. Type the
+commands if you want everything to stay on your machine.
 
 ---
 
@@ -843,6 +968,7 @@ Everything NetWatch stores is under the data directory
 | `braindance/bd-*.json` | Braindance clips. |
 | `room.json` | Node positions, walls and tripwires. |
 | `sleep.json` | The respiration log. |
+| `window/` | The browser profile of NetWatch's own window (its size, the microphone permission). Safe to delete. |
 | `surface/surface-YYYY-MM-DD.json` | Daily surface snapshots. |
 | `ledger.jsonl` | The LEDGER: one hash-chained entry per line for every alert, action and note. |
 | `firmware/*.bin` | Optional: a firmware image placed here (`sonar-node.bin`, `threat-light.bin`) is flashed instead of the one built into NetWatch. |
@@ -859,6 +985,11 @@ an Ollama host that is not your own machine.
 Braindance clips and the respiration log record when people moved and breathed
 in your space. Keep them private, and tell the people you live or work with
 that SONAR is running.
+
+A phone view records where one person's phone was and which way it pointed.
+It exists only while that person has **SHARE MY VIEW** switched on, holds no
+picture or sound, stays in memory (ten minutes per phone at most) and is gone
+when NetWatch stops or when you press **✕** beside it in the BRAINDANCE deck.
 
 PULSE stores a description of how you type — typical key hold time and gap, and
 how much each varies — and never which keys. It is off until you turn it on.
@@ -885,7 +1016,10 @@ can read your alerts and the SONAR view over your network.
 | SONAR shows "no nodes reporting" | The console was not started with `--sonar-udp`, a firewall is blocking UDP 5566, or the boards are pointed at the wrong IP. |
 | 3D button is disabled | The browser is not providing WebGL; 2D still works. |
 | Copilot says "built-in rules" | Ollama is not running, or has no model installed. |
-| VOICE button is disabled | The browser has no speech recognition; type commands instead. |
+| VOICE says the browser has no speech recognition | Firefox has none. Use Google Chrome or Microsoft Edge (NetWatch opens its window in one of them if installed). Typing does everything voice does. |
+| VOICE says it could not reach its speech service | Chromium and Brave are built without Google's speech service. Use Google Chrome or Edge, and check the internet connection: recognition happens online. |
+| VOICE says the microphone is blocked | Allow the microphone for the page: the icon at the left of the address bar, or in NetWatch's own window the ⋮ menu → site settings. |
+| NetWatch opens as a browser tab, not its own window | No Chrome, Edge, Chromium or Brave was found (or NetWatch is running as root). Install one; `NETWATCH_BROWSER` picks a specific one. |
 | Trust or quarantine is refused | A presence key is set and that device is off the network. |
 | Process names are missing | The connection belongs to another user; run NetWatch as root to see it. |
 | A honeyport will not open | Something already uses that port, or it is under 1024 and NetWatch is not root. |

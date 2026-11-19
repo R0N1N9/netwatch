@@ -88,3 +88,43 @@ EXTRA_COMMANDS.push(async (t) => {
   return null;
 });
 Object.assign(window.netwatch, { layout, panelsOf, panelMax, popOut, setCompact, fitScreen, favi });
+
+// ---- UPDATE card: the commands to stop, update and restart, ready to copy ----
+const help = { open: false };
+function helpCopy(text, btn) {
+  const done = () => { btn.textContent = "COPIED"; btn.classList.add("on"); setTimeout(() => { btn.textContent = "COPY"; btn.classList.remove("on"); }, 1400); };
+  const fallback = () => { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); done(); } catch (_) {} t.remove(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+}
+function helpSteps(a) {
+  const cd = a.repo ? "cd " + (/[^\w@%+=:,./-]/.test(a.repo) ? "'" + a.repo.replace(/'/g, "'\\''") + "'" : a.repo) : "cd ~/netwatch   # the folder you cloned NetWatch into";
+  return [
+    ["THE SHORT WAY · one command does all of it", [[cd + " && ./update.sh", "stops NetWatch, pulls, rebuilds, restores capture rights and starts it again"]]],
+    ["STEP BY STEP", [[cd, "go to the NetWatch folder"], ["pkill -x netwatch", "stop the running copy (use sudo pkill if you started it with sudo)"], ["git pull", "get the latest code"], ["make build", "rebuild"], ["sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch", "let the new build capture packets without sudo — needed after every build"], ["./bin/netwatch gui", "start it"]]],
+    ["JUST RESTART · no update", [["pkill -x netwatch; " + cd + " && ./bin/netwatch gui", "stop it and start it again"]]],
+  ];
+}
+async function helpOpen() {
+  const a = (await get("/api/about")) || {};
+  help.about = a; help.open = true; $("#helpBox").hidden = false;
+  $("#hpBuild").textContent = "this build: " + (a.build || "unknown") + (a.demo ? " · demo mode" : "");
+  $("#hpData").textContent = a.dataDir || "memory only (no data folder in this run)";
+  const body = $("#hpBody"); body.innerHTML = "";
+  helpSteps(a).forEach(([title, lines]) => {
+    body.appendChild(el("div", "micro cy", "▚▚ " + title));
+    lines.forEach(([cmd, what]) => {
+      const row = el("div", "hp-row"), code = el("code", null, cmd), b = el("button", "hs-btn", "COPY");
+      b.onclick = () => helpCopy(cmd, b); row.appendChild(code); row.appendChild(b); row.appendChild(el("span", "hp-what", what)); body.appendChild(row);
+    });
+  });
+  return a;
+}
+function helpClose() { help.open = false; $("#helpBox").hidden = true; }
+$("#helpBtn").onclick = helpOpen; $("#helpClose").onclick = helpClose;
+$("#helpBox").addEventListener("click", (e) => { if (e.target.id === "helpBox") helpClose(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && help.open) helpClose(); });
+EXTRA_COMMANDS.push(async (t) => {
+  if (/^(how (do|can) i |how to )?(update|upgrade|restart|reboot|kill|stop)( netwatch| it| this| the app| the process)?( and restart)?$|^(update|restart) (commands|instructions|help)$|^help$/.test(t)) { const a = await helpOpen(); return "The commands are on screen. The short way: " + (a.repo ? "cd " + a.repo + " && " : "in the NetWatch folder, ") + "./update.sh"; }
+  return null;
+});
+Object.assign(window.netwatch, { helpOpen, helpClose, helpSteps });
