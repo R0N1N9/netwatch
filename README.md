@@ -110,6 +110,15 @@ The optic layer: a boot/uplink sequence, **scramble-decode** text reveals, a liv
 **telemetry ticker**, a **target-lock reticle** that snaps onto the selected host
 with OS / JA3 / beacon / threat-score readout, plus scanlines, CRT flicker and glitch.
 
+The skin (`skin2077.css`) follows the game's scanner view: red rule-lines and a
+scan ring framing a green core, navy/cyan panels, a segmented **SEGMENT
+INTEGRITY** bar (one block per host, red-outlined when at risk), scanner-style
+host rows with a threat cost, and a tabbed **DATA | BLACKWALL** target panel with
+trust/exposure glyphs. A **neural-link** layer adds a point-cloud brain that
+fires and glitches while the Copilot is parsing, an EEG-style link trace, film
+grain, and a glitch cut when you switch decks. UI type is Rajdhani (SIL OFL,
+vendored under `assets/vendor/fonts`).
+
 ## Passive intelligence engine
 
 Continuous AF_PACKET capture feeds a flow table and a bank of analyzers — all

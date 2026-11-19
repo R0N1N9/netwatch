@@ -7,6 +7,7 @@ let live = false;
 let tickerRefresh = null, tickerPrimed = false;
 
 const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 // ---------- clock ----------
@@ -17,6 +18,7 @@ document.querySelectorAll(".tab").forEach((t) => {
   t.addEventListener("click", () => selectDeck(t.dataset.deck));
 });
 function selectDeck(name) {
+  if (name !== currentDeck()) { document.body.classList.add("glitch"); setTimeout(() => document.body.classList.remove("glitch"), 270); }
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.deck === name));
   document.querySelectorAll(".deck").forEach((d) => (d.hidden = d.dataset.deck !== name));
   if (name === "netwatch" && selectedIP) lockReticle(selectedIP);
@@ -65,30 +67,44 @@ function render() {
 
   renderDevices();
   renderAlerts();
+  renderHud();
+  if (selectedIP) fillTarget(STATE.devices.find((x) => x.ip === selectedIP));
   if (currentDeck() === "ar") renderARTags();
   if (!tickerPrimed && tickerRefresh && STATE.devices.length) { tickerPrimed = true; tickerRefresh(); }
 }
 
 function threats() { return (STATE.alerts || []).filter((a) => a.severity === "CRITICAL").length; }
 
+function threatOf(d) { return Math.max(riskScore(d), Math.round(d.anomaly || 0)); }
+function statusOf(d) {
+  if (d.quarantined) return ["LOCKED", "lock"];
+  if (d.self) return ["SELF", ""];
+  if (d.gateway) return ["GATEWAY", ""];
+  if (d.trusted) return ["TRUSTED", ""];
+  return ["UNVERIFIED", "bad"];
+}
 function renderDevices() {
   const list = $("#deviceList"); list.innerHTML = "";
   if (!STATE.devices.length) { list.appendChild(mk("empty", "scanning segment…")); return; }
   STATE.devices.forEach((d) => {
-    const row = el("div", "dev");
+    const t = threatOf(d), st = statusOf(d);
+    const row = el("div", "dev qh");
     if (d.ip === selectedIP) row.classList.add("sel");
     if (d.quarantined) row.classList.add("quar");
-    row.appendChild(el("span", "ip", d.ip));
-    row.appendChild(el("span", "name", d.hostname || d.vendor || "unknown"));
-    const tags = el("div", "tags");
-    if (d.self) tags.appendChild(el("span", "chip you", "YOU"));
-    if (d.gateway) tags.appendChild(el("span", "chip gw", "GW"));
-    if (d.trusted) tags.appendChild(el("span", "chip trust", "✓"));
-    if (d.quarantined) tags.appendChild(el("span", "chip quar", "LOCKED"));
-    if (d.beacon) tags.appendChild(el("span", "chip beacon", "BEACON"));
-    if (d.anomaly >= 50) tags.appendChild(el("span", "chip anom hi", "⚠" + Math.round(d.anomaly)));
-    else if (d.anomaly >= 25) tags.appendChild(el("span", "chip anom", String(Math.round(d.anomaly))));
-    row.appendChild(tags);
+    if (t >= 50) row.classList.add("hot");
+    const main = el("div", "qh-main");
+    main.appendChild(el("div", "qh-name", (d.hostname || d.vendor || "unknown host").toUpperCase()));
+    const sub = el("div", "qh-sub");
+    sub.appendChild(el("span", "badge " + st[1], st[0]));
+    if (d.beacon) sub.appendChild(el("span", "badge bad", "BEACON"));
+    sub.appendChild(el("span", "ip", d.ip));
+    main.appendChild(sub);
+    const cost = el("div", "qh-cost" + (t >= 50 ? " hot" : ""));
+    if (t > 0) cost.appendChild(el("span", "arrow", "↑"));
+    cost.appendChild(el("b", null, String(t)));
+    cost.appendChild(el("i"));
+    const icon = el("div", "qh-icon", d.quarantined ? "⊘" : t >= 50 ? "⚠" : d.self ? "◉" : d.gateway ? "⌂" : d.trusted ? "◈" : "▣");
+    row.appendChild(main); row.appendChild(cost); row.appendChild(icon);
     row.addEventListener("click", () => selectDevice(d.ip));
     list.appendChild(row);
   });
@@ -121,7 +137,8 @@ function selectDevice(ip) {
   const d = STATE.devices.find((x) => x.ip === ip);
   $("#btnTrust").disabled = false;
   $("#btnTrust").textContent = d && d.trusted ? "◈ UNTRUST" : "◈ TRUST";
-  $("#bwTarget").innerHTML = d ? `target: <b>${d.ip}</b> ${d.hostname ? "(" + d.hostname + ")" : ""}` : "no host selected";
+  $("#bwTarget").innerHTML = d ? "target: <b>" + esc(d.ip) + "</b> " + (d.hostname ? "(" + esc(d.hostname) + ")" : "") : "no host selected";
+  fillTarget(d);
   $("#btnQuarantine").disabled = !d || d.self || d.gateway || d.quarantined;
   $("#btnRelease").disabled = !d || !d.quarantined;
   renderDevices();
@@ -151,7 +168,9 @@ async function sendCopilot() {
   const inp = $("#copilotInput"); const q = inp.value.trim(); if (!q) return;
   addCp("user", "OPERATOR", q); inp.value = "";
   const thinking = addCp("ai", "DAEMON", "▌ parsing…");
+  neuralBusy = true;
   const res = await post("/api/copilot", { query: q });
+  setTimeout(() => { neuralBusy = false; }, 900);
   thinking.querySelector(".body").textContent = res && res.answer ? res.answer : "uplink down — backend not reachable.";
 }
 function addCp(who, label, text) {
@@ -243,7 +262,13 @@ function scramble(elm, text, dur = 650) {
 function runBoot() {
   const boot = $("#boot");
   if (!boot) return;
-  $("#bootLogo").textContent = "KIROSHI OPTIC  ·  MK.4  //  NETWATCH NEURAL UPLINK";
+  $("#bootLogo").textContent = "NETWATCH // NEURAL LINK HANDSHAKE";
+  const t0 = performance.now();
+  const pct = setInterval(() => {
+    const v = Math.min(100, Math.round((performance.now() - t0) / 23));
+    $("#bootPct").textContent = v + "%";
+    if (v >= 100) clearInterval(pct);
+  }, 60);
   const seq = [
     ["> establishing neural link", "ok"],
     ["> mounting sensory cortex", "ok"],
@@ -265,7 +290,7 @@ function runBoot() {
   setTimeout(() => {
     boot.classList.add("done");
     document.querySelectorAll(".panel-head > span:first-child").forEach((s) => scramble(s, s.textContent, 700));
-    setTimeout(() => (boot.style.display = "none"), 700);
+    setTimeout(() => { boot.style.display = "none"; booting = false; }, 700);
   }, 2500);
 }
 
@@ -321,19 +346,8 @@ function lockReticle(ip) {
   ret.style.top = (r.top - 4) + "px";
   ret.style.width = (r.width + 12) + "px";
   ret.style.height = (r.height + 8) + "px";
-  const risk = Math.max(riskScore(d), Math.round(d.anomaly || 0));
-  const rc = risk >= 50 ? "risk-hi" : "risk-ok";
-  let html =
-    '<b>◣ TARGET LOCK</b><br>' +
-    '<span class="lo">IP  </span>' + d.ip + "<br>" +
-    '<span class="lo">MAC </span>' + (d.mac || "--") + "<br>" +
-    '<span class="lo">VND </span>' + (d.vendor || "unknown") + "<br>" +
-    '<span class="lo">OS  </span>' + (d.os || "profiling…") + "<br>" +
-    '<span class="lo">ROLE</span> ' + (d.self ? "SELF" : d.gateway ? "GATEWAY" : d.trusted ? "TRUSTED" : "UNVERIFIED") + "<br>";
-  if (d.ja3) html += '<span class="lo">JA3 </span>' + d.ja3.slice(0, 16) + "…<br>";
-  if (d.beacon) html += '<span class="risk-hi">BEACON</span> ' + d.beacon + "<br>";
-  html += '<span class="lo">THREAT</span> <span class="' + rc + '">' + risk + "/100</span>";
-  $("#rtag").innerHTML = html;
+  const risk = threatOf(d);
+  $("#rtag").innerHTML = "◈ " + esc((d.hostname || d.ip).toUpperCase()) + "<small>THREAT " + risk + "/100</small>";
   ret.hidden = false;
 }
 
@@ -511,8 +525,8 @@ function renderGlobeList(pts) {
   pts.slice().sort((a, b) => b.bytes - a.bytes).forEach((p) => {
     const sus = !p.sni || p.port === 8443;
     const n = el("div", "gnode" + (sus ? " sus" : ""));
-    n.innerHTML = '<span class="d">' + p.dst + ":" + p.port + '</span><span class="r">' + p.region + " · " + fmtBytes(p.bytes) + "</span>" +
-      '<span class="s">' + (p.sni || "⚠ no SNI — opaque egress") + "</span>";
+    n.innerHTML = '<span class="d">' + esc(p.dst) + ":" + esc(p.port) + '</span><span class="r">' + esc(p.region) + " · " + fmtBytes(p.bytes) + "</span>" +
+      '<span class="s">' + (p.sni ? esc(p.sni) : "⚠ no SNI — opaque egress") + "</span>";
     list.appendChild(n);
   });
 }
@@ -543,11 +557,11 @@ function renderARTags() {
     const sus = d.anomaly >= 50 || d.beacon || d.quarantined;
     const t = el("div", "ar-tag" + (sus ? " sus" : ""));
     const risk = Math.round(Math.max(d.anomaly || 0, riskLite(d)));
-    let html = "<b>◢ " + (d.hostname || d.ip) + "</b><br>" +
-      '<span class="lo">IP</span> ' + d.ip + "<br>" +
-      '<span class="lo">OS</span> ' + (d.os || "unknown") + "<br>" +
+    let html = "<b>◢ " + esc(d.hostname || d.ip) + "</b><br>" +
+      '<span class="lo">IP</span> ' + esc(d.ip) + "<br>" +
+      '<span class="lo">OS</span> ' + esc(d.os || "unknown") + "<br>" +
       '<span class="lo">THREAT</span> ' + risk + "/100";
-    if (d.beacon) html += '<br><span class="lo">BEACON</span> ' + d.beacon;
+    if (d.beacon) html += '<br><span class="lo">BEACON</span> ' + esc(d.beacon);
     t.innerHTML = html;
     t.style.left = (10 + (i % 4) * 22 + (i * 7 % 9)) + "%";
     t.style.top = (16 + Math.floor(i / 4) * 32 + (i * 13 % 10)) + "%";
@@ -555,7 +569,185 @@ function renderARTags() {
   });
 }
 
+
+// ================= SCANNER HUD: integrity bar, target panel, neural link =================
+let ramSig = "", neuralBusy = false, booting = true;
+
+function renderHud() {
+  const devs = STATE.devices || [], m = STATE.meta || {};
+  const risky = devs.filter((d) => threatOf(d) >= 50).length;
+  $("#ramText").textContent = (devs.length - risky) + "/" + devs.length;
+  const sig = devs.length + ":" + risky;
+  if (sig !== ramSig) {
+    ramSig = sig;
+    const bar = $("#ramBar"); bar.innerHTML = "";
+    for (let i = 0; i < devs.length; i++) {
+      const seg = el("i", i >= devs.length - risky ? "risk" : "");
+      seg.style.animationDelay = (i * 0.05) + "s";
+      bar.appendChild(seg);
+    }
+  }
+  const thr = threats();
+  $("#ppsVal").textContent = m.pps || 0;
+  $("#thrVal").textContent = thr;
+  $("#thrStat").classList.toggle("hot", thr > 0);
+  const link = $("#linkState");
+  link.textContent = thr > 0 ? "INTRUSION DETECTED" : "SYNCED";
+  link.classList.toggle("bad", thr > 0);
+}
+
+function tri(sym, label, cls) {
+  return '<div class="tri ' + cls + '"><svg viewBox="0 0 40 36"><path d="M20 3 37 33H3Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>' +
+    '<text x="20" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor" font-family="sans-serif">' + sym + "</text></svg>" + label + "</div>";
+}
+function fillTarget(d) {
+  if (!d) return;
+  $("#tpName").textContent = (d.hostname || d.ip).toUpperCase();
+  $("#tpAff").textContent = (d.vendor || "unknown").toUpperCase();
+  let kv = "<span>IP</span>" + esc(d.ip) + "<br><span>MAC</span>" + esc(d.mac || "--") + "<br><span>OS</span>" + esc(d.os || "profiling…");
+  if (d.ja3) kv += "<br><span>JA3</span>" + esc(d.ja3.slice(0, 20)) + "…";
+  if (d.sni) kv += "<br><span>SNI</span>" + esc(d.sni);
+  if (d.beacon) kv += '<br><span>C2?</span><b style="color:var(--red)">' + esc(d.beacon) + "</b>";
+  $("#tpKV").innerHTML = kv;
+  const iceHit = (STATE.alerts || []).some((a) => a.source === d.ip && a.severity === "CRITICAL");
+  const randomMac = (d.vendor || "").includes("randomized");
+  let good = "", bad = "";
+  if (d.self) good += tri("◉", "SELF", "good");
+  if (d.gateway) good += tri("⌂", "GATEWAY", "good");
+  if (d.trusted) good += tri("✓", "TRUSTED", "good");
+  if (d.hostname) good += tri("N", "NAMED", "good");
+  if (d.vendor && !randomMac) good += tri("V", "VENDOR ID", "good");
+  if (!d.trusted && !d.self && !d.gateway) bad += tri("?", "UNVERIFIED", "bad");
+  if (randomMac) bad += tri("≠", "RANDOM MAC", "bad");
+  if (d.anomaly >= 25) bad += tri("~", "ANOMALY", "bad");
+  if (d.beacon) bad += tri("⚡", "BEACON", "bad");
+  if (iceHit) bad += tri("!", "ICE ALERT", "bad");
+  if (d.quarantined) bad += tri("⊘", "LOCKED", "bad");
+  const t = threatOf(d);
+  $("#tpGood").innerHTML = good; $("#tpBad").innerHTML = bad;
+  $("#tpGoodPct").textContent = (100 - t) + " %";
+  $("#tpBadPct").textContent = t + " %";
+}
+document.querySelectorAll(".tp-tab").forEach((t) => t.addEventListener("click", () => {
+  document.querySelectorAll(".tp-tab").forEach((x) => x.classList.toggle("active", x === t));
+  document.querySelectorAll(".tp-body").forEach((b) => (b.hidden = b.dataset.tp !== t.dataset.tp));
+}));
+
+// ---- neural-link brain: a point-cloud cortex with synapse fire, static and glitch ----
+function makeBrain(canvas) {
+  const ctx = canvas.getContext("2d"), W = canvas.width, H = canvas.height;
+  const sx = W / 2.62, sy = H / 2.1, cx = W * 0.52, cy = H * 0.44;
+  const inE = (x, y, ex, ey, rx, ry) => ((x - ex) / rx) ** 2 + ((y - ey) / ry) ** 2 < 1;
+  const region = (x, y) => {
+    if (inE(x, y, 0, -0.1, 1.05, 0.68) && y < 0.34) return 1;          // cerebrum
+    if (inE(x, y, 0.2, 0.3, 0.62, 0.3)) return 1;                       // temporal lobe
+    if (inE(x, y, -0.64, 0.5, 0.36, 0.23)) return 2;                    // cerebellum
+    if (y > 0.36 && y < 0.98) { const t = (y - 0.36) / 0.62; if (x > -0.34 - 0.16 * t && x < -0.1 - 0.2 * t) return 3; } // stem
+    return 0;
+  };
+  const pts = [];
+  for (let g = 0; pts.length < 430 && g < 30000; g++) {
+    const x = Math.random() * 2.5 - 1.25, y = Math.random() * 1.95 - 0.85, r = region(x, y);
+    if (r) pts.push({ x, y, r, ph: Math.random() * 6.28, hot: Math.random() < 0.07 });
+  }
+  for (let a = Math.PI * 0.94; a < Math.PI * 2.14; a += 0.03) pts.push({ x: Math.cos(a) * 1.05, y: -0.1 + Math.sin(a) * 0.68, r: 1, ph: a, rim: true });
+  const edges = [];
+  for (let i = 0; i < pts.length && edges.length < 1100; i++) for (let j = i + 1; j < pts.length; j++) {
+    const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+    if (dx * dx + dy * dy < 0.016) edges.push([i, j]);
+  }
+  const folds = [];
+  for (let k = 0; k < 6; k++) {
+    const f = [];
+    for (let x = -0.95; x <= 0.95; x += 0.05) { const y = -0.55 + k * 0.15 + 0.07 * Math.sin(x * 6 + k * 1.7); if (region(x, y) === 1) f.push([x, y]); }
+    folds.push(f);
+  }
+  const pos = new Float32Array(pts.length * 2);
+  return function tick(t, busy, build) {
+    ctx.clearRect(0, 0, W, H);
+    const band = Math.random() < (busy ? 0.5 : 0.22) ? Math.random() * H : -1, bandH = 8 + Math.random() * 26, bandDx = (Math.random() - 0.5) * (busy ? 60 : 34);
+    const shown = build == null ? pts.length : Math.floor(pts.length * build);
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      let X = cx + p.x * sx + Math.sin(t * 2 + p.ph) * 1.4, Y = cy + p.y * sy + Math.cos(t * 1.7 + p.ph) * 1.4;
+      if (band >= 0 && Y > band && Y < band + bandH) X += bandDx;
+      pos[i * 2] = X; pos[i * 2 + 1] = Y;
+    }
+    // synapses
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(94,246,255,0.14)"; ctx.beginPath();
+    const fired = [];
+    for (const e of edges) {
+      if (e[0] >= shown || e[1] >= shown) continue;
+      if (Math.random() < (busy ? 0.09 : 0.025)) { fired.push(e); continue; }
+      ctx.moveTo(pos[e[0] * 2], pos[e[0] * 2 + 1]); ctx.lineTo(pos[e[1] * 2], pos[e[1] * 2 + 1]);
+    }
+    ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = busy ? "rgba(255,184,74,0.95)" : "rgba(214,255,255,0.9)"; ctx.beginPath();
+    for (const e of fired) { ctx.moveTo(pos[e[0] * 2], pos[e[0] * 2 + 1]); ctx.lineTo(pos[e[1] * 2], pos[e[1] * 2 + 1]); }
+    ctx.stroke();
+    // cortical folds
+    ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(94,246,255,0.28)";
+    for (const f of folds) { ctx.beginPath(); f.forEach((q, i) => { const X = cx + q[0] * sx, Y = cy + q[1] * sy + Math.sin(t * 3 + q[0] * 9) * 1.5; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke(); }
+    // neurons
+    for (let i = 0; i < shown; i++) {
+      const p = pts[i]; let a = 0.3 + 0.7 * Math.abs(Math.sin(t * 3 + p.ph));
+      if (Math.random() < 0.04) a = 1;
+      ctx.fillStyle = p.hot ? "rgba(255,84,73," + a + ")" : p.r === 2 ? "rgba(29,255,161," + a + ")" : p.rim ? "rgba(189,249,255," + (0.5 + a * 0.5) + ")" : "rgba(94,246,255," + a + ")";
+      const sz = p.hot ? 4 : p.rim ? 3 : 2.5;
+      ctx.fillRect(pos[i * 2] - sz / 2, pos[i * 2 + 1] - sz / 2, sz, sz);
+    }
+    // static
+    const n = busy ? 420 : 170;
+    for (let i = 0; i < n; i++) { ctx.fillStyle = "rgba(200,255,255," + (Math.random() * 0.35) + ")"; ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
+    if (Math.random() < 0.3) { const y = Math.random() * H; ctx.fillStyle = "rgba(255,84,73,0.25)"; ctx.fillRect(0, y, W, 2 + Math.random() * 3); }
+    // scan bar + chromatic ghost
+    ctx.fillStyle = "rgba(94,246,255,0.22)"; ctx.fillRect(0, (t * 90) % H, W, 3);
+    if (Math.random() < (busy ? 0.6 : 0.2)) { ctx.globalAlpha = 0.28; ctx.globalCompositeOperation = "lighter"; ctx.drawImage(canvas, (Math.random() - 0.5) * 16, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; }
+  };
+}
+
+// ---- neural link trace (header) ----
+function makeEEG(canvas) {
+  const ctx = canvas.getContext("2d"), W = canvas.width, H = canvas.height, buf = new Array(W / 2).fill(0);
+  let spike = 0;
+  return function tick(t, hot) {
+    if (Math.random() < 0.035) spike = 6;
+    let v = Math.sin(t * 9) * 2.4 + Math.sin(t * 23) * 1.4 + (Math.random() - 0.5) * (hot ? 7 : 2.4);
+    if (spike > 0) { v += [0, -5, 11, -9, 4, -2][6 - spike] || 0; spike--; }
+    buf.push(v); buf.shift();
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = hot ? "#ff5449" : "#5ef6ff"; ctx.lineWidth = 1.5; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 6;
+    ctx.beginPath(); buf.forEach((y, i) => { const Y = H / 2 - y; i ? ctx.lineTo(i * 2, Y) : ctx.moveTo(0, Y); }); ctx.stroke();
+  };
+}
+
+function initNeural() {
+  const g = document.createElement("canvas"); g.width = g.height = 128;
+  const gx = g.getContext("2d"), img = gx.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) { const v = (Math.random() * 255) | 0; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  gx.putImageData(img, 0, 0);
+  $("#grain").style.backgroundImage = "url(" + g.toDataURL() + ")";
+
+  const brain = makeBrain($("#brain")), bootBrain = makeBrain($("#bootBrain")), eeg = makeEEG($("#eeg"));
+  const t0 = performance.now();
+  let frame = 0;
+  setInterval(() => {
+    const t = (performance.now() - t0) / 1000; frame++;
+    if (booting) { bootBrain(t, true, Math.min(1, t / 2.2)); return; }
+    eeg(t, threats() > 0);
+    if ($("#brain").offsetParent) {
+      brain(t, neuralBusy);
+      if (frame % 8 === 0) {
+        $("#neural").classList.toggle("busy", neuralBusy);
+        $("#nlState").textContent = neuralBusy ? "PARSING QUERY" : "SYNAPSE SYNC";
+        $("#nlPct").textContent = (neuralBusy ? 55 + Math.random() * 30 : 97 + Math.random() * 2.6).toFixed(1) + "%";
+      }
+    }
+  }, 55);
+}
+
 // ---------- boot ----------
+initNeural();
 runBoot();
 initTicker();
 renderKcFlow();

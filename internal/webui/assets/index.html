@@ -5,9 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>NetWatch</title>
 <link rel="stylesheet" href="app.css" />
+<link rel="stylesheet" href="skin2077.css" />
 </head>
 <body>
 <div class="fx-grid"></div>
+<div class="hud-frame">
+  <div class="ring"></div>
+  <div class="mk tl">▚▚▚
+SCANNER
+V 2.07</div>
+  <div class="mk tr">▚▚▚
+OPTIC
+MK.4</div>
+  <div class="mk bl">▚▚
+▚▚▚
+▚▚</div>
+  <div class="mk br">▚▚
+▚▚▚
+▚▚</div>
+</div>
 
 <div id="app">
   <header class="hud-top">
@@ -24,6 +40,23 @@
     <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">WATCH ACTIVE</span></div>
     <div class="clock" id="clock">--:--:--</div>
   </header>
+
+  <div class="hud-strip">
+    <div class="hs-left">
+      <span class="micro">NEURAL LINK</span>
+      <canvas id="eeg" width="240" height="28"></canvas>
+      <span class="hs-link" id="linkState">SYNCED</span>
+    </div>
+    <div class="hs-center">
+      <div class="micro">▚▚ RESOURCES V 2304.300</div>
+      <div class="ram-title">SEGMENT INTEGRITY: <span id="ramText">0/0</span></div>
+      <div class="ram" id="ramBar"></div>
+    </div>
+    <div class="hs-right">
+      <span class="hs-stat"><span class="micro cy">PKT/S</span><b id="ppsVal">0</b></span>
+      <span class="hs-stat" id="thrStat"><span class="micro">THREATS</span><b id="thrVal">0</b></span>
+    </div>
+  </div>
 
   <!-- WATCHTOWER DECK (defensive) -->
   <main class="deck" data-deck="netwatch">
@@ -46,7 +79,14 @@
       </div>
       <div class="panel copilot" style="--accent: var(--magenta); flex: 0 0 38%">
         <div class="panel-head"><span>COPILOT // DAEMON</span><span class="meta">neural uplink</span></div>
-        <div class="panel-body" id="copilotLog"></div>
+        <div class="cp-wrap">
+          <div class="panel-body" id="copilotLog"></div>
+          <div class="neural" id="neural">
+            <canvas id="brain" width="368" height="280"></canvas>
+            <span class="micro" id="nlState">SYNAPSE SYNC</span>
+            <span class="nl-pct" id="nlPct">98.4%</span>
+          </div>
+        </div>
         <div class="field">
           <input id="copilotInput" placeholder="ask the daemon…  e.g. what's weird right now?" autocomplete="off" />
           <button class="btn" id="copilotSend">SEND</button>
@@ -69,14 +109,32 @@
         </div>
       </div>
 
-      <div class="panel grow" style="--accent: var(--red)">
-        <div class="panel-head"><span>BLACKWALL</span><span class="meta">quarantine</span></div>
-        <div class="bw">
-          <div class="wall"></div>
-          <div class="target" id="bwTarget">no host selected</div>
-          <div class="btn-row" style="padding:0">
-            <button class="btn danger" id="btnQuarantine" disabled>⊘ QUARANTINE</button>
-            <button class="btn" id="btnRelease" disabled>⊚ RELEASE</button>
+      <div class="tpanel">
+        <div class="tp-tabs">
+          <div class="tp-tab active" data-tp="data">DATA</div>
+          <div class="tp-tab red" data-tp="wall">BLACKWALL</div>
+          <span class="tp-key">R1</span>
+        </div>
+        <div class="tp-body" data-tp="data">
+          <div class="micro cy">SCAN RESULTS</div>
+          <div class="tp-name" id="tpName">NO TARGET</div>
+          <div class="micro cy">AFFILIATION</div>
+          <div class="tp-aff" id="tpAff">—</div>
+          <div class="tp-kv" id="tpKV"><span class="tp-empty">select a host to scan</span></div>
+          <div class="tp-cols">
+            <div><div class="micro grn">TRUST SIGNALS:</div><div class="tri-list" id="tpGood"></div><div class="tp-pct good" id="tpGoodPct"></div></div>
+            <div><div class="micro">EXPOSURE:</div><div class="tri-list" id="tpBad"></div><div class="tp-pct bad" id="tpBadPct"></div></div>
+          </div>
+        </div>
+        <div class="tp-body wall" data-tp="wall" hidden>
+          <div class="micro">BLACKWALL // QUARANTINE</div>
+          <div class="bw" style="padding:6px 0">
+            <div class="wall"></div>
+            <div class="target" id="bwTarget">no host selected</div>
+            <div class="btn-row" style="padding:0">
+              <button class="btn danger" id="btnQuarantine" disabled>⊘ QUARANTINE</button>
+              <button class="btn" id="btnRelease" disabled>⊚ RELEASE</button>
+            </div>
           </div>
         </div>
       </div>
@@ -159,10 +217,10 @@
   <div class="ticker"><div class="ticker-track" id="ticker"></div></div>
 
   <footer class="hud-bottom">
-    <span><span class="k">[TAB]</span> deck</span>
-    <span><span class="k">[S]</span> sweep</span>
-    <span><span class="k">[T]</span> trust</span>
-    <span><span class="k">[↑↓]</span> select</span>
+    <span class="kh"><i class="kb">S</i>SWEEP</span>
+    <span class="kh"><i class="kb">↑↓</i>CHANGE TARGET</span>
+    <span class="kh"><i class="kb">T</i>TAGGING</span>
+    <span class="kh"><i class="kb">TAB</i>SWITCH DECK</span>
     <span class="msg" id="statusLine">deck online</span>
   </footer>
 </div>
@@ -170,6 +228,7 @@
 <div class="fx-scan"></div>
 <div class="fx-vignette"></div>
 <div class="fx-flicker"></div>
+<div class="fx-grain" id="grain"></div>
 <script src="vendor/three.min.js"></script>
 
 <!-- Kiroshi target-lock reticle -->
@@ -182,9 +241,15 @@
 <!-- boot sequence -->
 <div id="boot">
   <div class="boot-inner">
-    <pre class="boot-logo" id="bootLogo"></pre>
-    <div class="boot-lines" id="bootLines"></div>
-    <div class="boot-bar"><span id="bootFill"></span></div>
+    <div class="boot-brain">
+      <canvas id="bootBrain" width="760" height="580"></canvas>
+      <div class="boot-sync">NEURAL LINK<b id="bootPct">0%</b></div>
+    </div>
+    <div>
+      <div class="boot-logo" id="bootLogo"></div>
+      <div class="boot-lines" id="bootLines"></div>
+      <div class="boot-bar"><span id="bootFill"></span></div>
+    </div>
   </div>
 </div>
 
