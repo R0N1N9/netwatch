@@ -201,3 +201,38 @@ func scanLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	}
 	return 0, nil, nil
 }
+
+// Stages a flash goes through, in order.
+var Stages = []string{"connect", "write", "verify", "restart"}
+
+// Stage reads one line of esptool output and says which stage it belongs to
+// and, while writing, how far along it is. ok is false for lines that say
+// nothing about progress. It understands both esptool 4 ("... (25 %)") and
+// esptool 5 ("... [===>  ]  25.0% 65536/262144 bytes").
+func Stage(line string) (stage string, percent int, ok bool) {
+	l := strings.ToLower(line)
+	switch {
+	case strings.HasPrefix(l, "writing at"):
+		i := strings.LastIndex(l, "%")
+		if i < 0 {
+			return "write", 0, true
+		}
+		j := i
+		for j > 0 && (l[j-1] == ' ' || l[j-1] == '.' || (l[j-1] >= '0' && l[j-1] <= '9')) {
+			j--
+		}
+		var whole float64
+		fmt.Sscanf(strings.TrimSpace(l[j:i]), "%f", &whole)
+		if whole < 0 || whole > 100 {
+			whole = 0
+		}
+		return "write", int(whole), true
+	case strings.HasPrefix(l, "connecting"), strings.HasPrefix(l, "serial port"), strings.HasPrefix(l, "connected to"):
+		return "connect", 0, true
+	case strings.Contains(l, "hash of data verified"), strings.HasPrefix(l, "wrote "), strings.Contains(l, "verifying"):
+		return "verify", 100, true
+	case strings.Contains(l, "hard resetting"), strings.Contains(l, "leaving..."):
+		return "restart", 100, true
+	}
+	return "", 0, false
+}

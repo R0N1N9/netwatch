@@ -53,7 +53,7 @@ step.
 | `fatigue` | Operator sharpness from session length, hour, typing drift and unopened alerts. |
 | `scenes` | Trigger → actions rules with matching, arming and cooldowns. It decides which scenes fire; `server` carries out the actions. |
 | `light` | Picks the threat light's colour for a state and sends it as a UDP datagram to a private address. |
-| `forge` | Finds ESP32 boards on USB (`/sys`), holds the embedded firmware images (`forge/firmware/*.bin`, built by CI), renders the settings block and runs esptool. |
+| `forge` | Finds ESP32 boards on USB (`/sys`), holds the embedded firmware images (`forge/firmware/*.bin`, built by CI), renders the settings block, runs esptool and reads its output into a stage and percentage. |
 | `persona` | The talking decoy: a scripted login and shell that records a visit and summarises it. Input is matched against a table, never executed. |
 | `tui`, `theme` | The terminal view and shared colours. |
 

@@ -641,3 +641,17 @@ body.crit-glitch #app { animation: critglitch 0.9s steps(2) 1; }
 .fg-log { margin: 0; padding: 10px 12px; max-height: 220px; overflow-y: auto; background: #020608; border: 1px solid rgba(94, 246, 255, 0.3); font-family: var(--mono); font-size: 12px; line-height: 1.45; color: var(--cyan-soft); white-space: pre-wrap; }
 .fg-log[hidden] { display: none; } .fg-log.ok { border-color: var(--green); } .fg-log.bad { border-color: var(--red); color: var(--red); }
 .fg-card .m-note { padding: 8px 0 0; } .fg-card .m-note b { color: var(--cyan); }
+.fg-run { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--c, var(--cyan)); background: color-mix(in srgb, var(--c, var(--cyan)) 7%, transparent); }
+.fg-run[hidden] { display: none; }
+.fg-run.run, .fg-run.wait { --c: var(--amber); } .fg-run.ok { --c: var(--green); animation: fgdone 0.9s ease-out 1; } .fg-run.bad { --c: var(--red); } .fg-run.warn { --c: var(--amber); }
+@keyframes fgdone { 0% { box-shadow: 0 0 0 0 rgba(29, 255, 161, 0.9); } 100% { box-shadow: 0 0 0 26px rgba(29, 255, 161, 0); } }
+.fg-steps { display: flex; align-items: center; gap: 8px; }
+.fg-steps i { flex: 1; height: 1px; background: rgba(94, 246, 255, 0.25); }
+.fg-step { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--dim); padding: 1px 8px; border: 1px solid rgba(94, 246, 255, 0.2); white-space: nowrap; }
+.fg-step.done { color: var(--green); border-color: var(--green); }
+.fg-step.now { color: #1a1204; background: var(--amber); border-color: var(--amber); animation: riskpulse 1s ease-in-out infinite; }
+.fg-step.now.bad { background: var(--red); border-color: var(--red); animation: none; }
+.fg-bar { flex: none; height: 12px; } .fg-bar i { background: var(--c, var(--cyan)); box-shadow: 0 0 12px var(--c, var(--cyan)); transition: width 0.3s; }
+.fg-banner { display: flex; flex-direction: column; gap: 2px; }
+.fg-banner b { font-size: 24px; font-weight: 700; letter-spacing: 0.08em; color: var(--c, var(--cyan)); text-shadow: 0 0 14px color-mix(in srgb, var(--c, var(--cyan)) 50%, transparent); }
+.fg-banner span { font-size: 14px; color: var(--fg); }

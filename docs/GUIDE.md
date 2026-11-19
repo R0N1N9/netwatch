@@ -645,15 +645,35 @@ log out and in).
 2. In **SONAR**, press **＋ ADD A NODE**. The board appears with its port. (An
    alert also tells you when a board is plugged in.)
 3. Type your Wi-Fi name and password (2.4 GHz only) and press **MAKE IT A
-   SENSOR NODE**. It takes about twenty seconds; the log shows esptool's
-   progress. If it cannot connect, hold the board's **BOOT** button, tap
+   SENSOR NODE**. If it cannot connect, hold the board's **BOOT** button, tap
    **RESET**, release BOOT and try again.
-4. Unplug it and power it anywhere in range — any USB charger or power bank, on
+4. Watch the panel. The steps light up in turn — **CONNECT → WRITE → VERIFY →
+   RESTART → ONLINE** — with a bar that fills while it writes (about twenty
+   seconds). Leave the cable in: the board restarts, joins your Wi-Fi, and
+   when its first frames arrive the panel turns green, says **✓ NODE-A1B2 IS
+   ONLINE** and chimes. That is "done". If a minute passes with nothing, it
+   says so and tells you to check the Wi-Fi details.
+5. Unplug it and power it anywhere in range — any USB charger or power bank, on
    either port. It joins your Wi-Fi and shows up in SONAR within about ten
    seconds, named after its hardware address (`node-a1b2`) unless you gave it a
    name.
-5. Plug in the next board and press the button again. The Wi-Fi details are
+6. Plug in the next board and press the button again. The Wi-Fi details are
    remembered until NetWatch stops.
+
+The board's own RGB light tells the same story, with or without the console:
+
+| Light | Meaning |
+|---|---|
+| Blinking blue | Joining your Wi-Fi. |
+| Steady green | Joined and streaming. After 30 seconds it goes dark, with one faint green blink every ten seconds. |
+| Blinking red | Cannot join: wrong password, or the network is 5 GHz only. |
+| Blinking purple | It has no settings: flash it from NetWatch. |
+
+The light is driven on GPIO48 and GPIO38, where the two revisions of
+Espressif's DevKitC-1 have it. On another make of board it may stay dark; the
+console's ONLINE step is then the thing to go by. During the flash itself the
+firmware is not running, so only the board's small TX/RX lights (if it has
+them) flicker.
 
 Flashing a board this way also makes NetWatch start listening for nodes (UDP
 port 5566 on your network) and remember to do so on later starts, so you no
@@ -809,6 +829,7 @@ can read your alerts and the SONAR view over your network.
 | PULSE flags you | Your rhythm changed (another keyboard, one hand). FORGET PROFILE and enrol again. |
 | ADD A NODE shows no board | The cable carries power only, the board is on a port NetWatch does not recognise, or you are not in the `dialout` group. |
 | Flashing fails to connect | Hold BOOT, tap RESET, release BOOT, and try again; or move the cable to the UART port. |
+| The panel says FLASHED, BUT IT HAS NOT REPORTED IN | The board's light blinking red means it cannot join the Wi-Fi: fix the details and press SETTINGS ONLY. Green but not reported means something between it and NetWatch is blocking UDP 5566. |
 | A flashed node never appears | Wrong Wi-Fi password or a 5 GHz-only network; a firewall blocking UDP 5566; plug it back in and read its log with `esptool`'s monitor or `screen /dev/ttyACM0 115200`. |
 | NETDIVE is blank | The browser is not providing WebGL. |
 | The phone cannot open the companion | It is not on the same network, a firewall blocks the port, or the certificate warning was not accepted. |

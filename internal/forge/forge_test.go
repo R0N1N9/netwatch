@@ -125,3 +125,29 @@ func hex32(v uint32) string {
 	}
 	return string(b)
 }
+
+func TestStageReadsBothEsptoolDialects(t *testing.T) {
+	cases := []struct {
+		line, stage string
+		pct         int
+		ok          bool
+	}{
+		{"Serial port /dev/ttyACM0", "connect", 0, true},
+		{"Connecting....", "connect", 0, true},
+		{"Chip is ESP32-S3 (QFN56) (revision v0.2)", "", 0, false},
+		{"Writing at 0x00010000... (25 %)", "write", 25, true},
+		{"Writing at 0x000f0000... (100 %)", "write", 100, true},
+		{"Writing at 0x0001f8e5 [==>                           ]  10.5% 16384/155632 bytes...", "write", 10, true},
+		{"Writing at 0x000cc000 [==============================] 100.0% 836512/836512 bytes...", "write", 100, true},
+		{"Wrote 836512 bytes (512345 compressed) at 0x00000000 in 12.3 seconds", "verify", 100, true},
+		{"Hash of data verified.", "verify", 100, true},
+		{"Hard resetting via RTS pin...", "restart", 100, true},
+		{"A fatal error occurred: Failed to connect to ESP32-S3", "", 0, false},
+	}
+	for _, c := range cases {
+		stage, pct, ok := Stage(c.line)
+		if stage != c.stage || pct != c.pct || ok != c.ok {
+			t.Errorf("Stage(%q) = %q %d %v, want %q %d %v", c.line, stage, pct, ok, c.stage, c.pct, c.ok)
+		}
+	}
+}

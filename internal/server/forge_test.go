@@ -36,6 +36,15 @@ func TestForgeDemoTouchesNoBoard(t *testing.T) {
 	if job["ok"] != true || len(job["lines"].([]any)) < 6 || v["listening"] != "" {
 		t.Errorf("demo job = %v, listening = %v", job, v["listening"])
 	}
+	if job["stage"] != "restart" || job["progress"].(float64) != 100 {
+		t.Errorf("finished job shows stage %v at %v%%", job["stage"], job["progress"])
+	}
+	for end := time.Now().Add(6 * time.Second); time.Now().Before(end) && job["online"] == ""; time.Sleep(200 * time.Millisecond) {
+		job = getJSON(t, s.handleForge, "/api/forge")["job"].(map[string]any)
+	}
+	if job["online"] != "node-a1b2 (simulated)" {
+		t.Errorf("the demo node never came online: %v", job)
+	}
 	body := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(toJSON(v), "\n", " "), "\t", " "))), " "))
 	if strings.Contains(body, "correct horse") || v["havePass"] != true || v["ssid"] != "home" {
 		t.Errorf("the password must stay inside the server; view = %s", body)
@@ -88,6 +97,18 @@ func TestNodesAreAnsweredAndHeardWithoutAFlag(t *testing.T) {
 		if nodes := s.son.Snapshot(time.Now()); len(nodes) == 1 && nodes[0].Node == "node-a1b2" {
 			if v := getJSON(t, s.handleForge, "/api/forge"); v["listening"] != addr {
 				t.Errorf("listening = %v", v["listening"])
+			}
+			// A board flashed a moment ago, with nothing else reporting then: this node is the one.
+			s.fg.job = &forgeJob{Kind: "node", Done: true, OK: true, doneAt: time.Now().Add(-5 * time.Second), liveBefore: map[string]bool{"node-old": true}}
+			job := getJSON(t, s.handleForge, "/api/forge")["job"].(map[string]any)
+			if job["online"] != "node-a1b2" || job["stalled"] != false {
+				t.Errorf("the freshly flashed node was not recognised as online: %v", job)
+			}
+			// ...but a node that was already reporting is not mistaken for it, and after a minute the wait is called off.
+			s.fg.job = &forgeJob{Kind: "node", Done: true, OK: true, doneAt: time.Now().Add(-90 * time.Second), liveBefore: map[string]bool{"node-a1b2": true}}
+			job = getJSON(t, s.handleForge, "/api/forge")["job"].(map[string]any)
+			if job["online"] != "" || job["stalled"] != true {
+				t.Errorf("an already-live node was taken for the new one, or the wait never stalled: %v", job)
 			}
 			return
 		}

@@ -32,6 +32,57 @@ type forgeJob struct {
 	Done  bool     `json:"done"`
 	OK    bool     `json:"ok"`
 	Error string   `json:"error"`
+
+	Stage    string `json:"stage"`    // connect | write | verify | restart
+	Progress int    `json:"progress"` // percent written
+	// After a sensor node is flashed NetWatch waits for it to report in.
+	Online  string `json:"online"`  // the node's name once its first frames arrive
+	WaitSec int    `json:"waitSec"` // how long NetWatch has been waiting for that
+	Stalled bool   `json:"stalled"` // a minute has passed and it has not reported
+
+	doneAt     time.Time
+	liveBefore map[string]bool // nodes that were already reporting when the flash finished
+}
+
+// track reads a line of the flasher's output into the job's stage and progress. Caller holds s.mu.
+func (j *forgeJob) track(line string) {
+	stage, pct, ok := forge.Stage(line)
+	if !ok {
+		return
+	}
+	if stage == "write" && j.Stage == "write" && pct < j.Progress {
+		return // the small settings file being written after the image: keep the bar where it was
+	}
+	j.Stage = stage
+	if pct > j.Progress {
+		j.Progress = pct
+	}
+}
+
+// forgeWatch notices the freshly flashed node reporting in.
+func (s *Server) forgeWatch() {
+	nodes := s.son.Snapshot(time.Now())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j := s.fg.job
+	if j == nil || !j.Done || !j.OK || j.Kind != "node" || j.Online != "" || j.doneAt.IsZero() {
+		return
+	}
+	wait := time.Since(j.doneAt)
+	j.WaitSec, j.Stalled = int(wait.Seconds()), wait > time.Minute
+	if s.demo {
+		if wait > 3*time.Second {
+			j.Online = "node-a1b2 (simulated)"
+		}
+		return
+	}
+	for _, n := range nodes {
+		if !j.liveBefore[n.Node] && n.AgeMS < 3000 {
+			j.Online, j.Stalled = n.Node, false
+			go s.emitAlert(model.Alert{Time: time.Now(), Severity: model.SevInfo, Kind: "forge", Source: n.Node, Message: "sensor node " + n.Node + " is online and reporting"})
+			return
+		}
+	}
 }
 
 // listenForNodes starts accepting sensor frames on addr, unless NetWatch already is.
@@ -55,6 +106,7 @@ func (s *Server) listenForNodes(addr string) {
 }
 
 func (s *Server) forgeView() map[string]any {
+	s.forgeWatch()
 	boards := forge.Boards()
 	_, toolName := forge.Tool()
 	if s.demo {
@@ -125,6 +177,7 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 	job := &forgeJob{Port: req.Flash, Kind: req.Kind, Lines: []string{}}
 	add := func(line string) {
 		s.mu.Lock()
+		job.track(line)
 		if n := len(job.Lines); n > 0 && strings.HasPrefix(line, "Writing at") && strings.HasPrefix(job.Lines[n-1], "Writing at") {
 			job.Lines[n-1] = line // esptool redraws its progress line
 		} else if n < 400 {
@@ -133,10 +186,18 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 	}
 	finish := func(err error) {
+		live := map[string]bool{}
+		for _, n := range s.son.Snapshot(time.Now()) {
+			if n.AgeMS < 3000 {
+				live[n.Node] = true
+			}
+		}
 		s.mu.Lock()
-		job.Done, job.OK = true, err == nil
+		job.Done, job.OK, job.doneAt, job.liveBefore = true, err == nil, time.Now(), live
 		if err != nil {
 			job.Error = err.Error()
+		} else {
+			job.Stage, job.Progress = "restart", 100
 		}
 		s.mu.Unlock()
 	}
@@ -195,7 +256,7 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		if req.Kind == "node" {
 			s.listenForNodes(sonarDefaultListen) // so it shows up without restarting with a flag
 			s.saveModules()
-			add("Done. Unplug it and power it anywhere in range of your Wi-Fi: it joins \"" + req.SSID + "\" and appears in SONAR within about ten seconds.")
+			add("Flashed. The board is restarting and joining \"" + req.SSID + "\" — NetWatch will say when it reports in. Then unplug it and power it anywhere in range.")
 		} else {
 			add("Done. Power it up; it logs its address on the serial port. Put that address (port 5577) in REFLEX → AMBIENT THREAT LIGHT.")
 		}
