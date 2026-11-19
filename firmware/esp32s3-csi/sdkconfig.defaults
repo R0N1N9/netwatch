@@ -1,0 +1,3 @@
+# CSI capture must be enabled in the Wi-Fi driver.
+CONFIG_ESP_WIFI_CSI_ENABLED=y
+CONFIG_FREERTOS_HZ=1000

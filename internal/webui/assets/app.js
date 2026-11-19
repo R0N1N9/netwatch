@@ -5,6 +5,7 @@ let STATE = { meta: {}, devices: [], alerts: [], stats: {} };
 let selectedIP = null;
 let live = false;
 let tickerRefresh = null, tickerPrimed = false;
+let liveState = null, replay = false;
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -25,6 +26,7 @@ function selectDeck(name) {
   else $("#reticle").hidden = true;
   if (name === "grid") setTimeout(() => { initGlobe(); if (globe && globe.resize) globe.resize(); loadGlobe(); }, 40);
   if (name === "ar") renderARTags();
+  if (name === "sonar") setTimeout(sonarResize, 40);
 }
 function currentDeck() { return document.querySelector(".tab.active").dataset.deck; }
 
@@ -40,12 +42,18 @@ async function post(path, body) {
   }
 }
 function status(msg) { $("#statusLine").textContent = msg; }
+async function get(path) {
+  try { const r = await fetch(path); if (!r.ok) throw new Error("HTTP " + r.status); return await r.json(); } catch (e) { return null; }
+}
 
 // ---------- live stream (SSE) ----------
 function connect() {
   const es = new EventSource("/api/stream");
   es.onmessage = (ev) => {
-    try { STATE = JSON.parse(ev.data); live = true; render(); } catch (_) {}
+    let snap; try { snap = JSON.parse(ev.data); } catch (_) { return; }
+    live = true; liveState = snap;
+    onNewAlerts(snap);
+    if (!replay) { STATE = snap; render(); }
   };
   es.onerror = () => { if (!live) { loadMock(); } };
 }
@@ -54,7 +62,8 @@ function connect() {
 function render() {
   const m = STATE.meta || {}, s = STATE.stats || {};
   $("#segMeta").textContent = `${m.iface || "--"} · ${m.subnet || "--"}`;
-  $("#statusText").textContent = m.sweeping ? "SCANNING" : (m.watching ? "WATCH ACTIVE" : "IDLE");
+  $("#statusText").textContent = replay ? "REPLAY" : m.sweeping ? "SCANNING" : (m.watching ? "WATCH ACTIVE" : "IDLE");
+  if (m.copilot) $("#cpBackend").textContent = m.copilot;
   const dot = $("#statusDot"); dot.className = "dot" + (threats() > 0 ? " crit" : m.sweeping ? " warn" : "");
 
   $("#hostCount").textContent = STATE.devices.length;
@@ -162,16 +171,20 @@ $("#btnRelease").addEventListener("click", async () => {
 });
 
 // ---------- copilot ----------
-$("#copilotSend").addEventListener("click", sendCopilot);
-$("#copilotInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCopilot(); });
-async function sendCopilot() {
+$("#copilotSend").addEventListener("click", () => sendCopilot(false));
+$("#copilotInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCopilot(false); });
+async function sendCopilot(viaVoice) {
   const inp = $("#copilotInput"); const q = inp.value.trim(); if (!q) return;
-  addCp("user", "OPERATOR", q); inp.value = "";
+  addCp("user", viaVoice === true ? "OPERATOR · VOICE" : "OPERATOR", q); inp.value = "";
+  const cmd = await runCommand(q);
+  if (cmd) { addCp("ai", "DAEMON", cmd); if (viaVoice === true) speak(cmd); return; }
   const thinking = addCp("ai", "DAEMON", "▌ parsing…");
   neuralBusy = true;
   const res = await post("/api/copilot", { query: q });
   setTimeout(() => { neuralBusy = false; }, 900);
-  thinking.querySelector(".body").textContent = res && res.answer ? res.answer : "uplink down — backend not reachable.";
+  const ans = res && res.answer ? res.answer : "uplink down — backend not reachable.";
+  thinking.querySelector(".body").textContent = ans;
+  if (viaVoice === true) speak(ans);
 }
 function addCp(who, label, text) {
   const log = $("#copilotLog");
@@ -197,6 +210,7 @@ document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   if (e.key === "s") $("#btnSweep").click();
   if (e.key === "t") $("#btnTrust").click();
+  if (e.key === "v") $("#micBtn").click();
   if (e.key === "Tab") { e.preventDefault(); cycleDeck(); }
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     const ips = STATE.devices.map((d) => d.ip); if (!ips.length) return;
@@ -235,6 +249,7 @@ function loadMock() {
       { ts: Date.now() - 301000, severity: "INFO", kind: "new-device", source: "192.168.1.112", message: "new host joined the segment: esp32-node-3 · Espressif" },
     ],
   };
+  liveState = STATE;
   render();
   addCp("ai", "DAEMON", "Uplink synced. 7 hosts on the segment. 1 CRITICAL: gateway MAC changed — classic ARP-spoof signature. Recommend BLACKWALL on 192.168.1.99 and verify the router.");
 }
@@ -808,6 +823,242 @@ function initNeural() {
   }, 55);
 }
 
+// ================= TIME SCRUBBER: replay the console's recent past =================
+let hist = [];
+async function loadHistory() {
+  const r = await get("/api/history");
+  if (!r || !r.entries) return;
+  hist = r.entries;
+  const range = $("#scrubRange");
+  range.max = Math.max(0, hist.length - 1);
+  if (!replay) { range.value = range.max; $("#scrubTime").textContent = hist.length ? "LIVE · " + hist.length + " frames" : "LIVE"; }
+  drawScrubMarks();
+}
+function drawScrubMarks() {
+  const c = $("#scrubMarks"), w = c.clientWidth || 800;
+  c.width = w * 2; c.height = 36;
+  const x = c.getContext("2d");
+  x.clearRect(0, 0, c.width, c.height);
+  x.fillStyle = "rgba(94,246,255,0.18)"; x.fillRect(0, 17, c.width, 2);
+  if (hist.length < 2) return;
+  const maxHosts = Math.max(...hist.map((h) => h.hosts), 1);
+  x.strokeStyle = "rgba(94,246,255,0.45)"; x.lineWidth = 2; x.beginPath();
+  hist.forEach((h, i) => { const X = i / (hist.length - 1) * c.width, Y = 34 - (h.hosts / maxHosts) * 14; i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
+  x.stroke();
+  for (let i = 1; i < hist.length; i++) {
+    const X = i / (hist.length - 1) * c.width;
+    if (hist[i].crit > hist[i - 1].crit) { x.fillStyle = "#ff5449"; x.fillRect(X - 2, 0, 5, 36); }
+    else if (hist[i].alerts > hist[i - 1].alerts) { x.fillStyle = "#ffb84a"; x.fillRect(X - 1, 6, 3, 24); }
+  }
+}
+async function scrubTo(i) {
+  if (!hist.length || i >= hist.length - 1) return goLive();
+  const snap = await get("/api/history/at?i=" + i);
+  if (!snap) return;
+  replay = true;
+  document.body.classList.add("replay");
+  $("#scrubLive").classList.remove("active");
+  $("#scrubRange").value = i;
+  $("#scrubTime").textContent = "REPLAY · " + new Date(hist[i].ts).toLocaleTimeString("en-GB");
+  STATE = snap; render();
+}
+function goLive() {
+  replay = false;
+  document.body.classList.remove("replay");
+  $("#scrubLive").classList.add("active");
+  $("#scrubRange").value = $("#scrubRange").max;
+  $("#scrubTime").textContent = "LIVE · " + hist.length + " frames";
+  if (liveState) { STATE = liveState; render(); }
+}
+$("#scrubRange").addEventListener("input", (e) => scrubTo(+e.target.value));
+$("#scrubLive").addEventListener("click", goLive);
+window.addEventListener("resize", drawScrubMarks);
+
+// ================= SONAR: Wi-Fi CSI presence field =================
+let sonarState = { nodes: [], armed: false }, sonarPos = {}, sonarDrag = null;
+try { sonarPos = JSON.parse(localStorage.getItem("nw.sonarPos") || "{}"); } catch (_) { sonarPos = {}; }
+function sonarXY(name, idx, total) {
+  if (!sonarPos[name]) {
+    if (name === "@ap") sonarPos[name] = { x: 0, y: -0.05 };
+    else { const a = Math.PI * (0.15 + 0.7 * (total > 1 ? idx / (total - 1) : 0.5)); sonarPos[name] = { x: Math.cos(a) * 0.72 * (idx % 2 ? 1 : 0.85), y: 0.1 + Math.sin(a) * 0.62 }; if (idx === 0) sonarPos[name] = { x: -0.7, y: -0.5 }; }
+  }
+  return sonarPos[name];
+}
+function sonarResize() { const c = $("#sonarCanvas"); c.width = c.clientWidth * 2; c.height = c.clientHeight * 2; }
+function sonarDraw(t) {
+  const c = $("#sonarCanvas"); if (!c.offsetParent) return;
+  if (!c.width || c.width !== c.clientWidth * 2) sonarResize();
+  const x = c.getContext("2d"), W = c.width, H = c.height, S = Math.min(W, H) / 2;
+  const P = (p) => [W / 2 + p.x * S, H / 2 + p.y * S];
+  x.clearRect(0, 0, W, H);
+  x.strokeStyle = "rgba(29,255,161,0.07)"; x.lineWidth = 1;
+  for (let g = -8; g <= 8; g++) { x.beginPath(); x.moveTo(W / 2 + g * S / 5, 0); x.lineTo(W / 2 + g * S / 5, H); x.stroke(); x.beginPath(); x.moveTo(0, H / 2 + g * S / 5); x.lineTo(W, H / 2 + g * S / 5); x.stroke(); }
+  const nodes = sonarState.nodes || [];
+  const ap = P(sonarXY("@ap", 0, 1));
+  // sweep rings from the access point
+  for (let k = 0; k < 3; k++) { const r = ((t * 0.12 + k / 3) % 1) * S * 1.1; x.strokeStyle = "rgba(29,255,161," + (0.22 * (1 - r / (S * 1.1))) + ")"; x.lineWidth = 2; x.beginPath(); x.arc(ap[0], ap[1], r, 0, 6.283); x.stroke(); }
+  nodes.forEach((n, i) => {
+    const np = P(sonarXY(n.node, i, nodes.length));
+    const hot = n.state === "motion", k = Math.min(1, n.score / 100);
+    const dx = np[0] - ap[0], dy = np[1] - ap[1], len = Math.hypot(dx, dy), ang = Math.atan2(dy, dx);
+    // the sensed zone is the ellipse around the AP-to-node link
+    x.save(); x.translate((ap[0] + np[0]) / 2, (ap[1] + np[1]) / 2); x.rotate(ang);
+    const pulse = hot ? 0.55 + 0.45 * Math.sin(t * 9) : 1;
+    x.fillStyle = hot ? "rgba(255,84,73," + (0.1 + 0.3 * k * pulse) + ")" : "rgba(29,255,161," + (n.state === "clear" ? 0.06 : 0.02) + ")";
+    x.strokeStyle = hot ? "rgba(255,84,73,0.8)" : "rgba(29,255,161,0.3)"; x.lineWidth = hot ? 3 : 1.5;
+    x.beginPath(); x.ellipse(0, 0, len / 2 + 14, 26 + len * 0.13 + (hot ? k * 26 : 0), 0, 0, 6.283); x.fill(); x.stroke();
+    x.restore();
+    x.strokeStyle = hot ? "rgba(255,84,73,0.9)" : "rgba(94,246,255,0.35)"; x.lineWidth = 2; x.setLineDash(n.state === "calibrating" ? [8, 8] : []);
+    x.beginPath(); x.moveTo(ap[0], ap[1]); x.lineTo(np[0], np[1]); x.stroke(); x.setLineDash([]);
+    // node marker
+    const col = n.state === "offline" ? "#43727e" : hot ? "#ff5449" : n.state === "calibrating" ? "#ffb84a" : "#1dffa1";
+    x.fillStyle = col; x.shadowColor = col; x.shadowBlur = 18;
+    x.beginPath(); x.moveTo(np[0], np[1] - 16); x.lineTo(np[0] + 16, np[1]); x.lineTo(np[0], np[1] + 16); x.lineTo(np[0] - 16, np[1]); x.closePath(); x.fill(); x.shadowBlur = 0;
+    x.font = "600 26px Rajdhani, sans-serif"; x.fillStyle = "#bdf9ff"; x.fillText(n.node.toUpperCase(), np[0] + 24, np[1] - 4);
+    x.font = "20px ui-monospace, monospace"; x.fillStyle = col; x.fillText(n.state.toUpperCase() + (n.state === "offline" ? "" : " · " + Math.round(n.score)), np[0] + 24, np[1] + 22);
+  });
+  // access point
+  x.strokeStyle = "#5ef6ff"; x.lineWidth = 3; x.shadowColor = "#5ef6ff"; x.shadowBlur = 16;
+  x.beginPath(); x.arc(ap[0], ap[1], 14, 0, 6.283); x.stroke(); x.beginPath(); x.arc(ap[0], ap[1], 4, 0, 6.283); x.fillStyle = "#5ef6ff"; x.fill(); x.shadowBlur = 0;
+  x.font = "600 24px Rajdhani, sans-serif"; x.fillStyle = "#bdf9ff"; x.fillText("ACCESS POINT", ap[0] + 24, ap[1] + 8);
+}
+function sonarRenderList() {
+  const nodes = sonarState.nodes || [], list = $("#sonarList");
+  const moving = nodes.filter((n) => n.state === "motion").length;
+  $("#sonarMeta").textContent = nodes.length ? nodes.length + " nodes · " + (moving ? moving + " link" + (moving > 1 ? "s" : "") + " disturbed" : "field clear") : "no nodes reporting";
+  $("#sonarSrc").textContent = sonarState.demo ? "simulated csi" : sonarState.listening ? "udp " + sonarState.listening : "wi-fi csi";
+  const arm = $("#sonarArm");
+  arm.classList.toggle("armed", !!sonarState.armed);
+  arm.textContent = sonarState.armed ? "◉ ARMED" : "◎ ARM";
+  $("#sonarArmNote").textContent = sonarState.armed ? "armed — movement raises an ICE alert" : "disarmed — movement is shown, no alerts raised";
+  list.innerHTML = "";
+  if (!nodes.length) {
+    const h = el("div", "sonar-help");
+    h.innerHTML = "No nodes are reporting yet.<br><br>1. Start the console with<br><b>netwatch gui --sonar-udp 0.0.0.0:5566</b><br>2. Flash <b>firmware/esp32s3-csi</b> to each ESP32-S3<br>&nbsp;&nbsp;&nbsp;(or try <b>netwatch sonar-sim</b> first)<br>3. Leave the room still for ~5 s to calibrate";
+    list.appendChild(h); return;
+  }
+  nodes.forEach((n) => {
+    const row = el("div", "snode " + n.state);
+    const tr = n.trace || [];
+    const pts = tr.map((v, i) => (i / Math.max(1, tr.length - 1) * 120).toFixed(1) + "," + (19 - Math.min(100, v) / 100 * 18).toFixed(1)).join(" ");
+    row.innerHTML = '<div class="top"><span class="nm">' + esc(n.node.toUpperCase()) + '</span><span class="badge ' + (n.state === "motion" ? "bad" : "") + '">' + esc(n.state.toUpperCase()) + '</span><span class="sc">' + Math.round(n.score) + "</span></div>" +
+      '<div class="bar"><i style="width:' + Math.min(100, n.score) + '%"></i></div>' +
+      '<div class="meta2"><span>RSSI ' + esc(n.rssi) + " dBm · " + esc(n.fps) + ' fps</span><svg viewBox="0 0 120 20"><polyline fill="none" stroke="' + (n.state === "motion" ? "#ff5449" : "#1dffa1") + '" stroke-width="1.2" points="' + pts + '"/></svg></div>';
+    list.appendChild(row);
+  });
+}
+async function sonarPoll() {
+  const visible = currentDeck() === "sonar";
+  if (!visible && !audioOn) return;
+  const r = await get("/api/sonar"); if (!r) return;
+  sonarState = r;
+  if (visible) sonarRenderList();
+}
+$("#sonarArm").addEventListener("click", async () => { await post("/api/sonar/arm", { armed: !sonarState.armed }); sonarPoll(); });
+(function sonarPointer() {
+  const c = $("#sonarCanvas");
+  const norm = (e) => { const r = c.getBoundingClientRect(), S = Math.min(r.width, r.height) / 2; return { x: (e.clientX - r.left - r.width / 2) / S, y: (e.clientY - r.top - r.height / 2) / S }; };
+  c.addEventListener("pointerdown", (e) => {
+    const m = norm(e); let best = null, bd = 0.09;
+    Object.keys(sonarPos).forEach((k) => { const d = Math.hypot(sonarPos[k].x - m.x, sonarPos[k].y - m.y); if (d < bd) { bd = d; best = k; } });
+    if (best) { sonarDrag = best; c.setPointerCapture(e.pointerId); }
+  });
+  c.addEventListener("pointermove", (e) => { if (sonarDrag) sonarPos[sonarDrag] = norm(e); });
+  c.addEventListener("pointerup", () => { if (sonarDrag) { sonarDrag = null; try { localStorage.setItem("nw.sonarPos", JSON.stringify(sonarPos)); } catch (_) {} } });
+})();
+
+// ================= COMMANDS: typed or spoken =================
+const DECK_WORDS = { watchtower: "netwatch", watch: "netwatch", breach: "breach", "kill chain": "killchain", killchain: "killchain", "attack": "attack", "att&ck": "attack", mitre: "attack", grid: "grid", globe: "grid", ar: "ar", optic: "ar", sonar: "sonar" };
+let pendingConfirm = null;
+function findDevice(words) {
+  const w = words.toLowerCase().replace(/^the\s+/, "").trim(); if (!w) return null;
+  const flat = w.replace(/[^a-z0-9.]/g, "");
+  const devs = STATE.devices || [];
+  if (/gateway|router/.test(w)) return devs.find((d) => d.gateway) || null;
+  return devs.find((d) => d.ip === flat) || devs.find((d) => d.ip.endsWith("." + flat)) ||
+    devs.find((d) => d.hostname && d.hostname.toLowerCase().replace(/[^a-z0-9]/g, "").includes(flat.replace(/\./g, ""))) || null;
+}
+// Returns a reply string when the text was a command, or null to hand it to the Copilot.
+async function runCommand(text) {
+  const t = text.toLowerCase().replace(/[.!?]+$/, "").trim();
+  let m;
+  if (pendingConfirm) {
+    const p = pendingConfirm; pendingConfirm = null;
+    if (/^(confirm|yes|do it|execute)$/.test(t) && Date.now() < p.until) { const r = await post("/api/blackwall", { ip: p.ip, action: "quarantine" }); return r && r.ok ? "BLACKWALL engaged. " + p.ip + " is quarantined." : "Quarantine failed: " + ((r && r.error) || "backend unreachable"); }
+    if (/^(cancel|no|abort)$/.test(t)) return "Cancelled.";
+  }
+  if (/^(sweep|scan)( the)?( network| segment)?$/.test(t)) { if (replay) return "Go live first."; await post("/api/sweep"); return "Sweeping the segment."; }
+  if ((m = t.match(/^(?:switch to|open|show|go to)\s+(?:the\s+)?(.+?)(?:\s+deck)?$/)) && DECK_WORDS[m[1]]) { selectDeck(DECK_WORDS[m[1]]); return "Switching to " + m[1].toUpperCase() + "."; }
+  if ((m = t.match(/^(?:select|target|lock on(?: to)?)\s+(.+)$/))) { const d = findDevice(m[1]); if (!d) return "No host matches " + m[1] + "."; selectDeck("netwatch"); selectDevice(d.ip); return "Locked on " + (d.hostname || d.ip) + ". Threat " + threatOf(d) + " of 100."; }
+  if ((m = t.match(/^(untrust|trust)(?:\s+(.+))?$/))) { const d = m[2] ? findDevice(m[2]) : STATE.devices.find((x) => x.ip === selectedIP); if (!d) return "Select a host first."; await post("/api/trust", { ip: d.ip, trusted: m[1] === "trust" }); return (d.hostname || d.ip) + (m[1] === "trust" ? " marked trusted." : " marked unverified."); }
+  if ((m = t.match(/^(?:quarantine|isolate|blackwall)(?:\s+(.+))?$/))) { const d = m[1] ? findDevice(m[1]) : STATE.devices.find((x) => x.ip === selectedIP); if (!d) return "Select a host first."; if (d.self || d.gateway) return "Refusing: that is " + (d.self ? "this machine" : "the gateway") + "."; pendingConfirm = { ip: d.ip, until: Date.now() + 15000 }; return "Quarantine " + (d.hostname || d.ip) + " at the firewall? Say or type confirm."; }
+  if ((m = t.match(/^release(?:\s+(.+))?$/))) { const d = m[1] ? findDevice(m[1]) : STATE.devices.find((x) => x.ip === selectedIP); if (!d) return "Select a host first."; await post("/api/blackwall", { ip: d.ip, action: "release" }); return (d.hostname || d.ip) + " released."; }
+  if (/^(go )?live$/.test(t)) { goLive(); return "Back to live."; }
+  if ((m = t.match(/^(?:rewind|go back)\s+(\d+)\s+min/))) { const target = Date.now() - (+m[1]) * 60000; let i = 0; hist.forEach((h, k) => { if (h.ts <= target) i = k; }); await scrubTo(i); return "Replaying " + m[1] + " minutes ago."; }
+  if ((m = t.match(/^(disarm|arm)(?: the)? sonar$/))) { await post("/api/sonar/arm", { armed: m[1] === "arm" }); sonarPoll(); return "SONAR " + (m[1] === "arm" ? "armed." : "disarmed."); }
+  if (/^(audio on|unmute)$/.test(t)) { setAudio(true); return "Spatial audio on."; }
+  if (/^(audio off|mute)$/.test(t)) { setAudio(false); return "Spatial audio off."; }
+  return null;
+}
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(String(text).slice(0, 320)); u.rate = 1.05; u.pitch = 0.7;
+  window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+}
+(function voice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, btn = $("#micBtn");
+  if (!SR) { btn.disabled = true; btn.title = "speech recognition is not available in this browser — type commands instead"; return; }
+  const rec = new SR(); rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+  let on = false;
+  rec.onresult = (e) => { $("#copilotInput").value = e.results[0][0].transcript; sendCopilot(true); };
+  rec.onend = () => { on = false; btn.classList.remove("listening"); btn.textContent = "◉ VOICE"; };
+  rec.onerror = (e) => { status("voice: " + e.error); };
+  btn.addEventListener("click", () => {
+    if (on) { rec.stop(); return; }
+    try { rec.start(); on = true; btn.classList.add("listening"); btn.textContent = "◉ LISTENING"; } catch (_) {}
+  });
+})();
+
+// ================= SPATIAL AUDIO: hear where an alert comes from =================
+let actx = null, audioOn = false, lastAlertTs = null;
+function audioPosFor(source) {
+  const n = (sonarState.nodes || []).find((x) => x.node === source);
+  if (n && sonarPos[source]) return { x: sonarPos[source].x * 4, z: sonarPos[source].y * 4 };
+  let h = 2166136261; for (const ch of String(source)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; // spread similar addresses around the listener
+  const a = ((h >>> 0) % 360) * Math.PI / 180;
+  return { x: Math.cos(a) * 3, z: Math.sin(a) * 3 };
+}
+function playAlert(a) {
+  if (!audioOn || !actx) return null;
+  const pos = audioPosFor(a.source), now = actx.currentTime;
+  const pan = new PannerNode(actx, { panningModel: "HRTF", distanceModel: "inverse", positionX: pos.x, positionY: 0, positionZ: pos.z });
+  const gain = actx.createGain(); gain.connect(pan).connect(actx.destination);
+  const tones = a.severity === "CRITICAL" ? [[880, 0, "sawtooth"], [587, 0.16, "sawtooth"], [880, 0.34, "sawtooth"], [587, 0.5, "sawtooth"]] : a.severity === "WARN" ? [[660, 0, "square"], [660, 0.18, "square"]] : [[520, 0, "sine"]];
+  tones.forEach(([f, at, type]) => {
+    const o = actx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(gain);
+    gain.gain.setValueAtTime(0.0001, now + at); gain.gain.exponentialRampToValueAtTime(0.25, now + at + 0.02); gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.14);
+    o.start(now + at); o.stop(now + at + 0.15);
+  });
+  return pos;
+}
+function setAudio(on) {
+  audioOn = on;
+  if (on && !actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+  if (on && actx && actx.state === "suspended") actx.resume();
+  const b = $("#audioBtn"); b.classList.toggle("on", on); b.textContent = on ? "AUDIO ON" : "AUDIO OFF";
+}
+$("#audioBtn").addEventListener("click", () => { setAudio(!audioOn); if (audioOn) playAlert({ severity: "INFO", source: "self" }); });
+function onNewAlerts(snap) {
+  const alerts = snap.alerts || [], newest = alerts.reduce((mx, a) => Math.max(mx, a.ts || 0), 0);
+  if (lastAlertTs === null) { lastAlertTs = newest; return; }
+  alerts.filter((a) => a.ts > lastAlertTs).slice(0, 3).forEach(playAlert);
+  lastAlertTs = Math.max(lastAlertTs, newest);
+}
+
+// test hooks (also handy from the browser console)
+window.netwatch = { runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
+
 // ---------- boot ----------
 initNeural();
 runBoot();
@@ -816,3 +1067,7 @@ killchainDeck.init();
 attackDeck.init();
 connect();
 setTimeout(() => { if (!live) loadMock(); }, 600);
+setTimeout(loadHistory, 900);
+setInterval(loadHistory, 10000);
+setInterval(sonarPoll, 400);
+(function sonarLoop() { sonarDraw(performance.now() / 1000); requestAnimationFrame(sonarLoop); })();

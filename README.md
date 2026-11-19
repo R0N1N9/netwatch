@@ -16,7 +16,7 @@ One binary, multiple **decks**:
 | **Breach** | Offensive — authorized recon & lab testing | 🟡 recon seed (scope-locked) |
 | **Kill Chain** | Purple team — Lockheed-Martin kill chain | ✅ working |
 | **ATT&CK** | Purple team — MITRE ATT&CK tactics (TA0043→TA0040) | ✅ working |
-| **SONAR** | Spatial awareness — ESP32-S3 sensor mesh → 3D presence map | 🔭 scaffold |
+| **SONAR** | Spatial awareness — Wi-Fi CSI presence sensing from ESP32-S3 nodes | 🟡 engine + simulator working; firmware untested on hardware |
 
 > **Scope & ethics.** NetWatch is for **defense, your own networks, lab
 > environments, CTFs, and engagements you are authorized to perform**. The
@@ -163,12 +163,55 @@ each host** — IP, passively-fingerprinted OS, threat score, beacon target —
 drawn over the live camera feed. Camera stays on-device. Falls back to a
 synthetic overlay where WebXR/camera isn't available.
 
-## RUView (scaffold)
+## SONAR — presence sensing
 
-Placeholder for the ESP32-S3 sensor mesh → live 3D spatial map (WebGL/three.js
-in the same shell).
+ESP32-S3 nodes report Wi-Fi **Channel State Information**; a body moving through
+the path between the access point and a node disturbs the subcarrier
+amplitudes. The engine measures that turbulence against a calm baseline and
+shows which link is disturbed on a top-down map you arrange to match your room.
+It is zone-level sensing, not coordinates.
 
----
+```bash
+netwatch gui --sonar-udp 0.0.0.0:5566     # listen for nodes on your LAN (off by default)
+```
+
+```bash
+netwatch sonar-sim                        # simulated nodes, to try it before hardware
+```
+
+**ARM** it when you want movement to raise an ICE alert; disarmed, it only
+draws. Firmware lives in `firmware/esp32s3-csi` and has **not yet been compiled
+or run on a board**.
+
+## Copilot — free, local model
+
+The Copilot uses a model served by [Ollama](https://ollama.com) on your own
+machine when one is running, and the built-in rules otherwise. No API key, no
+token cost, and nothing about your network leaves the host.
+
+```bash
+ollama pull llama3.2
+```
+
+Start `netwatch gui` afterwards and the Copilot panel shows
+`local model · llama3.2`. `NETWATCH_LLM_MODEL` picks a model, `NETWATCH_LLM_URL`
+points at another Ollama host, `NETWATCH_LLM=off` forces the built-in rules.
+
+## Commands, voice, spatial audio, time scrubber
+
+- **Commands** — the Copilot box is also a command line: `sweep`,
+  `select gateway`, `select 99`, `trust`, `quarantine pi-hole` (asks you to
+  `confirm`), `release`, `switch to sonar`, `rewind 10 minutes`, `go live`,
+  `arm sonar`, `audio on`. Anything else goes to the Copilot as a question.
+- **Voice** — the VOICE button (or `V`) speaks the same commands and reads the
+  reply back. It uses the browser's speech recognition; in Chrome that sends
+  audio to Google, so type instead if you want everything to stay local.
+- **Spatial audio** — AUDIO ON plays each new alert from a direction: SONAR
+  nodes from where you placed them on the map, hosts from a fixed bearing per
+  address. Use headphones.
+- **Time scrubber** — drag the bar above the ticker to replay the console's
+  recent past (ticks mark alerts; red is critical). Controls lock while
+  replaying; LIVE returns to the present. History is kept in memory only.
 
 ## Architecture
 
@@ -188,6 +231,7 @@ internal/
   passive/    live capture + flow table + analyzers (OS fp, JA3, DNS/DGA, beacon)
   anomaly/    online behavioral-anomaly model (per-device z-score baselines)
   geo/        offline IP -> globe placement (real GeoIP pluggable)
+  sonar/      Wi-Fi CSI presence engine (turbulence vs baseline) + simulator
   server/     HTTP server: serves the GUI + SSE live stream + action endpoints
   webui/      embedded Cyberpunk web console (assets/ baked in with go:embed)
   tui/        terminal deck (Bubble Tea) — fallback
@@ -223,7 +267,7 @@ desktop app.
 - [ ] CIDR ranges, service banners, OS hints.
 - [ ] Traffic masking / VPN (WireGuard) integration.
 
-**RUView — spatial**
+**SONAR — spatial**
 - [ ] ESP32-S3 sensor mesh ingestion (Wi-Fi/BLE/UWB) → live 3D map.
 
 ---

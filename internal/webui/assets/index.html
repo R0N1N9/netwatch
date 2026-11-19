@@ -54,8 +54,10 @@ MK.4</div>
       <div class="ram" id="ramBar"></div>
     </div>
     <div class="hs-right">
+      <span class="replay-tag">REPLAY · viewing the past · controls locked</span>
       <span class="hs-stat"><span class="micro cy">PKT/S</span><b id="ppsVal">0</b></span>
       <span class="hs-stat" id="thrStat"><span class="micro">THREATS</span><b id="thrVal">0</b></span>
+      <button class="hs-btn" id="audioBtn" title="spatial audio alerts">AUDIO OFF</button>
     </div>
   </div>
 
@@ -79,7 +81,7 @@ MK.4</div>
         <div class="panel-body" id="alertList"></div>
       </div>
       <div class="panel copilot" style="--accent: var(--magenta); flex: 0 0 38%">
-        <div class="panel-head"><span>COPILOT // DAEMON</span><span class="meta">neural uplink</span></div>
+        <div class="panel-head"><span>COPILOT // DAEMON</span><span class="meta" id="cpBackend">neural uplink</span></div>
         <div class="cp-wrap">
           <div class="panel-body" id="copilotLog"></div>
           <div class="neural" id="neural">
@@ -89,7 +91,8 @@ MK.4</div>
           </div>
         </div>
         <div class="field">
-          <input id="copilotInput" placeholder="ask the daemon…  e.g. what's weird right now?" autocomplete="off" />
+          <input id="copilotInput" placeholder="ask or command…  e.g. what's weird?  ·  select gateway  ·  switch to sonar" autocomplete="off" />
+          <button class="btn" id="micBtn" title="voice command (V)">◉ VOICE</button>
           <button class="btn" id="copilotSend">SEND</button>
         </div>
       </div>
@@ -225,13 +228,33 @@ MK.4</div>
   </main>
 
   <!-- SONAR DECK (spatial awareness) -->
-  <main class="deck" data-deck="sonar" hidden>
-    <div class="coming">
-      <h2>SO<span class="glitch">NAR</span></h2>
-      <p>SPATIAL AWARENESS · ESP32-S3 SENSOR MESH · 3D PRESENCE MAP</p>
-      <p style="opacity:0.6">// RF trilateration uplink pending — hardware integration //</p>
+  <main class="deck sonar" data-deck="sonar" hidden>
+    <div class="sonar-map">
+      <canvas id="sonarCanvas"></canvas>
+      <div class="globe-hud">
+        <div class="ghud-title">SO<span class="glitch">NAR</span> // PRESENCE FIELD</div>
+        <div class="ghud-meta" id="sonarMeta">— nodes</div>
+      </div>
+      <div class="sonar-hint">drag the access point and nodes to match your room</div>
+    </div>
+    <div class="panel grow" style="--accent: var(--green)">
+      <div class="panel-head"><span>SENSOR MESH</span><span class="meta" id="sonarSrc">wi-fi csi</span></div>
+      <div class="btn-row">
+        <button class="btn" id="sonarArm">◎ ARM</button>
+        <span class="sonar-note" id="sonarArmNote">disarmed — movement is shown, no alerts raised</span>
+      </div>
+      <div class="panel-body" id="sonarList"></div>
     </div>
   </main>
+
+  <div class="scrub" id="scrub">
+    <button class="scrub-live active" id="scrubLive">● LIVE</button>
+    <div class="scrub-track">
+      <canvas id="scrubMarks" height="18"></canvas>
+      <input type="range" id="scrubRange" min="0" max="0" value="0" aria-label="time scrubber" />
+    </div>
+    <span class="scrub-time" id="scrubTime">--:--:--</span>
+  </div>
 
   <div class="ticker"><div class="ticker-track" id="ticker"></div></div>
 
