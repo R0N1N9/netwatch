@@ -1,3 +1,5 @@
+<p align="center"><img src="internal/webui/assets/favicon.svg" width="120" alt="NetWatch logo"></p>
+
 # NetWatch
 
 > An experimental network and spatial-sensing console with a Cyberpunk 2077
@@ -8,6 +10,8 @@ Suite*). It watches your local network, senses movement in your space from
 Wi-Fi signals, and lets you replay both.
 
 ![Watchtower](docs/screens/watchtower.jpg)
+
+*Watchtower: hosts on the network, intrusion alerts and the Copilot.*
 
 > **Scope.** NetWatch is for your own networks and spaces, lab environments,
 > and work you are authorised to do. Anything that touches other machines is
@@ -89,7 +93,27 @@ And across every deck: hold `Q` for **scanner mode**, and when you come back aft
 
 ![CORTEX](docs/screens/cortex.jpg)
 
+*CORTEX investigating an alert: evidence, the case for and against, and one proposed action awaiting approval.*
+
 ![SONAR](docs/screens/sonar-3d.jpg)
+
+*SONAR: presence sensing from ESP32-S3 Wi-Fi nodes in a 3D room view.*
+
+More screens for every deck are in [`docs/screens/`](docs/screens/).
+
+## Structure
+
+```
+main.go                 entry point
+internal/cli, server    commands and the HTTP API
+internal/webui/         the embedded console (HTML, JS, CSS, icons)
+internal/<module>/      one package per deck or module (sonar, cortex, decoy, ledger, ...)
+firmware/               ESP32-S3 CSI sensor and ESP32 light firmware
+docs/                   guide, architecture, experimental registry, screenshots
+Makefile, update.sh     build, demo, test, update-and-restart
+```
+
+See [Architecture](docs/ARCHITECTURE.md) for the full package map and API.
 
 ## How proven is it?
 
