@@ -310,7 +310,7 @@ func panel(title, body string, w, h int, accent lipgloss.Color) string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
-		Width(w - 2).
+		Width(w-2).
 		Height(inner).
 		Padding(0, 1).
 		Render(content)

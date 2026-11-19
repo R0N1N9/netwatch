@@ -4,12 +4,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -22,6 +26,7 @@ import (
 	"github.com/r0n1n9/netwatch/internal/netif"
 	"github.com/r0n1n9/netwatch/internal/offensive"
 	"github.com/r0n1n9/netwatch/internal/passive"
+	"github.com/r0n1n9/netwatch/internal/sonar"
 	"github.com/r0n1n9/netwatch/internal/sweep"
 	"github.com/r0n1n9/netwatch/internal/webui"
 )
@@ -46,24 +51,48 @@ type Server struct {
 
 	clientsMu sync.Mutex
 	clients   map[chan []byte]struct{}
+
+	// state history for the time scrubber
+	histMu sync.Mutex
+	hist   []histEntry
+
+	// SONAR: CSI presence sensing
+	son          *sonar.Engine
+	SonarAddr    string // UDP address to ingest CSI frames on ("" = off)
+	sonarArmed   bool
+	lastPresence map[string]time.Time
+}
+
+type histEntry struct {
+	TS     int64 `json:"ts"`
+	Hosts  int   `json:"hosts"`
+	Alerts int   `json:"alerts"`
+	Crit   int   `json:"crit"`
+	snap   []byte
 }
 
 // New builds a server for an interface.
 func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 	s := &Server{
-		info:        info,
-		engine:      ice.New(),
-		wall:        blackwall.New(),
-		cop:         copilot.Default(),
-		autoEvery:   autoEvery,
-		demo:        demo,
-		trusted:     map[string]bool{},
-		quarantined: map[string]bool{},
-		clients:     map[chan []byte]struct{}{},
+		info:         info,
+		engine:       ice.New(),
+		wall:         blackwall.New(),
+		cop:          copilot.Detect(context.Background()),
+		son:          sonar.New(),
+		lastPresence: map[string]time.Time{},
+		autoEvery:    autoEvery,
+		demo:         demo,
+		trusted:      map[string]bool{},
+		quarantined:  map[string]bool{},
+		clients:      map[chan []byte]struct{}{},
 	}
 	s.mon = passive.NewMonitor(info.Iface, info.IP, s.emitAlert)
+	s.son.OnMotion = s.onPresence
 	return s
 }
+
+// CopilotName reports which Copilot backend is answering.
+func (s *Server) CopilotName() string { return s.cop.Name() }
 
 // emitAlert records an alert (from the passive monitor) and pushes to clients.
 func (s *Server) emitAlert(a model.Alert) {
@@ -92,6 +121,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/kc/connections", auditHandler(audit.Connections))
 	mux.HandleFunc("/api/kc/eicar", auditHandler(audit.Eicar))
 	mux.HandleFunc("/api/globe", s.handleGlobe)
+	mux.HandleFunc("/api/history", s.handleHistory)
+	mux.HandleFunc("/api/history/at", s.handleHistoryAt)
+	mux.HandleFunc("/api/sonar", s.handleSonar)
+	mux.HandleFunc("/api/sonar/ingest", s.handleSonarIngest)
+	mux.HandleFunc("/api/sonar/arm", s.handleSonarArm)
 	return mux
 }
 
@@ -99,7 +133,15 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) Run(ctx context.Context, addr string) error {
 	if s.demo {
 		s.loadDemo()
+		go s.sonarDemo(ctx)
 	} else {
+		if s.SonarAddr != "" {
+			go func() {
+				if err := s.son.ListenUDP(ctx, s.SonarAddr); err != nil {
+					log.Printf("sonar: cannot listen on %s: %v", s.SonarAddr, err)
+				}
+			}()
+		}
 		go s.watchLoop(ctx)
 		go func() {
 			if err := s.mon.Run(ctx); err != nil {
@@ -220,6 +262,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) broadcast() {
 	b := s.snapshotJSON()
+	s.record(b, time.Now())
 	s.clientsMu.Lock()
 	for ch := range s.clients {
 		select {
@@ -340,12 +383,19 @@ func (s *Server) handleCopilot(w http.ResponseWriter, r *http.Request) {
 		Devices:     append([]model.Device(nil), s.devices...),
 		Alerts:      append([]model.Alert(nil), s.alerts...),
 		Quarantined: cloneSet(s.quarantined),
+		Intel:       map[string]copilot.HostIntel{},
 		Iface:       s.info.Iface.Name,
 		Subnet:      s.info.IPNet.String(),
 	}
+	for i := range snap.Devices {
+		ip := snap.Devices[i].IP.String()
+		snap.Devices[i].Trusted = s.trusted[ip]
+		e := s.enrich(ip)
+		snap.Intel[ip] = copilot.HostIntel{OS: e.OS, Anomaly: e.Anomaly, Beacon: e.Beacon}
+	}
 	s.mu.Unlock()
 	answer := s.cop.Ask(r.Context(), req.Query, snap)
-	writeJSON(w, map[string]any{"answer": answer})
+	writeJSON(w, map[string]any{"answer": answer, "backend": s.cop.Name()})
 }
 
 // ---- snapshot ----
@@ -387,7 +437,7 @@ func (s *Server) snapshotJSON() []byte {
 			IP: ipStr, MAC: macStr(d.MAC), Vendor: d.Vendor, Hostname: d.Hostname,
 			Self: d.IsSelf, Gateway: d.IsGateway, Trusted: s.trusted[ipStr],
 			Quarantined: s.quarantined[ipStr],
-			OS: e.OS, JA3: e.JA3, SNI: e.SNI, Anomaly: e.Anomaly, Beacon: e.Beacon,
+			OS:          e.OS, JA3: e.JA3, SNI: e.SNI, Anomaly: e.Anomaly, Beacon: e.Beacon,
 		})
 	}
 	alerts := make([]wireAlert, 0, len(s.alerts))
@@ -408,7 +458,7 @@ func (s *Server) snapshotJSON() []byte {
 		"meta": map[string]any{
 			"iface": s.info.Iface.Name, "subnet": s.info.IPNet.String(),
 			"gateway": gwStr(s.info), "watching": true, "sweeping": s.sweeping,
-			"pps": s.pps(),
+			"pps": s.pps(), "copilot": s.cop.Name(), "sonarArmed": s.sonarArmed,
 		},
 		"devices": devices,
 		"alerts":  alerts,
@@ -435,12 +485,180 @@ func (s *Server) loadDemo() {
 	}
 	s.trusted["192.168.1.50"] = true
 	s.trusted["192.168.1.20"] = true
+	now := time.Now()
 	s.alerts = []model.Alert{
-		{Time: time.Now(), Severity: model.SevCritical, Kind: "arp-spoof", Source: "192.168.1.1", Message: "gateway MAC changed f0:27:2d:aa:bb:cc → 02:11:22:33:44:55 (possible MITM)"},
-		{Time: time.Now().Add(-time.Minute), Severity: model.SevWarn, Kind: "new-device", Source: "192.168.1.99", Message: "new host joined the segment: 192.168.1.99 · randomized MAC (privacy address or evasion)"},
+		{Time: now.Add(-2 * time.Minute), Severity: model.SevCritical, Kind: "arp-spoof", Source: "192.168.1.1", Message: "gateway MAC changed f0:27:2d:aa:bb:cc → 02:11:22:33:44:55 (possible MITM)"},
+		{Time: now.Add(-9 * time.Minute), Severity: model.SevWarn, Kind: "new-device", Source: "192.168.1.99", Message: "new host joined the segment: 192.168.1.99 · randomized MAC (privacy address or evasion)"},
+		{Time: now.Add(-22 * time.Minute), Severity: model.SevInfo, Kind: "new-device", Source: "192.168.1.31", Message: "new host joined the segment: 192.168.1.31 (echo-dot) · Amazon"},
 	}
-	s.lastSweep = time.Now()
+	s.lastSweep = now
+	full, alerts := s.devices, s.alerts
 	s.mu.Unlock()
+
+	// Synthesize the last 30 minutes so the time scrubber has something to replay.
+	joined := map[string]time.Time{"192.168.1.31": now.Add(-22 * time.Minute), "192.168.1.99": now.Add(-9 * time.Minute)}
+	for m := 30; m >= 0; m-- {
+		at := now.Add(-time.Duration(m) * time.Minute)
+		var ds []model.Device
+		for _, d := range full {
+			if j, ok := joined[d.IP.String()]; !ok || !j.After(at) {
+				ds = append(ds, d)
+			}
+		}
+		var as []model.Alert
+		for _, a := range alerts {
+			if !a.Time.After(at) {
+				as = append(as, a)
+			}
+		}
+		s.mu.Lock()
+		s.devices, s.alerts = ds, as
+		s.mu.Unlock()
+		s.record(s.snapshotJSON(), at)
+	}
+	s.mu.Lock()
+	s.devices, s.alerts = full, alerts
+	s.mu.Unlock()
+}
+
+// ---- time scrubber: state history ----
+
+func (s *Server) record(b []byte, at time.Time) {
+	if bytes.Contains(b, []byte(`"sweeping":true`)) {
+		return // transient scan-in-progress frames are not worth replaying
+	}
+	var v struct {
+		Devices []json.RawMessage `json:"devices"`
+		Alerts  []struct {
+			Severity string `json:"severity"`
+		} `json:"alerts"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return
+	}
+	crit := 0
+	for _, a := range v.Alerts {
+		if a.Severity == "CRITICAL" {
+			crit++
+		}
+	}
+	s.histMu.Lock()
+	s.hist = append(s.hist, histEntry{TS: at.UnixMilli(), Hosts: len(v.Devices), Alerts: len(v.Alerts), Crit: crit, snap: b})
+	if len(s.hist) > 1500 {
+		s.hist = s.hist[len(s.hist)-1500:]
+	}
+	s.histMu.Unlock()
+}
+
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	s.histMu.Lock()
+	entries := append([]histEntry(nil), s.hist...)
+	s.histMu.Unlock()
+	writeJSON(w, map[string]any{"entries": entries})
+}
+
+func (s *Server) handleHistoryAt(w http.ResponseWriter, r *http.Request) {
+	i, err := strconv.Atoi(r.URL.Query().Get("i"))
+	s.histMu.Lock()
+	defer s.histMu.Unlock()
+	if err != nil || i < 0 || i >= len(s.hist) {
+		http.Error(w, "no such history entry", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(s.hist[i].snap)
+}
+
+// ---- SONAR: CSI presence sensing ----
+
+func (s *Server) onPresence(node string, score float64) {
+	s.mu.Lock()
+	armed := s.sonarArmed
+	recent := time.Since(s.lastPresence[node]) < 30*time.Second
+	if armed && !recent {
+		s.lastPresence[node] = time.Now()
+	}
+	s.mu.Unlock()
+	if !armed || recent {
+		return
+	}
+	s.emitAlert(model.Alert{
+		Time: time.Now(), Severity: model.SevWarn, Kind: "presence", Source: node,
+		Message: fmt.Sprintf("SONAR armed: movement detected on the %s link (turbulence %.0f/100)", node, score),
+	})
+}
+
+func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	armed := s.sonarArmed
+	s.mu.Unlock()
+	writeJSON(w, map[string]any{"armed": armed, "listening": s.SonarAddr, "demo": s.demo, "nodes": s.son.Snapshot(time.Now())})
+}
+
+func (s *Server) handleSonarIngest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	var frames []sonar.Frame
+	if json.Unmarshal(body, &frames) != nil {
+		var f sonar.Frame
+		if json.Unmarshal(body, &f) != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": "expected a CSI frame or an array of frames"})
+			return
+		}
+		frames = []sonar.Frame{f}
+	}
+	now := time.Now()
+	for _, f := range frames {
+		s.son.Ingest(f, now)
+	}
+	writeJSON(w, map[string]any{"ok": true, "frames": len(frames)})
+}
+
+func (s *Server) handleSonarArm(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Armed bool `json:"armed"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	s.mu.Lock()
+	s.sonarArmed = req.Armed
+	s.mu.Unlock()
+	s.broadcast()
+	writeJSON(w, map[string]any{"ok": true, "armed": req.Armed})
+}
+
+// sonarDemo feeds three simulated nodes so the SONAR deck works without hardware.
+func (s *Server) sonarDemo(ctx context.Context) {
+	sims := []*sonar.Sim{sonar.NewSim("node-A", 1), sonar.NewSim("node-B", 2), sonar.NewSim("node-C", 3)}
+	t := time.NewTicker(40 * time.Millisecond)
+	defer t.Stop()
+	start := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		phase := math.Mod(time.Since(start).Seconds(), 30)
+		motion := []float64{0, 0, 0}
+		if phase > 8 && phase < 14 {
+			motion[1] = 1
+		}
+		if phase > 11 && phase < 13 {
+			motion[0] = 0.6
+		}
+		if phase > 19 && phase < 24 {
+			motion[2] = 0.8
+		}
+		now := time.Now()
+		for i, sim := range sims {
+			s.son.Ingest(sim.Frame(motion[i]), now)
+		}
+	}
 }
 
 // ---- passive enrichment + globe ----

@@ -11,8 +11,8 @@ import (
 )
 
 type stat struct {
-	n          int
-	mean, m2   float64 // Welford's online variance
+	n        int
+	mean, m2 float64 // Welford's online variance
 }
 
 func (s *stat) add(x float64) {

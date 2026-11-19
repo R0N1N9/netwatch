@@ -22,6 +22,7 @@ var (
 	guiAuto   time.Duration
 	guiDemo   bool
 	guiNoOpen bool
+	guiSonar  string
 )
 
 var guiCmd = &cobra.Command{
@@ -44,6 +45,7 @@ var guiCmd = &cobra.Command{
 		defer cancel()
 
 		srv := server.New(info, guiAuto, guiDemo)
+		srv.SonarAddr = guiSonar
 		url := "http://" + guiAddr
 
 		fmt.Println(theme.Banner())
@@ -54,6 +56,12 @@ var guiCmd = &cobra.Command{
 			mode = "demo (sample data)"
 		}
 		fmt.Printf("  %s %s · iface %s · %s\n\n", theme.Label.Render("mode:"), theme.Value.Render(mode), theme.Value.Render(info.Iface.Name), theme.Faint.Render("ctrl-c to stop"))
+
+		fmt.Printf("  %s %s\n", theme.Label.Render("copilot:"), theme.Value.Render(srv.CopilotName()))
+		if guiSonar != "" {
+			fmt.Printf("  %s %s\n", theme.Label.Render("sonar:"), theme.Value.Render("listening for CSI frames on udp "+guiSonar))
+		}
+		fmt.Println()
 
 		if !guiNoOpen {
 			go openBrowser(url)
@@ -71,6 +79,7 @@ func init() {
 	guiCmd.Flags().DurationVar(&guiAuto, "auto", 20*time.Second, "auto-sweep interval (0 to disable)")
 	guiCmd.Flags().BoolVar(&guiDemo, "demo", false, "serve sample data instead of live capture (no privileges needed)")
 	guiCmd.Flags().BoolVar(&guiNoOpen, "no-open", false, "do not auto-open the browser")
+	guiCmd.Flags().StringVar(&guiSonar, "sonar-udp", "", "ingest ESP32 CSI frames on this UDP address, e.g. 0.0.0.0:5566 (off by default)")
 	rootCmd.AddCommand(guiCmd)
 }
 

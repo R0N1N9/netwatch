@@ -18,7 +18,7 @@ type Loc struct {
 }
 
 type region struct {
-	name                         string
+	name                           string
 	latMin, latMax, lonMin, lonMax float64
 }
 

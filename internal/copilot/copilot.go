@@ -16,19 +16,30 @@ type Context struct {
 	Devices     []model.Device
 	Alerts      []model.Alert
 	Quarantined map[string]bool
+	Intel       map[string]HostIntel // passive intelligence keyed by IP
 	Iface       string
 	Subnet      string
+}
+
+// HostIntel is what the passive engine has learned about one host.
+type HostIntel struct {
+	OS      string
+	Anomaly float64
+	Beacon  string
 }
 
 // Copilot answers operator questions about the network.
 type Copilot interface {
 	Ask(ctx context.Context, query string, c Context) string
+	Name() string // shown in the console so the operator knows what is answering
 }
 
 // Default returns the built-in heuristic copilot.
 func Default() Copilot { return heuristic{} }
 
 type heuristic struct{}
+
+func (heuristic) Name() string { return "built-in rules" }
 
 func (heuristic) Ask(_ context.Context, query string, c Context) string {
 	q := strings.ToLower(query)

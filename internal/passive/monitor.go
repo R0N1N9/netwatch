@@ -19,14 +19,14 @@ import (
 
 // Enrichment is the passive intelligence accumulated for one host.
 type Enrichment struct {
-	OS       string `json:"os"`
-	OSConf   int    `json:"osConf"`
-	JA3      string `json:"ja3"`
-	SNI      string `json:"sni"`
-	Anomaly  float64 `json:"anomaly"`
-	AnomTop  string `json:"anomTop"`
-	Beacon   string `json:"beacon"`
-	Updated  time.Time `json:"-"`
+	OS      string    `json:"os"`
+	OSConf  int       `json:"osConf"`
+	JA3     string    `json:"ja3"`
+	SNI     string    `json:"sni"`
+	Anomaly float64   `json:"anomaly"`
+	AnomTop string    `json:"anomTop"`
+	Beacon  string    `json:"beacon"`
+	Updated time.Time `json:"-"`
 }
 
 // External is a public-facing flow (for the connection globe).
@@ -210,25 +210,34 @@ func (m *Monitor) ent(ip string) *Enrichment {
 	return e
 }
 func (m *Monitor) setOS(ip string, g OSGuess) {
-	m.mu.Lock(); defer m.mu.Unlock()
-	e := m.ent(ip); e.OS, e.OSConf, e.Updated = g.OS, g.Confidence, time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.ent(ip)
+	e.OS, e.OSConf, e.Updated = g.OS, g.Confidence, time.Now()
 }
 func (m *Monitor) setTLS(ip, ja3, sni string) {
-	m.mu.Lock(); defer m.mu.Unlock()
-	e := m.ent(ip); e.JA3, e.SNI, e.Updated = ja3, sni, time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.ent(ip)
+	e.JA3, e.SNI, e.Updated = ja3, sni, time.Now()
 }
 func (m *Monitor) setAnomaly(ip string, score float64, top string) {
-	m.mu.Lock(); defer m.mu.Unlock()
-	e := m.ent(ip); e.Anomaly, e.AnomTop = score, top
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.ent(ip)
+	e.Anomaly, e.AnomTop = score, top
 }
 func (m *Monitor) setBeacon(ip, dst string, secs float64) {
-	m.mu.Lock(); defer m.mu.Unlock()
-	e := m.ent(ip); e.Beacon = fmt.Sprintf("%s (~%.0fs)", dst, secs)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.ent(ip)
+	e.Beacon = fmt.Sprintf("%s (~%.0fs)", dst, secs)
 }
 
 // Enrichment returns a copy of the intelligence for ip.
 func (m *Monitor) Enrichment(ip string) Enrichment {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if e := m.enr[ip]; e != nil {
 		return *e
 	}
@@ -252,7 +261,8 @@ func (m *Monitor) Externals() []External {
 func (m *Monitor) PPS() uint64 { return atomic.LoadUint64(&m.ppsLast) }
 
 func (m *Monitor) allow(key string, d time.Duration) bool {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if last, ok := m.throttle[key]; ok && time.Since(last) < d {
 		return false
 	}
