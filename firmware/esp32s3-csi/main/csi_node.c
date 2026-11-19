@@ -421,8 +421,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL));
 
     wifi_config_t wc = {0};
-    snprintf((char *)wc.sta.ssid, sizeof(wc.sta.ssid), "%s", s_cfg_ssid);
-    snprintf((char *)wc.sta.password, sizeof(wc.sta.password), "%s", s_cfg_pass);
+    // These two fields are fixed-size byte arrays, not C strings: a full-length name has no terminator.
+    memcpy(wc.sta.ssid, s_cfg_ssid, strnlen(s_cfg_ssid, sizeof(wc.sta.ssid)));
+    memcpy(wc.sta.password, s_cfg_pass, strnlen(s_cfg_pass, sizeof(wc.sta.password)));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // power save would starve the CSI stream
