@@ -121,8 +121,9 @@ The optic layer: a boot/uplink sequence, **scramble-decode** text reveals, a liv
 with OS / JA3 / beacon / threat-score readout, plus scanlines, CRT flicker and glitch.
 
 The skin (`skin2077.css`) follows the game's scanner view: red rule-lines and a
-scan ring framing a green core, navy/cyan panels, a segmented **SEGMENT
-INTEGRITY** bar (one block per host, red-outlined when at risk), scanner-style
+scan ring framing a green core, navy/cyan panels, segmented **RAM** and
+**CPU** bars showing the live usage of the machine running NetWatch (red above
+85%), scanner-style
 host rows with a threat cost, and a tabbed **DATA | BLACKWALL** target panel with
 trust/exposure glyphs. A **neural-link** layer adds a point-cloud brain that
 fires and glitches while the Copilot is parsing, an EEG-style link trace, film

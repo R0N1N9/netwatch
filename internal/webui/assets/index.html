@@ -49,12 +49,20 @@ MK.4</div>
       <span class="hs-link" id="linkState">SYNCED</span>
     </div>
     <div class="hs-center">
-      <div class="micro">▚▚ RESOURCES V 2304.300</div>
-      <div class="ram-title">SEGMENT INTEGRITY: <span id="ramText">0/0</span></div>
-      <div class="ram" id="ramBar"></div>
+      <div class="res">
+        <div class="micro">▚▚ RESOURCES · THIS HOST</div>
+        <div class="ram-title">RAM: <span id="ramText">—</span></div>
+        <div class="ram" id="ramBar"></div>
+      </div>
+      <div class="res">
+        <div class="micro">▚▚ <span id="cpuCores">—</span> CORES · LOAD <span id="cpuLoad">—</span></div>
+        <div class="ram-title">CPU: <span id="cpuText">—</span></div>
+        <div class="ram" id="cpuBar"></div>
+      </div>
     </div>
     <div class="hs-right">
       <span class="replay-tag">REPLAY · viewing the past · controls locked</span>
+      <span class="hs-stat" id="intStat"><span class="micro cy">INTEGRITY</span><b id="intVal">0/0</b></span>
       <span class="hs-stat"><span class="micro cy">PKT/S</span><b id="ppsVal">0</b></span>
       <span class="hs-stat" id="thrStat"><span class="micro">THREATS</span><b id="thrVal">0</b></span>
       <button class="hs-btn" id="audioBtn" title="spatial audio alerts">AUDIO OFF</button>

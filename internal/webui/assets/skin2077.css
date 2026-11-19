@@ -279,3 +279,9 @@ body.replay .btn-row, body.replay .field { opacity: 0.35; pointer-events: none; 
 .sonar-mode .hs-btn { font-size: 13px; padding: 2px 14px; background: rgba(7, 21, 36, 0.8); }
 .sonar-mode .hs-btn.on { color: #04121a; background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 12px rgba(94, 246, 255, 0.5); }
 .sonar-mode .hs-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* resource bars: real RAM and CPU of the host running NetWatch */
+.hs-center { display: flex; gap: 30px; }
+.ram i.off { background: transparent; border: 1px solid rgba(94, 246, 255, 0.28); box-shadow: none; }
+.ram i.hot { background: linear-gradient(180deg, #ff9a92, #ff5449); box-shadow: 0 0 8px rgba(255, 84, 73, 0.6); }
+.ram i { transition: background 0.3s, box-shadow 0.3s; }

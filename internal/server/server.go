@@ -28,6 +28,7 @@ import (
 	"github.com/r0n1n9/netwatch/internal/passive"
 	"github.com/r0n1n9/netwatch/internal/sonar"
 	"github.com/r0n1n9/netwatch/internal/sweep"
+	"github.com/r0n1n9/netwatch/internal/sysmon"
 	"github.com/r0n1n9/netwatch/internal/webui"
 )
 
@@ -38,6 +39,7 @@ type Server struct {
 	wall      *blackwall.Wall
 	cop       copilot.Copilot
 	mon       *passive.Monitor
+	sys       sysmon.Monitor
 	autoEvery time.Duration
 	demo      bool
 
@@ -121,6 +123,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/kc/connections", auditHandler(audit.Connections))
 	mux.HandleFunc("/api/kc/eicar", auditHandler(audit.Eicar))
 	mux.HandleFunc("/api/globe", s.handleGlobe)
+	mux.HandleFunc("/api/sys", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.sys.Snapshot()) })
 	mux.HandleFunc("/api/history", s.handleHistory)
 	mux.HandleFunc("/api/history/at", s.handleHistoryAt)
 	mux.HandleFunc("/api/sonar", s.handleSonar)
@@ -131,6 +134,7 @@ func (s *Server) Handler() http.Handler {
 
 // Run starts the background watch loop and the HTTP server.
 func (s *Server) Run(ctx context.Context, addr string) error {
+	go s.sys.Run(ctx)
 	if s.demo {
 		s.loadDemo()
 		go s.sonarDemo(ctx)

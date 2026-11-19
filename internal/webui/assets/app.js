@@ -648,22 +648,13 @@ function renderARTags() {
 
 
 // ================= SCANNER HUD: integrity bar, target panel, neural link =================
-let ramSig = "", neuralBusy = false, booting = true;
+let neuralBusy = false, booting = true;
 
 function renderHud() {
   const devs = STATE.devices || [], m = STATE.meta || {};
   const risky = devs.filter((d) => threatOf(d) >= 50).length;
-  $("#ramText").textContent = (devs.length - risky) + "/" + devs.length;
-  const sig = devs.length + ":" + risky;
-  if (sig !== ramSig) {
-    ramSig = sig;
-    const bar = $("#ramBar"); bar.innerHTML = "";
-    for (let i = 0; i < devs.length; i++) {
-      const seg = el("i", i >= devs.length - risky ? "risk" : "");
-      seg.style.animationDelay = (i * 0.05) + "s";
-      bar.appendChild(seg);
-    }
-  }
+  $("#intVal").textContent = (devs.length - risky) + "/" + devs.length;
+  $("#intStat").classList.toggle("hot", risky > 0);
   const thr = threats();
   $("#ppsVal").textContent = m.pps || 0;
   $("#thrVal").textContent = thr;
@@ -671,6 +662,25 @@ function renderHud() {
   const link = $("#linkState");
   link.textContent = thr > 0 ? "INTRUSION DETECTED" : "SYNCED";
   link.classList.toggle("bad", thr > 0);
+}
+
+// ---- resource bars: live RAM and CPU of the machine running NetWatch ----
+function fillBar(id, segs, pct) {
+  const bar = $(id);
+  if (bar.children.length !== segs) { bar.innerHTML = ""; for (let i = 0; i < segs; i++) { const seg = el("i", "off"); seg.style.animationDelay = (i * 0.03) + "s"; bar.appendChild(seg); } }
+  const on = Math.max(pct > 0 ? 1 : 0, Math.round(pct / 100 * segs)), hot = pct >= 85;
+  [...bar.children].forEach((seg, i) => { seg.className = i < on ? (hot ? "hot" : "") : "off"; });
+}
+async function sysPoll() {
+  const r = await get("/api/sys");
+  if (!r || !r.ok) { $("#ramText").textContent = "n/a"; $("#cpuText").textContent = "n/a"; return; }
+  const gb = (b) => (b / 1073741824).toFixed(1);
+  $("#ramText").textContent = gb(r.memUsed) + "/" + gb(r.memTotal) + " GB";
+  $("#cpuText").textContent = Math.round(r.cpu) + "%";
+  $("#cpuCores").textContent = r.cores;
+  $("#cpuLoad").textContent = r.load1.toFixed(2);
+  fillBar("#ramBar", 16, r.memPct);
+  fillBar("#cpuBar", 12, r.cpu);
 }
 
 function tri(sym, label, cls) {
@@ -1200,6 +1210,7 @@ setTimeout(() => { if (!live) loadMock(); }, 600);
 setTimeout(loadHistory, 900);
 setInterval(loadHistory, 10000);
 setInterval(sonarPoll, 400);
+sysPoll(); setInterval(sysPoll, 1500);
 (function sonarLoop() {
   if (currentDeck() === "sonar") { const t = performance.now() / 1000; if (sonarMode === "3d") sonar3dRender(t); else sonarDraw(t); }
   requestAnimationFrame(sonarLoop);
