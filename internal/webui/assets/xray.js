@@ -59,3 +59,21 @@ function xrayHeading(e) {
   if (e.absolute && typeof e.alpha === "number") return (360 - e.alpha) % 360;
   return null;
 }
+
+// ---- FIND: which way to a point on the room map ----
+// Bearing from me to pt, in degrees clockwise from "up the map", and the distance in metres.
+function xrayBearing(me, pt) {
+  const dx = (pt.x - me.x) * XRAY_M, dy = (pt.y - me.y) * XRAY_M;
+  return { bearing: ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360, dist: Math.hypot(dx, dy) };
+}
+// How far to turn to face it, given the way you are facing now: negative is left.
+function xrayTurn(me, pt, heading) {
+  const b = xrayBearing(me, pt);
+  return { turn: ((b.bearing - heading + 540) % 360) - 180, dist: b.dist, bearing: b.bearing };
+}
+// The instruction to show for a turn and a distance.
+function xrayHint(turn, dist) {
+  if (dist < 1.2) return "RIGHT HERE";
+  const a = Math.abs(turn);
+  return a < 15 ? "STRAIGHT AHEAD" : a > 150 ? "BEHIND YOU" : (turn < 0 ? "TURN LEFT" : "TURN RIGHT") + (a > 60 ? "" : " A LITTLE");
+}

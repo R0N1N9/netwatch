@@ -200,6 +200,7 @@ func (s *Server) Handler() http.Handler {
 	s.senseRoutes(mux)
 	s.reflexRoutes(mux)
 	mux.HandleFunc("/api/forge", s.handleForge)
+	mux.HandleFunc("/api/finder", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.finderView(r.RemoteAddr)) })
 	return mux
 }
 

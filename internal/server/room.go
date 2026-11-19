@@ -105,6 +105,17 @@ func (s *Server) handleSonarMap(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.sonarView()) }
 
+// sonarHost is a device on the network that the sensor nodes have placed in the room.
+type sonarHost struct {
+	MAC   string  `json:"mac"`
+	IP    string  `json:"ip"`
+	Name  string  `json:"name"`
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Nodes int     `json:"nodes"` // how many nodes hear it; 3 or more gives a real fix
+	RSSI  int     `json:"rssi"`
+}
+
 // sonarView is the room as SONAR sees it: nodes, layout, located hosts, the presence estimate.
 func (s *Server) sonarView() map[string]any {
 	now := time.Now()
@@ -125,19 +136,10 @@ func (s *Server) sonarView() map[string]any {
 	}
 	s.mu.Unlock()
 
-	type host struct {
-		MAC   string  `json:"mac"`
-		IP    string  `json:"ip"`
-		Name  string  `json:"name"`
-		X     float64 `json:"x"`
-		Y     float64 `json:"y"`
-		Nodes int     `json:"nodes"`
-		RSSI  int     `json:"rssi"`
-	}
-	hosts, unknown := []host{}, 0
+	hosts, unknown := []sonarHost{}, 0
 	for _, rd := range s.son.Radios(now, nodes, lay) {
 		if k, ok := byMAC[rd.MAC]; ok {
-			hosts = append(hosts, host{rd.MAC, k.ip, k.name, rd.X, rd.Y, rd.Nodes, rd.RSSI})
+			hosts = append(hosts, sonarHost{rd.MAC, k.ip, k.name, rd.X, rd.Y, rd.Nodes, rd.RSSI})
 		} else {
 			unknown++
 		}

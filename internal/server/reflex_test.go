@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -237,5 +238,56 @@ func TestCompanionNeedsThePairingCode(t *testing.T) {
 	}
 	if v := s.companionView(); v["url"] != "https://192.168.1.50:7443/?code=424242" {
 		t.Errorf("companion url = %v", v["url"])
+	}
+}
+
+func TestFinderPlacesHostsAndThePhoneItself(t *testing.T) {
+	s := demoServer(t)
+	s.demoRoom() // node positions
+	now := time.Now()
+	sims := []*sonar.Sim{sonar.NewSim("node-A", 1), sonar.NewSim("node-B", 2), sonar.NewSim("node-C", 3)}
+	for i := 0; i < 40; i++ {
+		for _, sim := range sims {
+			s.son.Ingest(sim.Frame(0), now)
+		}
+	}
+	s.demoRadios(now, rand.New(rand.NewSource(1))) // three nodes overhear three hosts
+	v := s.finderView("192.168.1.20:51515")        // the "phone" asking is the host at .20
+	b, _ := json.Marshal(v)
+	var got struct {
+		Hosts []struct {
+			IP, Name, Nearest string
+			Nodes             int
+			Me                bool
+			X, Y              float64
+		}
+		Me struct {
+			Located bool
+			X, Y    float64
+		}
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Hosts) != 3 || !got.Me.Located {
+		t.Fatalf("finder = %s", b)
+	}
+	for _, h := range got.Hosts {
+		if h.Nodes != 3 || h.Nearest == "" || (h.Me != (h.IP == "192.168.1.20")) {
+			t.Errorf("host %+v", h)
+		}
+		if h.Me && (h.X != got.Me.X || h.Y != got.Me.Y) {
+			t.Errorf("the phone's own position %v,%v does not match its host entry %v,%v", got.Me.X, got.Me.Y, h.X, h.Y)
+		}
+	}
+	if me := s.finderView("10.9.9.9:1")["me"].(map[string]any); me["located"] != false {
+		t.Errorf("a phone the nodes cannot hear was given a position: %v", me)
+	}
+	// through the companion listener it needs the pairing code
+	s.comp = companion{on: true, code: "424242", port: "7443"}
+	w := httptest.NewRecorder()
+	s.companionHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/finder", nil))
+	if w.Code != 403 {
+		t.Errorf("/finder without a code: %d", w.Code)
 	}
 }

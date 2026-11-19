@@ -120,6 +120,38 @@ func (s *Server) paired(r *http.Request) (ok bool, status int) {
 	return true, http.StatusOK
 }
 
+// finderView is what the phone needs to point at a device: every host the
+// sensor nodes have placed in the room, which node hears each one best, and —
+// if the nodes can hear the phone itself — where the phone is.
+func (s *Server) finderView(remote string) map[string]any {
+	v := s.sonarView()
+	hosts, _ := v["hosts"].([]sonarHost)
+	ip, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		ip = remote
+	}
+	now := time.Now()
+	type found struct {
+		sonarHost
+		Nearest     string `json:"nearest"`     // the node that hears it loudest
+		NearestRSSI int    `json:"nearestRssi"` // ...and how loud
+		Me          bool   `json:"me"`          // this is the phone asking
+	}
+	out := []found{}
+	me := map[string]any{"ip": ip, "located": false}
+	for _, h := range hosts {
+		f := found{sonarHost: h, Me: h.IP == ip}
+		if rd, ok := s.mod.spec.Hunt(h.MAC, now); ok && len(rd) > 0 {
+			f.Nearest, f.NearestRSSI = rd[0].Node, rd[0].RSSI
+		}
+		if f.Me {
+			me = map[string]any{"ip": ip, "located": true, "x": h.X, "y": h.Y, "nodes": h.Nodes, "name": h.Name}
+		}
+		out = append(out, f)
+	}
+	return map[string]any{"demo": s.demo, "hosts": out, "me": me, "layout": v["layout"], "walls": v["walls"], "nodes": v["nodes"], "est": v["est"]}
+}
+
 // companionHandler is everything the phone can reach.
 func (s *Server) companionHandler() http.Handler {
 	assets := webui.FS()
@@ -147,6 +179,13 @@ func (s *Server) companionHandler() http.Handler {
 	mux.HandleFunc("/xray.js", file("xray.js", "application/javascript"))
 	mux.HandleFunc("/favicon.svg", file("favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("/apple-touch-icon.png", file("apple-touch-icon.png", "image/png"))
+	mux.HandleFunc("/finder", func(w http.ResponseWriter, r *http.Request) {
+		if ok, code := s.paired(r); !ok {
+			http.Error(w, "pairing code required", code)
+			return
+		}
+		writeJSON(w, s.finderView(r.RemoteAddr))
+	})
 	mux.HandleFunc("/sonar", func(w http.ResponseWriter, r *http.Request) {
 		if ok, code := s.paired(r); !ok {
 			http.Error(w, "pairing code required", code)

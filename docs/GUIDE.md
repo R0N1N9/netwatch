@@ -531,13 +531,24 @@ compare. Press **START**.
 - **ALERTS** — the latest alerts, and a vibration pattern per kind (a decoy
   trip, a gateway change, a new device and a tripwire each feel different).
   iPhones do not allow web pages to vibrate; there the page flashes and beeps.
+- **FIND** — pick a device and the phone points you to it: a compass arrow,
+  a distance and an instruction (*turn left*, *straight ahead*, *right here*),
+  with a small map underneath. The device's position comes from the sensor
+  nodes overhearing its Wi-Fi, so it needs **three or more nodes** hearing it
+  for a real fix; with fewer the dial turns dashed and amber and the answer is
+  a rough guess. Your own position is filled in automatically if the nodes can
+  hear your phone (it must be on the 2.4 GHz band); otherwise tap the map
+  where you are. Face your router and tap **I'M FACING THE ACCESS POINT** once
+  so the compass lines up with your room map. No compass? Drag the dial.
+
+  ![FIND on a phone](screens/phone-find.jpg)
 - **X-RAY** — SONAR's view drawn over the camera: tap **CAMERA**, say roughly
   where you are, face the access point and tap **I'M FACING THE ACCESS POINT**
   so the compass lines up with your room map. Without a compass, drag to look
   around.
 
-The companion listener serves that page, the alert stream and the SONAR view,
-and nothing else: the console's controls are not reachable through it, and
+The companion listener serves that page, the alert stream, the SONAR view and
+the device positions for FIND, and nothing else: the console's controls are not reachable through it, and
 every data request needs the pairing code (ten wrong guesses lock it for a
 minute). The code changes each time NetWatch starts.
 

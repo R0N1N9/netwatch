@@ -33,17 +33,39 @@
   .xr-edge { position: absolute; top: 46%; color: var(--red); font-size: 13px; letter-spacing: 0.1em; } .xr-edge.left { left: 8px; } .xr-edge.right { right: 8px; }
   #xrBar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 8px; background: rgba(5, 2, 3, 0.75); }
   #xrBar button { flex: 1; padding: 9px 4px; font: inherit; font-size: 12px; letter-spacing: 0.1em; color: var(--cyan); background: #071524; border: 1px solid var(--cyan); }
+  #fdTargets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #fdTargets button { padding: 7px 10px; font: inherit; font-size: 13px; color: var(--cyan); background: #071524; border: 1px solid rgba(94, 246, 255, 0.4); }
+  #fdTargets button.on { background: var(--cyan); color: #04121a; } #fdTargets button small { display: block; font-size: 10px; opacity: 0.7; letter-spacing: 0.06em; }
+  #fdCompass { text-align: center; padding: 6px 0 10px; }
+  #fdDial { width: 190px; height: 190px; margin: 0 auto 8px; border: 2px solid rgba(94, 246, 255, 0.5); border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle, rgba(29, 255, 161, 0.12), transparent 70%); }
+  #fdArrow { font-size: 96px; line-height: 1; color: var(--green); text-shadow: 0 0 22px rgba(29, 255, 161, 0.7); transition: transform 0.15s linear; }
+  #fdCompass.near #fdArrow { color: var(--red); text-shadow: 0 0 22px rgba(255, 84, 73, 0.8); } #fdCompass.rough #fdDial { border-style: dashed; border-color: var(--amber); }
+  #fdHint { font-size: 22px; letter-spacing: 0.14em; color: var(--soft); } #fdDist { font-size: 34px; color: var(--green); } #fdSub { font-size: 12px; color: var(--dim); min-height: 30px; }
+  #fdMap { display: block; margin: 0 auto 8px; width: 240px; height: 240px; border: 1px solid rgba(94, 246, 255, 0.25); background: #020608; }
+  #fdBar { display: flex; gap: 6px; } #fdBar button { flex: 1; padding: 9px 4px; font: inherit; font-size: 12px; letter-spacing: 0.08em; color: var(--cyan); background: #071524; border: 1px solid var(--cyan); }
   #xrInfo { position: absolute; left: 8px; top: 8px; font-size: 11px; letter-spacing: 0.1em; color: var(--green); text-shadow: 0 0 4px #000; }
 </style>
 </head>
 <body>
 <header><h1><span>NET</span><i>WATCH</i></h1><span id="state">NOT STARTED</span></header>
-<nav><button id="tabA" class="on">ALERTS</button><button id="tabX">X-RAY</button></nav>
+<nav><button id="tabA" class="on">ALERTS</button><button id="tabF">FIND</button><button id="tabX">X-RAY</button></nav>
 <main>
   <section id="alerts">
     <button id="start">START</button>
     <p class="note" id="hint">START connects to your console and turns on vibration. Each kind of alert has its own pattern, so you can tell them apart in your pocket. This page is read-only: it cannot change anything on the console.</p>
     <div id="list"></div>
+  </section>
+  <section id="find" hidden>
+    <div id="fdTargets"></div>
+    <div id="fdCompass">
+      <div id="fdDial"><div id="fdArrow">▲</div></div>
+      <div id="fdHint">PICK A DEVICE</div>
+      <div id="fdDist"></div>
+      <div id="fdSub"></div>
+    </div>
+    <canvas id="fdMap" width="300" height="300"></canvas>
+    <div id="fdBar"><button id="fdCal">I'M FACING THE ACCESS POINT</button><button id="fdAuto">WHERE AM I: AUTO</button></div>
+    <p class="note" id="fdNote">Pick a device. The arrow points to where the sensor nodes place it. Tap the map to say where you are if NetWatch cannot place your phone itself.</p>
   </section>
   <section id="xr" hidden>
     <video id="cam" autoplay playsinline muted></video>
@@ -95,15 +117,69 @@ const doors = [["I'M AT THE DOOR ▾", { x: 0, y: 1.0 }], ["I'M IN THE MIDDLE �
 const xr = { pose: { x: 0, y: 1.0, heading: 0, pitch: 0 }, offset: 0, raw: 0, view: null, where: 0, timer: null };
 function xrDraw() { if (xr.view) { const n = xrayDraw($("#layer"), xr.view, xr.pose, 62); $("#xrInfo").textContent = "X-RAY · heading " + Math.round(xr.pose.heading) + "° · " + n + " in view"; } }
 async function xrPoll() { try { const r = await fetch("/sonar?code=" + encodeURIComponent(code)); if (r.ok) { xr.view = await r.json(); xrDraw(); } else $("#xrInfo").textContent = "X-RAY · no link (" + r.status + ")"; } catch (_) {} }
-function onOrient(e) { const h = xrayHeading(e); if (h == null) return; xr.raw = h; xr.pose.heading = (h - xr.offset + 360) % 360; if (typeof e.beta === "number") xr.pose.pitch = Math.max(-40, Math.min(40, e.beta - 90)); xrDraw(); }
-async function xrOpen() {
-  $("#alerts").hidden = true; $("#xr").hidden = false; $("#tabX").className = "on"; $("#tabA").className = "";
+function onOrient(e) { const h = xrayHeading(e); if (h == null) return; xr.raw = h; xr.pose.heading = (h - xr.offset + 360) % 360; if (!$("#find").hidden) fdDraw(); if (typeof e.beta === "number") xr.pose.pitch = Math.max(-40, Math.min(40, e.beta - 90)); xrDraw(); }
+async function sensorsOn() { // compass access needs a tap on iPhones; harmless elsewhere
+  if (sensorsOn.done) return; sensorsOn.done = true;
   try { if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch (_) {}
   window.addEventListener("deviceorientationabsolute", onOrient); window.addEventListener("deviceorientation", onOrient);
-  clearInterval(xr.timer); xr.timer = setInterval(xrPoll, 500); xrPoll();
 }
+function showTab(name) {
+  [["alerts", "tabA"], ["find", "tabF"], ["xr", "tabX"]].forEach(([sec, tab]) => { $("#" + sec).hidden = sec !== name; $("#" + tab).className = sec === name ? "on" : ""; });
+  clearInterval(xr.timer); clearInterval(fd.timer);
+  if (name === "xr") { sensorsOn(); xr.timer = setInterval(xrPoll, 500); xrPoll(); }
+  if (name === "find") { sensorsOn(); fd.timer = setInterval(fdPoll, 700); fdPoll(); }
+}
+const xrOpen = () => showTab("xr");
 $("#tabX").onclick = xrOpen;
-$("#tabA").onclick = () => { $("#xr").hidden = true; $("#alerts").hidden = false; $("#tabA").className = "on"; $("#tabX").className = ""; clearInterval(xr.timer); };
+$("#tabA").onclick = () => showTab("alerts");
+$("#tabF").onclick = () => showTab("find");
+
+// ---- FIND: an arrow to a device the sensor nodes have placed ----
+// It shares the X-RAY pose: where you are on the room map and which way you face.
+const fd = { view: null, target: null, auto: true, timer: null };
+function fdCalibrate() { // facing the access point: line the compass up with the room map
+  const lay = (fd.view && fd.view.layout) || (xr.view && xr.view.layout) || {}, ap = lay["@ap"] || { x: 0, y: 0 };
+  const want = xrayBearing(xr.pose, ap).bearing;
+  xr.offset = (xr.raw - want + 360) % 360; xr.pose.heading = want; fdDraw(); xrDraw();
+}
+function fdDraw() {
+  const v = fd.view; if (!v) return;
+  const hosts = v.hosts.filter((h) => !h.me), box = $("#fdTargets");
+  const sig = hosts.map((h) => h.mac + h.nodes).join("|") + "#" + fd.target;
+  if (sig !== fd.sig) {
+    fd.sig = sig;
+    box.innerHTML = hosts.length ? hosts.map((h, i) => '<button data-i="' + i + '" class="' + (h.mac === fd.target ? "on" : "") + '">' + esc(h.name || h.ip) + "<small>" + (h.nodes >= 3 ? "placed by " + h.nodes + " nodes" : "rough: " + h.nodes + " node" + (h.nodes === 1 ? "" : "s")) + "</small></button>").join("") : '<p class="note">The sensor nodes have not placed any device yet. They can only place devices they overhear on the 2.4 GHz channel, and need three nodes for a real position.</p>';
+    box.querySelectorAll("button").forEach((b) => (b.onclick = () => { fd.target = hosts[+b.dataset.i].mac; fd.sig = ""; fdDraw(); }));
+  }
+  if (fd.auto && v.me && v.me.located) { xr.pose.x = v.me.x; xr.pose.y = v.me.y; }
+  $("#fdAuto").textContent = "WHERE AM I: " + (fd.auto ? (v.me && v.me.located ? "AUTO (NODES HEAR YOU)" : "AUTO — NOT HEARD, TAP THE MAP") : "SET BY HAND");
+  const t = hosts.find((h) => h.mac === fd.target), comp = $("#fdCompass");
+  if (t) {
+    const r = xrayTurn(xr.pose, t, xr.pose.heading);
+    $("#fdArrow").style.transform = "rotate(" + r.turn.toFixed(0) + "deg)";
+    $("#fdHint").textContent = xrayHint(r.turn, r.dist); $("#fdDist").textContent = r.dist.toFixed(1) + " m";
+    $("#fdSub").textContent = (t.nearest ? "heard loudest by " + t.nearest + " (" + t.nearestRssi + " dBm)" : "") + (t.nodes < 3 ? " · only " + t.nodes + " node" + (t.nodes === 1 ? " hears" : "s hear") + " it, so this is a rough guess" : "");
+    comp.className = (r.dist < 1.2 ? "near " : "") + (t.nodes < 3 ? "rough" : "");
+    fd.last = { name: t.name || t.ip, turn: r.turn, dist: r.dist, hint: xrayHint(r.turn, r.dist) };
+  } else { $("#fdHint").textContent = "PICK A DEVICE"; $("#fdDist").textContent = ""; $("#fdSub").textContent = ""; comp.className = ""; }
+  // the map: nodes, devices, the target, and you
+  const c = $("#fdMap"), g = c.getContext("2d"), S = c.width, P = (p) => [S / 2 + (p.x / 1.3) * (S / 2), S / 2 + (p.y / 1.3) * (S / 2)];
+  g.clearRect(0, 0, S, S); g.strokeStyle = "rgba(94,246,255,0.35)"; g.lineWidth = 1;
+  (v.walls || []).forEach((w) => { g.beginPath(); g.moveTo(...P(w.a)); g.lineTo(...P(w.b)); g.stroke(); });
+  Object.entries(v.layout || {}).forEach(([name, p]) => { const [x, y] = P(p); g.fillStyle = name === "@ap" ? "#bdf9ff" : "#1dffa1"; g.fillRect(x - 3, y - 3, 6, 6); });
+  hosts.forEach((h) => { const [x, y] = P(h); g.fillStyle = h.mac === fd.target ? "#ff5449" : "#5ef6ff"; g.beginPath(); g.arc(x, y, h.mac === fd.target ? 7 : 4, 0, 7); g.fill(); });
+  const [mx, my] = P(xr.pose), a = ((xr.pose.heading - 90) * Math.PI) / 180;
+  g.fillStyle = "rgba(29,255,161,0.18)"; g.beginPath(); g.moveTo(mx, my); g.arc(mx, my, 60, a - 0.5, a + 0.5); g.closePath(); g.fill();
+  g.fillStyle = "#fff"; g.beginPath(); g.arc(mx, my, 5, 0, 7); g.fill();
+}
+async function fdPoll() { try { const r = await fetch("/finder?code=" + encodeURIComponent(code)); if (r.ok) { fd.view = await r.json(); fdDraw(); } else $("#fdNote").textContent = "No link (" + r.status + "): check the pairing code."; } catch (_) {} }
+$("#fdCal").onclick = fdCalibrate;
+$("#fdAuto").onclick = () => { fd.auto = !fd.auto; fdDraw(); };
+$("#fdMap").onclick = (e) => { const b = e.target.getBoundingClientRect(); fd.auto = false; xr.pose.x = ((e.clientX - b.left) / b.width - 0.5) * 2.6; xr.pose.y = ((e.clientY - b.top) / b.height - 0.5) * 2.6; fdDraw(); };
+let fdTouch = null; // no compass? drag the dial to turn
+$("#fdDial").addEventListener("pointerdown", (e) => (fdTouch = e.clientX));
+window.addEventListener("pointermove", (e) => { if (fdTouch == null) return; xr.pose.heading = (xr.pose.heading - (e.clientX - fdTouch) * 0.6 + 360) % 360; xr.offset = (xr.raw - xr.pose.heading + 360) % 360; fdTouch = e.clientX; fdDraw(); });
+window.addEventListener("pointerup", () => (fdTouch = null));
 $("#xrCam").onclick = async () => { try { $("#cam").srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); $("#xrCam").textContent = "CAMERA ON"; } catch (e) { $("#xrCam").textContent = "NO CAMERA"; } };
 $("#xrCal").onclick = () => { // facing the access point: work out which way that is on the map and line the compass up with it
   const ap = (xr.view && xr.view.layout && xr.view.layout["@ap"]) || { x: 0, y: 0 };
@@ -115,7 +191,7 @@ let touch = null; // without a compass, drag to look around
 $("#layer").addEventListener("pointerdown", (e) => (touch = e.clientX));
 $("#layer").addEventListener("pointermove", (e) => { if (touch == null) return; xr.pose.heading = (xr.pose.heading - (e.clientX - touch) * 0.2 + 360) % 360; xr.offset = (xr.raw - xr.pose.heading + 360) % 360; touch = e.clientX; xrDraw(); });
 window.addEventListener("pointerup", () => (touch = null));
-window.companion = { hapticPattern, felt, xr, start, xrOpen };
+window.companion = { hapticPattern, felt, xr, fd, start, xrOpen, showTab, fdDraw, fdCalibrate };
 </script>
 </body>
 </html>

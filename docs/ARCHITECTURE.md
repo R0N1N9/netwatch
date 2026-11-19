@@ -110,8 +110,10 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/oracle?all=1` · `/api/spectrum?hunt=<id>` | Every conversation (for NETDIVE); per-node readings of one radio (for HUNT). |
 
 The phone companion is a **separate listener** (`--companion`, HTTPS,
-self-signed): `/` (the page), `/xray.js`, `/stream?code=` (alerts only) and
-`/sonar?code=`. Nothing under `/api/` is served there.
+self-signed): `/` (the page), `/xray.js`, `/stream?code=` (alerts only), `/sonar?code=` and
+`/finder?code=` (located hosts, the node that hears each loudest, and the
+asking phone's own position if the nodes hear it; also at `/api/finder` on the
+console). Nothing under `/api/` is served there.
 
 Every `POST` handled by `decode()` is refused with 403 if the browser marks it
 cross-site or its `Origin` is not the console's own address.
