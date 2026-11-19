@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>NetWatch companion</title>
+<style>
+  :root { --bg: #050203; --cyan: #5ef6ff; --soft: #bdf9ff; --red: #ff5449; --green: #1dffa1; --amber: #ffb84a; --dim: #43727e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: #d6f7fb; font: 15px/1.35 "Arial Narrow", "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(255, 84, 73, 0.5); }
+  h1 { margin: 0; font-size: 18px; letter-spacing: 0.18em; } h1 i { font-style: normal; color: var(--red); } h1 span { color: var(--soft); }
+  #state { margin-left: auto; font-size: 11px; letter-spacing: 0.14em; color: var(--dim); }
+  #state.on { color: var(--green); } #state.bad { color: var(--red); }
+  nav { display: flex; } nav button { flex: 1; padding: 9px; background: #071524; color: var(--dim); border: 1px solid rgba(94, 246, 255, 0.2); font: inherit; letter-spacing: 0.14em; }
+  nav button.on { background: var(--cyan); color: #04121a; }
+  main { position: absolute; inset: 86px 0 0; } section { position: absolute; inset: 0; overflow-y: auto; padding: 10px; } section[hidden] { display: none; }
+  .row { border: 1px solid rgba(94, 246, 255, 0.15); border-left: 3px solid var(--dim); background: rgba(8, 24, 42, 0.8); padding: 7px 9px; margin-bottom: 6px; font-size: 14px; }
+  .row.CRITICAL { border-left-color: var(--red); background: rgba(64, 14, 14, 0.55); } .row.WARN { border-left-color: var(--amber); }
+  .row small { display: block; color: var(--dim); font-size: 11px; letter-spacing: 0.08em; }
+  #start { display: block; width: 100%; padding: 16px; margin: 12px 0; font: inherit; font-size: 18px; letter-spacing: 0.2em; color: #04121a; background: var(--cyan); border: 0; }
+  p.note { color: var(--dim); font-size: 13px; }
+  #flash { position: fixed; inset: 0; background: var(--red); opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+  #xr { padding: 0; overflow: hidden; background: #020608; } #cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.75; }
+  #layer { position: absolute; inset: 0; }
+  .xr-tag { position: absolute; transform: translate(-50%, -50%) scale(var(--s, 1)); text-align: center; white-space: nowrap; color: var(--cyan); text-shadow: 0 0 6px #000; }
+  .xr-tag i { display: block; width: 18px; height: 18px; margin: 0 auto 3px; border: 2px solid currentColor; transform: rotate(45deg); }
+  .xr-tag b { display: block; font-size: 13px; letter-spacing: 0.08em; } .xr-tag span { font-size: 11px; color: #d6f7fb; }
+  .xr-tag.presence { color: var(--red); } .xr-tag.presence i { width: 46px; height: 46px; border-radius: 50%; transform: none; box-shadow: 0 0 22px var(--red); }
+  .xr-tag.still { color: var(--amber); } .xr-tag.node { color: var(--green); } .xr-tag.hot { color: var(--red); } .xr-tag.ap { color: var(--soft); }
+  .xr-edge { position: absolute; top: 46%; color: var(--red); font-size: 13px; letter-spacing: 0.1em; } .xr-edge.left { left: 8px; } .xr-edge.right { right: 8px; }
+  #xrBar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 8px; background: rgba(5, 2, 3, 0.75); }
+  #xrBar button { flex: 1; padding: 9px 4px; font: inherit; font-size: 12px; letter-spacing: 0.1em; color: var(--cyan); background: #071524; border: 1px solid var(--cyan); }
+  #xrInfo { position: absolute; left: 8px; top: 8px; font-size: 11px; letter-spacing: 0.1em; color: var(--green); text-shadow: 0 0 4px #000; }
+</style>
+</head>
+<body>
+<header><h1><span>NET</span><i>WATCH</i></h1><span id="state">NOT STARTED</span></header>
+<nav><button id="tabA" class="on">ALERTS</button><button id="tabX">X-RAY</button></nav>
+<main>
+  <section id="alerts">
+    <button id="start">START</button>
+    <p class="note" id="hint">START connects to your console and turns on vibration. Each kind of alert has its own pattern, so you can tell them apart in your pocket. This page is read-only: it cannot change anything on the console.</p>
+    <div id="list"></div>
+  </section>
+  <section id="xr" hidden>
+    <video id="cam" autoplay playsinline muted></video>
+    <div id="layer"></div>
+    <div id="xrInfo">X-RAY</div>
+    <div id="xrBar"><button id="xrCam">CAMERA</button><button id="xrCal">I'M FACING THE ACCESS POINT</button><button id="xrWhere">I'M AT THE DOOR ▾</button></div>
+  </section>
+</main>
+<div id="flash"></div>
+<script src="xray.js"></script>
+<script>
+"use strict";
+const code = new URLSearchParams(location.search).get("code") || "";
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+// One vibration pattern per kind of alert (milliseconds: buzz, pause, buzz, ...).
+function hapticPattern(a) {
+  const byKind = { decoy: [220, 80, 220, 80, 500], "arp-spoof": [450, 120, 450], "new-device": [80, 60, 80], tripwire: [60, 40, 60, 40, 60, 40, 60], presence: [60, 40, 60], spectrum: [150, 60, 50, 60, 150], pulse: [500, 100, 100, 100, 100], ward: [120, 80, 250], usb: [300] };
+  if (/^\[REHEARSAL\]/.test(a.message || "")) return [40, 40, 40];
+  return byKind[a.kind] || (a.severity === "CRITICAL" ? [300, 100, 300, 100, 300] : a.severity === "WARN" ? [120, 80, 120] : [40]);
+}
+let seen = null, ac = null; const felt = [];
+function feel(a) {
+  const p = hapticPattern(a); felt.push({ kind: a.kind, pattern: p });
+  const buzzed = navigator.vibrate ? navigator.vibrate(p) : false;
+  if (!buzzed) { // no vibration motor reachable from this browser: flash and beep instead
+    const f = $("#flash"); f.style.opacity = a.severity === "CRITICAL" ? 0.55 : 0.25; setTimeout(() => (f.style.opacity = 0), 260);
+    if (ac) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = a.severity === "CRITICAL" ? 880 : 520; o.connect(g).connect(ac.destination); g.gain.value = 0.08; o.start(); o.stop(ac.currentTime + 0.18); }
+  }
+}
+function show(alerts) {
+  $("#list").innerHTML = alerts.map((a) => '<div class="row ' + esc(a.severity) + '">' + esc(a.message) + "<small>" + esc(a.kind) + " · " + new Date(a.ts).toLocaleTimeString() + "</small></div>").join("") || '<p class="note">no alerts</p>';
+  const keys = alerts.map((a) => a.ts + "|" + a.source + "|" + a.kind);
+  if (seen) alerts.filter((a, i) => !seen.has(keys[i])).slice(0, 2).forEach(feel);
+  seen = new Set(keys);
+}
+function start() {
+  try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ac = new AC(); } catch (_) {}
+  if (navigator.vibrate) navigator.vibrate(30);
+  $("#start").hidden = true; $("#hint").textContent = navigator.vibrate ? "Vibration is on. Keep this page open." : "This browser has no vibration (iPhones do not allow it for web pages): alerts will flash and beep instead.";
+  const es = new EventSource("/stream?code=" + encodeURIComponent(code));
+  es.onmessage = (e) => { $("#state").textContent = "LINKED"; $("#state").className = "on"; try { show(JSON.parse(e.data).alerts || []); } catch (_) {} };
+  es.onerror = () => { $("#state").textContent = code ? "NO LINK — check the pairing code" : "NO PAIRING CODE"; $("#state").className = "bad"; };
+}
+$("#start").onclick = start;
+
+// ---- X-RAY ----
+const doors = [["I'M AT THE DOOR ▾", { x: 0, y: 1.0 }], ["I'M IN THE MIDDLE ▾", { x: 0, y: 0.3 }], ["I'M BY THE ACCESS POINT ▾", { x: 0, y: -0.1 }]];
+const xr = { pose: { x: 0, y: 1.0, heading: 0, pitch: 0 }, offset: 0, raw: 0, view: null, where: 0, timer: null };
+function xrDraw() { if (xr.view) { const n = xrayDraw($("#layer"), xr.view, xr.pose, 62); $("#xrInfo").textContent = "X-RAY · heading " + Math.round(xr.pose.heading) + "° · " + n + " in view"; } }
+async function xrPoll() { try { const r = await fetch("/sonar?code=" + encodeURIComponent(code)); if (r.ok) { xr.view = await r.json(); xrDraw(); } else $("#xrInfo").textContent = "X-RAY · no link (" + r.status + ")"; } catch (_) {} }
+function onOrient(e) { const h = xrayHeading(e); if (h == null) return; xr.raw = h; xr.pose.heading = (h - xr.offset + 360) % 360; if (typeof e.beta === "number") xr.pose.pitch = Math.max(-40, Math.min(40, e.beta - 90)); xrDraw(); }
+async function xrOpen() {
+  $("#alerts").hidden = true; $("#xr").hidden = false; $("#tabX").className = "on"; $("#tabA").className = "";
+  try { if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch (_) {}
+  window.addEventListener("deviceorientationabsolute", onOrient); window.addEventListener("deviceorientation", onOrient);
+  clearInterval(xr.timer); xr.timer = setInterval(xrPoll, 500); xrPoll();
+}
+$("#tabX").onclick = xrOpen;
+$("#tabA").onclick = () => { $("#xr").hidden = true; $("#alerts").hidden = false; $("#tabA").className = "on"; $("#tabX").className = ""; clearInterval(xr.timer); };
+$("#xrCam").onclick = async () => { try { $("#cam").srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false }); $("#xrCam").textContent = "CAMERA ON"; } catch (e) { $("#xrCam").textContent = "NO CAMERA"; } };
+$("#xrCal").onclick = () => { // facing the access point: work out which way that is on the map and line the compass up with it
+  const ap = (xr.view && xr.view.layout && xr.view.layout["@ap"]) || { x: 0, y: 0 };
+  const want = ((Math.atan2(ap.x - xr.pose.x, -(ap.y - xr.pose.y)) * 180) / Math.PI + 360) % 360;
+  xr.offset = (xr.raw - want + 360) % 360; xr.pose.heading = want; xrDraw();
+};
+$("#xrWhere").onclick = () => { xr.where = (xr.where + 1) % doors.length; $("#xrWhere").textContent = doors[xr.where][0]; Object.assign(xr.pose, doors[xr.where][1]); xrDraw(); };
+let touch = null; // without a compass, drag to look around
+$("#layer").addEventListener("pointerdown", (e) => (touch = e.clientX));
+$("#layer").addEventListener("pointermove", (e) => { if (touch == null) return; xr.pose.heading = (xr.pose.heading - (e.clientX - touch) * 0.2 + 360) % 360; xr.offset = (xr.raw - xr.pose.heading + 360) % 360; touch = e.clientX; xrDraw(); });
+window.addEventListener("pointerup", () => (touch = null));
+window.companion = { hapticPattern, felt, xr, start, xrOpen };
+</script>
+</body>
+</html>

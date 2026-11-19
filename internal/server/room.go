@@ -103,7 +103,10 @@ func (s *Server) handleSonarMap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
-func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.sonarView()) }
+
+// sonarView is the room as SONAR sees it: nodes, layout, located hosts, the presence estimate.
+func (s *Server) sonarView() map[string]any {
 	now := time.Now()
 	nodes := s.son.Snapshot(now)
 	lay := s.sonarLayout()
@@ -139,11 +142,12 @@ func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) {
 			unknown++
 		}
 	}
-	writeJSON(w, map[string]any{
+	est, estOK := sonar.Estimate(nodes, lay)
+	return map[string]any{
 		"armed": armed, "listening": s.SonarAddr, "demo": s.demo, "layout": lay, "nodes": nodes,
 		"hosts": hosts, "unknownRadios": unknown, "people": sonar.People(nodes, lay),
-		"walls": walls, "wires": wires,
-	})
+		"walls": walls, "wires": wires, "est": map[string]any{"x": est.X, "y": est.Y, "ok": estOK},
+	}
 }
 
 // ---- loops ----
@@ -219,6 +223,7 @@ func (s *Server) tripped(w sonar.Wire, now time.Time) {
 	}
 	s.emitAlert(model.Alert{Time: now, Severity: model.SevCritical, Kind: "tripwire", Source: "tripwire:" + w.ID,
 		Message: "tripwire \"" + name + "\" crossed — movement passed from one side to the other"})
+	s.fireScenes("tripwire", name, w.ID)
 }
 
 func (s *Server) onFall(node string) {

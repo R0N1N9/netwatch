@@ -51,6 +51,7 @@ sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
 | **Breach** | A connect scan that refuses any public address. |
 | **Kill Chain** / **ATT&CK** | Purple-team consoles over the Lockheed-Martin stages and the MITRE tactics, with audits you can run on this machine. |
 | **GRID** | A globe of the public addresses your network talks to, with the local program behind each. |
+| **NETDIVE** | The network as a 3D city you fly through: a tower per host, flows as moving lights, a wall around anything quarantined. |
 | **AR** | Host tags over your camera feed. |
 | **SONAR** | Presence sensing from ESP32-S3 Wi-Fi nodes: a 3D room view, tripwires, located hosts, breathing, and braindance recordings you can replay. |
 
@@ -66,6 +67,10 @@ The second row of tabs holds the modules:
 | **WARD** | Learns each device's normal destinations, ports and hours, then flags steps outside them. |
 | **QUANTUM** | Inventories the TLS and SSH on your own network and shows what is exposed to record-now, decrypt-later. |
 | **LEDGER** | A hash-chained record of every alert and action, with a verify button and an incident report. |
+| **DOJO** | Incident rehearsals that play a labelled, synthetic incident into the console and score your response; and an operator fatigue meter. |
+| **REFLEX** | Scenes ("when this happens, do that"), wave gestures, spoken commentary, a soundscape of the network, an LED threat light and a phone companion. |
+
+And across every deck: hold `Q` for **scanner mode**, and when you come back after being away the console replays **what happened while you were out**.
 
 ![CORTEX](docs/screens/cortex.jpg)
 
@@ -84,6 +89,10 @@ tested only on simulated data, or written but never run. In short:
   firmware has not been compiled or flashed yet.
 - The passive traffic analyzers, the local-model Copilot, voice, spatial audio,
   USB watch and the proximity lock are tested with synthetic input only.
+- The incident rehearsal and the talking decoy have run live on this machine.
+  NETDIVE, HUNT, X-RAY, scenes, gestures, the phone companion, commentary and
+  the soundscape have only run on simulated input — nobody has yet heard the
+  audio, waved at a real sensor or opened the companion on a real phone.
 - CORTEX, SPECTRUM, ORACLE, PULSE, WARD and QUANTUM have only seen sample or
   scripted input: PULSE has never been tried on a human typist, and nothing
   yet sends SPECTRUM any Bluetooth data.
@@ -95,4 +104,5 @@ Google) or point the Copilot at an Ollama host that is not yours. SONAR
 recordings and the respiration log describe when people moved and breathed in
 your space; they are stored locally, and the [guide](docs/GUIDE.md#files-and-privacy)
 says where. PULSE keeps four numbers describing your typing rhythm and never
-records which keys you press.
+records which keys you press. The phone companion is off unless you start it,
+and a talking decoy records what a visitor types but never their password.

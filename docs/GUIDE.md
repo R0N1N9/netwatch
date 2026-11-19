@@ -11,8 +11,8 @@ are authorised to do.
 
 - [Install and run](#install-and-run)
 - [The console](#the-console)
-- [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [AR](#ar) · [SONAR](#sonar)
-- [Modules](#modules): [DECOY](#decoy) · [CORTEX](#cortex) · [SPECTRUM](#spectrum) · [ORACLE](#oracle) · [PULSE](#pulse) · [WARD](#ward) · [QUANTUM](#quantum) · [LEDGER](#ledger)
+- [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [NETDIVE](#netdive) · [AR](#ar) · [SONAR](#sonar)
+- [Modules](#modules): [DECOY](#decoy) · [CORTEX](#cortex) · [SPECTRUM](#spectrum) · [ORACLE](#oracle) · [PULSE](#pulse) · [WARD](#ward) · [QUANTUM](#quantum) · [LEDGER](#ledger) · [DOJO](#dojo) · [REFLEX](#reflex) · [Phone companion](#phone-companion)
 - [Commands and voice](#commands-and-voice)
 - [The Copilot and local models](#the-copilot-and-local-models)
 - [Host features](#host-features)
@@ -68,6 +68,7 @@ The console opens at `http://127.0.0.1:7979`.
 | `--auto` | `20s` | How often to sweep the network (`0` disables). |
 | `--no-open` | off | Do not open the browser. |
 | `--sonar-udp` | off | Accept sensor frames on this UDP address, e.g. `0.0.0.0:5566`. |
+| `--companion` | off | Serve the read-only [phone companion](#phone-companion) over HTTPS on this address, e.g. `0.0.0.0:7443`. |
 | `--data-dir` | `~/.local/share/netwatch` | Where clips, the room layout, the respiration log, surface snapshots, the ledger and module settings are kept. Empty keeps everything in memory. |
 
 ### Environment
@@ -93,7 +94,15 @@ The console opens at `http://127.0.0.1:7979`.
   recent state. Ticks mark alerts; red is critical. Controls lock while you are
   in the past. **LIVE** returns to now. History is kept in memory only.
 - **Footer** — key hints: `S` sweep, `↑↓` change target, `T` trust, `V` voice,
-  `Tab` next deck.
+  `Tab` next deck, hold `Q` for the scanner.
+- **Scanner mode** — hold `Q` anywhere. The console dims and every host fans
+  out with its CORTEX verdict; hover one to see what it talks to, how much a
+  quarantine would stop, decoys it touched and steps outside its profile, with
+  actions underneath (LOCK ON, INVESTIGATE, REACH, TRUST, QUARANTINE — which
+  asks you to confirm). Release `Q` to close; click a host to pin the scanner
+  open, then `Esc`.
+
+![Scanner mode](screens/scanner.jpg)
 
 ---
 
@@ -106,7 +115,11 @@ The defensive view of your local network.
 - **Segment map** — every host found by sweeping. Each row shows a name, a
   status badge and a threat number. Click a row to lock on.
 - **ICE intrusion log** — alerts: new hosts, a gateway that changed MAC
-  address, suspicious DNS, beaconing, anomalies, USB events, tripwires.
+  address, suspicious DNS, beaconing, anomalies, USB events, tripwires. Click
+  an alert to acknowledge it (it dims). A new-host alert raised while sensor
+  nodes are reporting gets a **▶ ROOM** button: the last minute of the room,
+  saved as a braindance clip, so you can see whether someone was moving when
+  the device appeared.
 - **Copilot** — ask a question or type a command (see below).
 - **DATA tab** — what is known about the selected host: vendor, passively
   guessed OS, TLS fingerprint, beacon target, and trust and exposure signals.
@@ -147,11 +160,38 @@ connection where it can.
 Positions on the globe are **not real geography** yet; each address is placed
 consistently but arbitrarily until a GeoIP database is added.
 
+### NETDIVE
+
+![NETDIVE](screens/netdive.jpg)
+
+Your network as a city. Each host is a tower — taller the more it has sent and
+received — coloured green (this machine), cyan (gateway), pale (trusted), amber
+(unverified) or red (a threat). Lights travel along each conversation; the
+magenta shapes floating above are destinations outside your network. A
+quarantined host stands inside a red wireframe wall, and nothing moves through
+it.
+
+- **Drag** to orbit, **scroll** to zoom, **W A S D** to move. Left alone, the
+  camera drifts.
+- **Click a tower** for its details, **LOCK ON** (Watchtower) or **REACH** (ORACLE).
+- Drag the **time scrubber** and the city rebuilds as it was: towers appear and
+  vanish. The flows shown are always the ones observed up to now.
+
+NETDIVE needs WebGL.
+
 ### AR
 
 Host tags drawn over your camera feed. **ENGAGE OPTIC** asks for the camera;
 the feed stays on your device. Tags are not anchored to where devices really
 are.
+
+**X-RAY** (button in the AR deck) replaces the host tags with what SONAR senses,
+drawn where it is: the presence estimate, links where someone is still and
+breathing, the nodes, the access point and located hosts, each with its
+distance. Click the small map where you are standing, then drag the view or
+the heading slider to look around. It works without a camera.
+
+![X-RAY](screens/xray.jpg)
 
 ### SONAR
 
@@ -231,6 +271,17 @@ Things that have no legitimate use, so any touch is a strong signal.
   touches are reported as an informational *drill*, so you can see the alarm
   works without raising a real one.
 
+- **Talking decoys** — type a port and press **OPEN** for a decoy that talks
+  back. It imitates a small router's login: the first attempt is refused, the
+  second is let "in", and a handful of commands (`id`, `uname -a`, `ls`,
+  `cat /proc/cpuinfo`, `wget …`) get canned replies. **Nothing the visitor
+  types is run**; it is matched against a fixed table and recorded. Each visit
+  appears under *Visits* with a plain summary of what they tried, and
+  **▶ REPLAY** plays it back like a terminal recording. Passwords are not
+  kept — only how long they were. A visit lasts at most 90 seconds and 16
+  commands. With a local model running, commands outside the table get an
+  improvised reply.
+
 Decoys are saved and come back after a restart. If a canary file was deleted or
 changed while NetWatch was not running, you get a warning at start-up.
 
@@ -279,6 +330,12 @@ outside demo mode) this deck is empty.
   mesh node.
 - **Disconnect frames** — a count over the last ten seconds. A few are normal;
   a burst means devices are being forced off the network.
+
+- **HUNT** (on any radio) — turns the scope into a direction finder. Carry a
+  battery-powered sensor node towards where you think the radio is: the big
+  number is its signal at the nearest node, **WARMER / COLDER** follows the
+  trend, and the ticks speed up as you close in. Signals bounce, so sweep the
+  room rather than trusting one reading.
 
 Limits worth knowing: a node hears only the Wi-Fi channel it is on, phones
 change their address, and the node firmware does not scan Bluetooth yet, so on
@@ -381,6 +438,93 @@ entry carrying the hash of the entry before it.
   plain-text summary and timeline from the chain. **COPY** puts it on the
   clipboard.
 
+### DOJO
+
+![DOJO](screens/dojo.jpg)
+
+**Incident rehearsal.** Pick a scenario and press **START**. NetWatch plays a
+scripted incident into the live console: alerts arrive over about a minute,
+each marked `[REHEARSAL]`, and you respond with the real controls — open the
+alert in CORTEX, look at the host in ORACLE, quarantine it, write a LEDGER
+note. Each expected response earns points, more if you are quick; the wrong
+move (quarantining the gateway in *Mirror at the gate*) costs fifteen.
+
+Nothing real is touched. The intruder is a made-up host (`REHEARSAL-GHOST`, at
+`.250` of your subnet) that disappears when the drill ends, and a quarantine
+aimed at it is simulated — the firewall is not called. The drill's alerts and
+your score are written to the LEDGER, labelled.
+
+**Operator.** **OPERATOR WATCH** is off until you turn it on. When on, the
+console estimates how sharp you are (100 is fresh) from how long you have been
+at it without a fifteen-minute break, the hour, how far your typing has drifted
+from your PULSE profile (if you enrolled one), and critical alerts you have not
+opened. The number also appears in the top bar. At *spent*, CORTEX makes you
+press APPROVE twice before a quarantine. It keeps two timestamps in memory and
+stores nothing.
+
+**While you were out.** NetWatch marks you away when SONAR has sensed nobody
+for ten minutes (or, with operator watch on, nobody has touched the console).
+When you come back a panel replays the gap: counts, who joined and left, and a
+time-lapse through the scrubber's history with each alert appearing at its
+moment. **REPLAY THE LAST 30 MINUTES** shows one on demand. `Esc` closes it.
+
+### REFLEX
+
+![REFLEX](screens/reflex.jpg)
+
+- **NARRATE** — each new alert is spoken as one sentence, and a critical
+  glitches the display. **SONIFY** — the network as a continuous sound: a drone
+  that brightens with traffic, a pulse that quickens with it, a dissonant tone
+  that grows with unopened critical alerts, and a bell for each alert. Both
+  are per-browser and off by default.
+- **Scenes** — "when this happens, do that". Give a scene a name, choose a
+  trigger (a tripwire is crossed, movement on a link, an alert is raised,
+  everyone leaves, someone returns, a wave gesture), optionally say which one
+  (the wire's name, a node, an alert kind such as `decoy` or a severity such as
+  `critical`), and tick the actions: save a clip of the room, say something,
+  raise an alert, write a LEDGER note, flash the light, acknowledge the newest
+  alert, arm or disarm SONAR, switch deck, lock the screen. **TEST** runs a
+  scene now; **ON/OFF** disables it; a scene will not fire again within five
+  seconds (or its own cooldown). Scenes are saved.
+- **Gestures** — while any scene uses the gesture trigger, NetWatch listens for
+  two or three short waves through a sensor link followed by about three
+  seconds of stillness (`double-wave`, `triple-wave`). Walking through does not
+  count. **SIMULATE A DOUBLE WAVE** tests your gesture scenes without hardware.
+- **Ambient threat light** — the swatch shows the colour NetWatch would send:
+  green when quiet, amber for unopened warnings, breathing red for unopened
+  critical alerts, flashing red for one that just arrived, blue while SONAR is
+  armed. Enter the address of a light (see [hardware](#esp32-s3-hardware)) and
+  press **SET**; **TEST** flashes it. Only private addresses are accepted.
+- **Phone companion** — see [below](#phone-companion).
+
+### Phone companion
+
+![Phone companion](screens/companion.jpg)
+
+A read-only page for your phone. Start NetWatch with a second address:
+
+```bash
+./bin/netwatch gui --companion 0.0.0.0:7443
+```
+
+The REFLEX deck then shows a link and a six-digit **pairing code**. Open the
+link on a phone on the same network. The certificate is self-signed, so the
+browser warns once; the deck shows the certificate's first bytes if you want to
+compare. Press **START**.
+
+- **ALERTS** — the latest alerts, and a vibration pattern per kind (a decoy
+  trip, a gateway change, a new device and a tripwire each feel different).
+  iPhones do not allow web pages to vibrate; there the page flashes and beeps.
+- **X-RAY** — SONAR's view drawn over the camera: tap **CAMERA**, say roughly
+  where you are, face the access point and tap **I'M FACING THE ACCESS POINT**
+  so the compass lines up with your room map. Without a compass, drag to look
+  around.
+
+The companion listener serves that page, the alert stream and the SONAR view,
+and nothing else: the console's controls are not reachable through it, and
+every data request needs the pairing code (ten wrong guesses lock it for a
+minute). The code changes each time NetWatch starts.
+
 ---
 
 ## Commands and voice
@@ -417,6 +561,17 @@ commands by speech and reads the reply aloud.
 | `pulse on` · `pulse off` | Typing-rhythm watch. |
 | `quantum scan` | Start the cryptography inventory. |
 | `verify ledger` · `note: <text>` · `report` · `report last hour` | LEDGER: check the chain, add a note, write the incident report. |
+| `rehearsal` · `rehearsal mirror` · `stop rehearsal` | Start or stop an incident rehearsal. |
+| `what did i miss` · `recap 60 minutes` | Replay what happened while you were out. |
+| `scanner` | Open scanner mode (the same as holding `Q`). |
+| `ack` · `ack all` | Acknowledge the newest alert, or all of them. |
+| `operator watch on` · `how am i` | The fatigue meter. |
+| `narrate on` · `sonify on` (and `off`) | Spoken commentary; the soundscape. |
+| `hunt <radio>` · `hunt stranger` · `stop hunt` | HUNT mode in SPECTRUM. |
+| `xray on` · `xray off` | X-RAY in the AR deck. |
+| `scenes` · `fire scene <name>` · `light test` | REFLEX scenes and the threat light. |
+| `open talking decoy 2323` | Open a talking decoy. |
+| `companion` | Read out the phone companion's link and pairing code. |
 
 Voice uses the browser's speech recognition. In Chrome that sends audio to
 Google; type the commands if you want everything to stay on your machine.
@@ -530,6 +685,18 @@ The console also accepts Bluetooth advertisements in the same datagram, as
 `"ble":[{"addr":"…","rssi":-70,"name":"…","company":76,"type":18}]`, but the
 firmware here does not scan Bluetooth, so nothing sends them yet.
 
+### The threat light
+
+`firmware/esp32-light` is a second, small project: an ESP32 with a WS2812 LED
+strip that listens on UDP port 5577 and shows the colour NetWatch sends. Edit
+the Wi-Fi details, data pin and LED count in `main/light.c`, flash it, and put
+the address it logs into the REFLEX deck. Like the node firmware it has not
+been compiled or run yet. Each datagram is one line:
+
+```json
+{"r":255,"g":30,"b":20,"pulse":"breathe","why":"2 critical alert(s) unopened"}
+```
+
 ---
 
 ## Files and privacy
@@ -544,7 +711,7 @@ Everything NetWatch stores is under the data directory
 | `sleep.json` | The respiration log. |
 | `surface/surface-YYYY-MM-DD.json` | Daily surface snapshots. |
 | `ledger.jsonl` | The LEDGER: one hash-chained entry per line for every alert, action and note. |
-| `modules.json` | Planted decoys, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, and radios you marked as yours. |
+| `modules.json` | Planted decoys and talking-decoy ports, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, radios you marked as yours, your scenes, and the threat light's address. |
 
 Canary files are the one thing NetWatch writes outside that directory: they go
 where you plant them, inside your home folder, and are deleted when you remove
@@ -563,6 +730,13 @@ how much each varies — and never which keys. It is off until you turn it on.
 SPECTRUM's list of nearby radios is kept in memory only; just the radios you
 mark as yours and the access points you approve are saved. The ledger holds
 every alert, so it includes the addresses and names of devices on your network.
+
+Operator watch keeps two timestamps in memory and stores nothing. Talking
+decoys keep what a visitor typed (in memory, most recent 60 visits) but not
+their passwords. Commentary and the soundscape use the browser's own speech
+and audio; nothing is sent anywhere. The phone companion is off unless you
+start NetWatch with `--companion`; when on, a phone that knows the pairing code
+can read your alerts and the SONAR view over your network.
 
 ---
 
@@ -583,4 +757,9 @@ every alert, so it includes the addresses and names of devices on your network.
 | SPECTRUM is empty | No sensor nodes are reporting, or their firmware predates access-point reporting. |
 | WARD stays on LEARNING | It needs 300 observations *and* 24 hours per device, and live capture. |
 | PULSE flags you | Your rhythm changed (another keyboard, one hand). FORGET PROFILE and enrol again. |
+| NETDIVE is blank | The browser is not providing WebGL. |
+| The phone cannot open the companion | It is not on the same network, a firewall blocks the port, or the certificate warning was not accepted. |
+| The companion says NO LINK | The pairing code is wrong or NetWatch restarted (the code changes each start). |
+| A scene does not fire | It is OFF, in its cooldown, marked *only while armed*, or its "which one" does not match. |
+| A gesture is never recognised | It needs two or three short waves with a pause between them and then stillness; this is untested on real sensors. |
 | An action returns "cross-site request refused" | The request did not come from the console's own page. Open the console at the address it was started on. |

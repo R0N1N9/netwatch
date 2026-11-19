@@ -126,6 +126,34 @@ devices.
 
 ---
 
+## 7. Experience and reflexes
+
+Features you see, hear, feel or walk through, and the automation that ties the
+room to the console.
+
+| Feature | What it does | Status | Proven by | Needs / limits |
+|---|---|---|---|---|
+| **NETDIVE** | The network as a city in 3D: a tower per host (height follows traffic, colour follows trust and threat), flows as moving lights, outside destinations floating above, and a wireframe wall around anything quarantined. The time scrubber moves the city through time. | 🧪 | A browser with software WebGL: 5 towers, 9 flows, the quarantined host walled; scrubbing back rebuilt it with 3 towers | Sample conversations only. The towers follow the scrubber but the flows are always the ones observed up to now. Needs WebGL; there is no 2D fallback. |
+| **Incident rehearsal (DOJO)** | Plays a scripted, labelled incident into the live console and scores you on doing the right thing quickly. Two scenarios. | ✅ | A live (non-demo) run: alerts injected, the synthetic host quarantined "for pretend" and no firewall rule requested (a test with demo mode off checks that); in a browser a full run through the real controls scored 100 | The drill's host is made up and its alerts are marked `[REHEARSAL]`. Scoring windows are my guesses at "quick". The drill's alerts do go into the LEDGER, labelled. |
+| **While you were out** | Marks you away after ten minutes with nobody sensed, and on your return replays what happened: counts, who joined or left, and a time-lapse through the scrubber's history. | 🧪 | Unit and handler tests; a recap of the sample half-hour replayed in a browser | **Away detection has never been triggered by a real absence.** It needs SONAR nodes, or operator watch switched on. The time-lapse only reaches as far back as the in-memory history. |
+| **Live commentary** | Speaks each new alert as one sentence and glitches the display on a critical. | 🧪 | The sentences were generated and queued in a browser | Nobody has listened to it: the test browser has no speech engine. Uses the browser's built-in voice. |
+| **Network sonification** | A continuous soundscape: a drone that opens up with traffic, a pulse that quickens, a dissonant tone that grows with unopened critical alerts, and a bell per alert. | 🧪 | The audio graph ran in a browser and the state-to-sound mapping was checked at quiet, normal and storm | **Never heard by a person**, so whether it is pleasant or useful is unknown. |
+| **Scanner mode** | Hold `Q`: the console dims and a list of hosts fans out, each with its verdict, reach, decoys touched and steps outside its profile, plus actions (lock on, investigate, reach, trust, quarantine with a confirm). | ✅ | Browser, driven by key and mouse; a quarantine issued from it | It presents what the other modules know, so it is only as proven as they are. |
+| **Operator fatigue meter** | Estimates how sharp you are from time at the console, the hour, drift in your typing rhythm and critical alerts left unopened. When you are "spent", CORTEX asks twice before a quarantine. | 🧪 | Unit and handler tests | The weights are guesses and have never been compared with how tired anyone actually was. Off by default; nothing is stored. |
+| **Alert acknowledgement** | Click an alert (or say `ack`) to mark it seen. Unopened alerts drive the threat light, the fatigue meter and the soundscape. | ✅ | Handler test; browser | Kept in memory only. |
+| **HUNT mode** | Pick a radio in SPECTRUM and carry a sensor node towards it: a signal meter, warmer/colder, and Geiger-counter ticks that speed up as you close in. | 🧪 | A simulated approach and retreat in a browser (−58 → −35 → −76 dBm, with the trend following) | **Never done with a real node in a real room.** Needs a node you can carry on a battery. Signal strength bounces off walls, so expect it to mislead at times. |
+| **X-RAY** | Draws what SONAR senses — the presence estimate, still-and-breathing links, nodes, located hosts — where it is, from a point and heading you set, over the camera feed. | 🧪 | The projection was checked against hand-worked angles; the AR deck showed and hid tags as the heading changed | On a laptop you set position and heading by hand. Positions are only as good as the node layout you arranged. The phone path (compass and camera) has never run on a phone. |
+| **Phone companion** | A read-only page for a phone on your network: each kind of alert vibrates in its own pattern, plus the X-RAY view. Served over HTTPS on its own port, behind a pairing code. | 🧪 | A live listener: page 200, data 403 without the code, console API 404 through it, lock-out after repeated wrong codes; an emulated phone browser received an alert and "vibrated" (stubbed) | **Never opened on a real phone.** iPhones do not let web pages vibrate (it flashes and beeps instead). The certificate is self-signed, so the phone shows a warning once. |
+| **Room scenes (REFLEX)** | "When this happens, do that": a trigger (tripwire, movement, alert, everyone leaves, someone returns, a gesture) and up to six actions (save a clip, speak, alert, note, flash the light, acknowledge, arm, disarm, switch deck, lock). | 🧪 | Handler tests and a browser: scenes built with the form, fired by a sample alert, a simulated tripwire and the TEST button | Every trigger so far came from the simulator, a test button or a sample alert. The lock action has never fired. A scene cannot fire more than once every five seconds. |
+| **Gesture control** | Two or three short waves through a link, followed by stillness, count as a gesture that can trigger a scene. Walking through is ignored. | 🧪 | Scripted on/off sequences (two waves, three, one, walking, fidgeting) | **Never tried with real signals**, and the timings are guesses built around the engine's 1.6-second window. Only listens while a scene uses a gesture. Reports about three seconds after the last wave. |
+| **Ambient threat light** | Sends the room's state as a colour, once a second, to an ESP32 with an LED strip: green quiet, amber warnings, red breathing for unopened criticals, flashing for a fresh one, blue while armed. | 🧪 | A live run: the datagram arrived at a local listener; a public address was refused | Private addresses only. One datagram a second, nothing comes back. |
+| **Threat light firmware** | The ESP32 side: listens for the datagram and drives a WS2812 strip. | 🔧 | Never compiled or run | Written against the `led_strip` component's v2 API, which has changed between versions. |
+| **Who brought that device** | When a new host joins, the last minute of the room is saved as a braindance clip and attached to the alert (▶ ROOM), and CORTEX is told whether anyone was moving. | 🧪 | Handler test; the sample alert in a browser opened its clip | Needs sensor nodes. It shows that someone moved, not who, and not that they carried the device. |
+| **Talking decoy** | A port that imitates a small device's login: refuses the first attempt, lets the second "in", answers a handful of commands from a fixed table and records the conversation with a plain-language summary. | ✅ | A live run: a real session over loopback, transcript and summary recorded, the port reopened after a restart, and the typed password found nowhere on disk | **Nothing typed is ever run** — input is only matched against a table. Passwords are not kept, only their length. Only ever visited by my own scripted client, never by a real intruder or bot. 90 seconds and 16 commands per visit. |
+| **Talking decoy · model improvisation** | With a local model, commands outside the table get an improvised reply. | 🔧 | Never run — no local model here | The visitor's text is passed to the model as data. |
+
+---
+
 ## Ideas not built yet
 
 Candidates, roughly grouped. Move a line into a table above when it lands.
@@ -133,11 +161,8 @@ Candidates, roughly grouped. Move a line into a table above when it lands.
 **Room and radio**
 - RF fingerprinting — tell devices apart by transmitter imperfections, even with a cloned MAC
 - Node-to-node ranging — real positions instead of bearings you set by hand
-- "Who brought that device" — attach the braindance clip to a new-host alert
 - Full-scene braindance — record per-device network state alongside the presence field
 - Floor plan image import
-- Gesture control — wave through a link to switch decks or dismiss an alert
-- Ambient threat light — an ESP32 with an LED strip showing network state
 - Bluetooth scanning in the node firmware (SPECTRUM can ingest it; nothing sends it yet) and a Bluetooth presence key
 
 **Network**
@@ -148,7 +173,6 @@ Candidates, roughly grouped. Move a line into a table above when it lands.
 
 **Deception**
 - Canary credentials — a made-up login that alerts when someone tries to use it (files and names are built)
-- Model-driven honeypot — a decoy service that answers plausibly and summarises the session
 - Self-shuffling decoy hosts
 
 **AI**
@@ -160,7 +184,6 @@ Candidates, roughly grouped. Move a line into a table above when it lands.
 
 **Host**
 - Moving-target mode — rotate this machine's MAC and hostname
-- Network sonification
 
 ---
 
@@ -174,6 +197,8 @@ Candidates, roughly grouped. Move a line into a table above when it lands.
 | 2026-11-19 | Braindance, breathing detection, Wi-Fi ranging, process lineage, presence key |
 | 2026-11-19 | Hosts on the map, floor plan, tripwires, activity, people count, respiration log, USB watch, surface diff, fire drill, proximity lock |
 | 2026-11-19 | Module decks: DECOY, CORTEX, SPECTRUM, ORACLE, PULSE, WARD, QUANTUM, LEDGER; two-row tab bar; cross-site request guard; demo mode no longer calls the firewall on quarantine |
+| 2026-11-19 | NETDIVE, incident rehearsal (DOJO), while-you-were-out, live commentary, sonification, scanner mode, operator fatigue meter, alert acknowledgement |
+| 2026-11-19 | REFLEX scenes, gesture detection, ambient threat light (+ firmware), HUNT mode, X-RAY, phone companion, who-brought-that-device, talking decoy |
 
 ---
 

@@ -109,6 +109,8 @@ type Monitor struct {
 	profile *Profile
 	window  []Stroke
 	last    float64
+	lastWin [2]dist // hold and gap summary of the most recent full window
+	haveWin bool
 	low     int // consecutive low-scoring windows
 
 	// OnMismatch fires after two consecutive windows that do not look like the owner.
@@ -143,6 +145,8 @@ func (m *Monitor) Feed(strokes []Stroke) State {
 		m.window = append(m.window, s)
 		if len(m.window) >= WindowN {
 			m.last = Match(*m.profile, m.window)
+			wd, wf := split(m.window)
+			m.lastWin, m.haveWin = [2]dist{summarise(wd), summarise(wf)}, true
 			m.window = m.window[:0]
 			if m.last < 35 {
 				m.low++
@@ -180,7 +184,7 @@ func (m *Monitor) State() State {
 // Reset forgets the profile.
 func (m *Monitor) Reset() {
 	m.mu.Lock()
-	m.enroll, m.profile, m.window, m.low, m.last = nil, nil, nil, 0, 0
+	m.enroll, m.profile, m.window, m.low, m.last, m.haveWin = nil, nil, nil, 0, 0, false
 	m.mu.Unlock()
 }
 
@@ -204,4 +208,19 @@ func (m *Monitor) Restore(p *Profile) {
 	c := *p
 	m.profile, m.enroll, m.window, m.low, m.last = &c, nil, nil, 0, 100
 	m.mu.Unlock()
+}
+
+// Drift compares the most recent window with the enrolled rhythm: how much
+// slower the holds and gaps are (0.10 = 10% slower) and how much more
+// variable. ok is false until a profile and one full window exist.
+func (m *Monitor) Drift() (hold, gap, spread float64, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.profile == nil || !m.haveWin || m.profile.Dwell.Mean <= 0 || m.profile.Flight.Mean <= 0 {
+		return 0, 0, 0, false
+	}
+	hold = m.lastWin[0].Mean/m.profile.Dwell.Mean - 1
+	gap = m.lastWin[1].Mean/m.profile.Flight.Mean - 1
+	spread = (m.lastWin[0].Std/math.Max(m.profile.Dwell.Std, 1) + m.lastWin[1].Std/math.Max(m.profile.Flight.Std, 1)) / 2
+	return hold, gap, spread, true
 }

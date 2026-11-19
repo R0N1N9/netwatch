@@ -78,6 +78,7 @@ type radio struct {
 	lastHist      time.Time
 	tracker       bool
 	flaggedLinger bool
+	byNode        map[string]nodeObs // the latest reading from each node
 	flaggedTrack  bool
 }
 
@@ -113,7 +114,12 @@ const (
 	appleID, findMy = 0x004C, 0x12
 )
 
-func (e *Engine) touch(id, kind, name string, rssi int, now time.Time) *radio {
+type nodeObs struct {
+	rssi int
+	at   time.Time
+}
+
+func (e *Engine) touch(node, id, kind, name string, rssi int, now time.Time) *radio {
 	id = strings.ToLower(id)
 	r := e.radios[id]
 	if r == nil {
@@ -125,6 +131,12 @@ func (e *Engine) touch(id, kind, name string, rssi int, now time.Time) *radio {
 	}
 	r.last = now
 	r.rssi = (r.rssi*2 + rssi) / 3
+	if r.byNode == nil {
+		r.byNode = map[string]nodeObs{}
+	}
+	if len(r.byNode) < 16 || r.byNode[node].at != (time.Time{}) {
+		r.byNode[node] = nodeObs{rssi, now}
+	}
 	if name != "" {
 		r.name = name
 	}
@@ -147,7 +159,7 @@ func (e *Engine) Ingest(rep Report, known map[string]string, now time.Time) {
 		if w.RSSI >= 0 || w.RSSI < -100 {
 			continue
 		}
-		r := e.touch(w.MAC, "wifi", "", w.RSSI, now)
+		r := e.touch(rep.Node, w.MAC, "wifi", "", w.RSSI, now)
 		if r == nil {
 			continue
 		}
@@ -160,7 +172,7 @@ func (e *Engine) Ingest(rep Report, known map[string]string, now time.Time) {
 		if b.RSSI >= 0 || b.RSSI < -110 {
 			continue
 		}
-		r := e.touch(b.Addr, "ble", b.Name, b.RSSI, now)
+		r := e.touch(rep.Node, b.Addr, "ble", b.Name, b.RSSI, now)
 		if r == nil {
 			continue
 		}
@@ -341,4 +353,32 @@ func (e *Engine) Mine() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Reading is one node's latest signal reading of a radio.
+type Reading struct {
+	Node  string `json:"node"`
+	RSSI  int    `json:"rssi"`
+	AgeMS int64  `json:"ageMs"`
+}
+
+// Hunt returns the unsmoothed per-node readings of one radio, strongest
+// first, so a node carried around the room works as a direction finder.
+func (e *Engine) Hunt(id string, now time.Time) ([]Reading, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	r := e.radios[strings.ToLower(id)]
+	if r == nil {
+		return nil, false
+	}
+	out := make([]Reading, 0, len(r.byNode))
+	for n, o := range r.byNode {
+		if age := now.Sub(o.at); age < 15*time.Second {
+			out = append(out, Reading{n, o.rssi, age.Milliseconds()})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].RSSI > out[j].RSSI || (out[i].RSSI == out[j].RSSI && out[i].Node < out[j].Node)
+	})
+	return out, true
 }

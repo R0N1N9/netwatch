@@ -20,8 +20,8 @@ step.
 | Package | Responsibility |
 |---|---|
 | `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
-| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks. |
-| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, vendored three.js and fonts). |
+| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener. |
+| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `xray.js`, `companion.html`, vendored three.js and fonts). |
 | `model` | Shared types: `Device`, `Alert`, `Severity`. |
 | `netif` | Finds the interface, subnet and gateway. |
 | `capture` | AF_PACKET raw socket in pure Go; a stub on other systems. |
@@ -48,9 +48,17 @@ step.
 | `pulse` | Typing-rhythm profile from key hold and gap timings (median and spread), window scoring, mismatch callback. |
 | `quantum` | TLS and SSH inventory of private addresses, including whether a hybrid post-quantum key exchange is accepted. |
 | `ledger` | Append-only hash chain of alerts, actions and notes; verification and the incident report text. |
+| `rehearsal` | Scripted incident scenarios, a session that injects steps on a clock, credits responses and scores them. |
+| `recap` | Presence tracker (away / back) and the summary of a span of absence. |
+| `fatigue` | Operator sharpness from session length, hour, typing drift and unopened alerts. |
+| `scenes` | Trigger → actions rules with matching, arming and cooldowns. It decides which scenes fire; `server` carries out the actions. |
+| `light` | Picks the threat light's colour for a state and sends it as a UDP datagram to a private address. |
+| `persona` | The talking decoy: a scripted login and shell that records a visit and summarises it. Input is matched against a table, never executed. |
 | `tui`, `theme` | The terminal view and shared colours. |
 
-`firmware/esp32s3-csi` is the ESP-IDF project for the sensor nodes.
+`firmware/esp32s3-csi` is the ESP-IDF project for the sensor nodes;
+`firmware/esp32-light` is the one for the LED threat light. `sonar/gesture.go`
+holds the wave-gesture detector.
 
 ## HTTP API
 
@@ -84,6 +92,17 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/ward` | `GET` profiles and deviations; `POST` `accept` or `relearn`. |
 | `/api/quantum` | `GET` findings; `POST` starts an inventory. |
 | `/api/ledger`, `/note`, `/report` | The chain (`?recheck=1` re-reads the file), add a note, the incident report (`?mins=`). |
+| `/api/rehearsal` | `GET` scenarios, state and past scores; `POST` `start` or `stop`. |
+| `/api/recap` | `GET` the last recap; `POST` builds one for the last `mins` minutes. |
+| `/api/operator` | `GET` the fatigue reading; `POST` `on`, or `ping` on operator input. |
+| `/api/ack` | Acknowledge one alert, the newest, or all. |
+| `/api/scanner` | Every host with its verdict, reach, trips and deviations, for scanner mode. |
+| `/api/reflex` | `GET` scenes, recent firings, light and companion state; `POST` `put`, `remove`, `fire`, `gesture`, `lightAddr`, `lightTest`. |
+| `/api/oracle?all=1` · `/api/spectrum?hunt=<id>` | Every conversation (for NETDIVE); per-node readings of one radio (for HUNT). |
+
+The phone companion is a **separate listener** (`--companion`, HTTPS,
+self-signed): `/` (the page), `/xray.js`, `/stream?code=` (alerts only) and
+`/sonar?code=`. Nothing under `/api/` is served there.
 
 Every `POST` handled by `decode()` is refused with 403 if the browser marks it
 cross-site or its `Origin` is not the console's own address.
@@ -101,6 +120,9 @@ cross-site or its `Origin` is not the console's own address.
 | WARD | 30 s | Feeds each known device's active conversations into its profile; saves `modules.json` every fifth minute. Not started in demo mode. |
 | Honeyport accept, canary-file watch | event-driven | One goroutine per decoy; each touch becomes an alert (at most one a minute per source and decoy). |
 | Demo radio scene | 1 s | Demo mode only: feeds SPECTRUM a simulated set of radios. |
+| Senses | 500 ms | Injects due rehearsal steps and ends the drill; feeds presence to the away tracker; every 10 s re-assesses the operator. |
+| Reflex | 150 ms | Feeds the gesture detector (only while a scene uses gestures); once a second computes the light's colour, sends it if an address is set, and fires away/return scenes. |
+| Talking decoy | event-driven | One goroutine per visit, at most four at once per port. |
 | System monitor | 1 s | CPU sample. |
 
 ## Adding a feature
@@ -133,3 +155,14 @@ cross-site or its `Origin` is not the console's own address.
   action endpoint should do the same.
 - Module state that must survive a restart goes in `modules.json` through
   `saveModules` / `loadModules`; demo mode never reads or writes it.
+- Every new alert passes through `afterAlert` (scenes, the room clip). The
+  browser side has matching hooks: `ALERT_HOOKS`, `RENDER_HOOKS`,
+  `EXTRA_COMMANDS` and `MOD_DECKS`; `senses.js` and `reflex.js` add features
+  through those rather than by editing `app.js`.
+- The server can ask open consoles to speak or switch deck through the `cue`
+  field of the snapshot; a scene is the only thing that sets it.
+- Anything a phone or other device on the network may reach goes on the
+  companion listener, read-only and behind the pairing code — never on the
+  console's own address.
+- A rehearsal must never reach a real host or the firewall: actions aimed at
+  its host are intercepted in `rehearsalBlackwall`.

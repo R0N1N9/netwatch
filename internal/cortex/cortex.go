@@ -29,6 +29,7 @@ type Evidence struct {
 	Programs                        []string // local programs talking to that address
 	DecoyTrips                      int      // decoys this source has touched
 	WardDeviations                  int      // steps outside its learned behaviour
+	Room                            string   // what SONAR sensed around the moment of the alert, if anything
 }
 
 // Step is one line of reasoning. Weight is positive toward "real threat".
@@ -155,6 +156,9 @@ func Investigate(ev Evidence) Case {
 	}
 	if ev.WardDeviations > 0 {
 		add("Learned profile", fmt.Sprintf("It has stepped outside its learned behaviour %d time(s).", ev.WardDeviations), 12, "for")
+	}
+	if ev.Room != "" {
+		add("In the room", ev.Room, 0, "")
 	}
 	if len(ev.Programs) > 0 {
 		add("On this machine", "Local programs talking to it: "+strings.Join(first(ev.Programs, 3), ", ")+".", 0, "")

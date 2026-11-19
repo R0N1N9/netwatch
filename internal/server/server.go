@@ -89,6 +89,11 @@ type Server struct {
 	surface hostwatch.SurfaceStore
 
 	mod modules // the module decks (modules.go)
+	sen senses  // rehearsal, recap, operator watch, acknowledgements (senses.go)
+	ref reflex  // scenes, gestures, light, talking decoy (reflex.go)
+
+	CompanionAddr string // HTTPS address for the phone companion ("" = off)
+	comp          companion
 }
 
 type histEntry struct {
@@ -123,6 +128,8 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 	s.son.OnMotion = s.onPresence
 	s.son.OnFall = s.onFall
 	s.initModules()
+	s.initSenses()
+	s.initReflex()
 	return s
 }
 
@@ -138,6 +145,7 @@ func (s *Server) emitAlert(a model.Alert) {
 		s.alerts = s.alerts[:200]
 	}
 	s.mu.Unlock()
+	s.afterAlert(a)
 	s.broadcast()
 }
 
@@ -187,6 +195,8 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, map[string]any{"ok": true, "lines": drill.Lines(drill.Run())})
 	})
 	s.moduleRoutes(mux)
+	s.senseRoutes(mux)
+	s.reflexRoutes(mux)
 	return mux
 }
 
@@ -210,6 +220,8 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		s.demoRoom() // after the sample hosts exist, so yesterday's snapshot includes them
 	}
 	s.startModules(ctx)
+	go s.sensesLoop(ctx)
+	s.startReflex(ctx)
 	if s.demo {
 		go s.sonarDemo(ctx)
 	} else {
@@ -276,6 +288,7 @@ func (s *Server) doSweep(ctx context.Context) {
 	devices, err := sweep.Run(c, s.info, opt)
 	cancel()
 
+	var newAlerts []model.Alert
 	s.mu.Lock()
 	s.sweeping = false
 	s.lastSweep = time.Now()
@@ -283,8 +296,8 @@ func (s *Server) doSweep(ctx context.Context) {
 		for i := range devices {
 			devices[i].Trusted = s.trusted[devices[i].IP.String()]
 		}
-		s.devices = devices
-		newAlerts := s.engine.Observe(devices, trusted)
+		newAlerts = s.engine.Observe(devices, trusted)
+		s.devices = s.withRehearsalHost(devices)
 		for _, a := range newAlerts {
 			s.logAlert(a)
 			s.alerts = append([]model.Alert{a}, s.alerts...)
@@ -294,6 +307,9 @@ func (s *Server) doSweep(ctx context.Context) {
 		}
 	}
 	s.mu.Unlock()
+	for _, a := range newAlerts {
+		s.afterAlert(a)
+	}
 	s.broadcast()
 }
 
@@ -421,6 +437,9 @@ func (s *Server) handleBlackwall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": msg})
 		return
 	}
+	if s.rehearsalBlackwall(w, req.IP, req.Action) {
+		return
+	}
 	var err error
 	switch req.Action {
 	case "quarantine":
@@ -519,6 +538,16 @@ type wireAlert struct {
 	Kind     string `json:"kind"`
 	Source   string `json:"source"`
 	Message  string `json:"message"`
+	Acked    bool   `json:"acked"`          // the operator has opened or dismissed it
+	Clip     string `json:"clip,omitempty"` // braindance clip of the room when it happened
+}
+
+func alertKey(a model.Alert) string {
+	return fmt.Sprintf("%d|%s|%s", a.Time.UnixMilli(), a.Source, a.Kind)
+}
+
+func wireOf(a model.Alert, acked bool) wireAlert {
+	return wireAlert{TS: a.Time.UnixMilli(), Severity: a.Severity.String(), Kind: a.Kind, Source: a.Source, Message: a.Message, Acked: acked}
 }
 
 func (s *Server) snapshotJSON() []byte {
@@ -542,10 +571,9 @@ func (s *Server) snapshotJSON() []byte {
 		if a.Kind == "new-device" {
 			newCount++
 		}
-		alerts = append(alerts, wireAlert{
-			TS: a.Time.UnixMilli(), Severity: a.Severity.String(),
-			Kind: a.Kind, Source: a.Source, Message: a.Message,
-		})
+		wa := wireOf(a, s.sen.acked[alertKey(a)])
+		wa.Clip = s.ref.clipFor[alertKey(a)]
+		alerts = append(alerts, wa)
 	}
 	last := ""
 	if !s.lastSweep.IsZero() {
@@ -556,7 +584,8 @@ func (s *Server) snapshotJSON() []byte {
 			"iface": s.info.Iface.Name, "subnet": s.info.IPNet.String(),
 			"gateway": gwStr(s.info), "watching": true, "sweeping": s.sweeping,
 			"pps": s.pps(), "copilot": s.cop.Name(), "sonarArmed": s.sonarArmed,
-			"gate": s.gateLocked(),
+			"gate": s.gateLocked(), "recap": s.sen.recapSeq, "rehearsal": s.sen.reh != nil && !s.sen.rehDone,
+			"cue": map[string]any{"seq": s.ref.cueSeq, "say": s.ref.cueSay, "ui": s.ref.cueUI},
 		},
 		"devices": devices,
 		"alerts":  alerts,
@@ -672,6 +701,10 @@ func (s *Server) handleHistoryAt(w http.ResponseWriter, r *http.Request) {
 func (s *Server) onPresence(node string, score float64) {
 	s.mu.Lock()
 	s.moves[node]++
+	defer s.fireScenes("presence", node, "")
+	if s.sen.motion = append(s.sen.motion, time.Now()); len(s.sen.motion) > 4000 {
+		s.sen.motion = s.sen.motion[2000:]
+	}
 	armed := s.sonarArmed
 	recent := time.Since(s.lastPresence[node]) < 30*time.Second
 	if armed && !recent {

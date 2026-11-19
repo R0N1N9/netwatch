@@ -96,3 +96,18 @@ func TestWeakAndClaimedRadiosAreNotReported(t *testing.T) {
 		t.Errorf("%d events for a claimed radio, a neighbour's weak radio and a plain Bluetooth device", n)
 	}
 }
+
+func TestHuntReadsEachNode(t *testing.T) {
+	e := New()
+	now := time.Unix(1_700_000_000, 0)
+	e.Ingest(Report{Node: "wand", WiFi: []WiFi{{MAC: "de:ad:be:ef:00:01", RSSI: -44}}}, nil, now)
+	e.Ingest(Report{Node: "node-A", WiFi: []WiFi{{MAC: "de:ad:be:ef:00:01", RSSI: -71}}}, nil, now)
+	e.Ingest(Report{Node: "node-B", WiFi: []WiFi{{MAC: "de:ad:be:ef:00:01", RSSI: -80}}}, nil, now.Add(-20*time.Second))
+	got, ok := e.Hunt("DE:AD:BE:EF:00:01", now.Add(time.Second))
+	if !ok || len(got) != 2 || got[0].Node != "wand" || got[0].RSSI != -44 || got[1].Node != "node-A" {
+		t.Errorf("hunt = %+v", got)
+	}
+	if _, ok := e.Hunt("00:00:00:00:00:00", now); ok {
+		t.Error("hunting a radio nobody has heard")
+	}
+}

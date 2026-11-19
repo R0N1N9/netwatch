@@ -36,6 +36,7 @@ MK.4</div>
         <div class="tab" data-deck="killchain">KILL&nbsp;CHAIN</div>
         <div class="tab" data-deck="attack">ATT&amp;CK</div>
         <div class="tab" data-deck="grid">GRID</div>
+        <div class="tab" data-deck="netdive">NETDIVE</div>
         <div class="tab" data-deck="ar">AR</div>
         <div class="tab" data-deck="sonar">SONAR</div>
       </div>
@@ -49,9 +50,13 @@ MK.4</div>
         <div class="tab" data-deck="ward">WARD</div>
         <div class="tab" data-deck="quantum">QUANTUM</div>
         <div class="tab" data-deck="ledger">LEDGER</div>
+        <div class="tab" data-deck="dojo">DOJO</div>
+        <div class="tab" data-deck="reflex">REFLEX</div>
       </div>
     </nav>
     <div class="spacer"></div>
+    <span class="reh-tag" id="rehTag" hidden>REHEARSAL · synthetic incident</span>
+    <span class="hs-stat" id="opStat" hidden title="operator sharpness — see DOJO"><span class="micro cy">OPERATOR</span><b id="opVal">—</b></span>
     <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">WATCH ACTIVE</span></div>
     <div class="clock" id="clock">--:--:--</div>
   </header>
@@ -249,10 +254,19 @@ MK.4</div>
       <video id="arVideo" autoplay playsinline muted></video>
       <canvas class="ar-grid"></canvas>
       <div class="ar-overlay" id="arOverlay"></div>
+      <div class="xr-layer" id="xrLayer" hidden></div>
+      <div class="xr-panel" id="xrPanel" hidden>
+        <div class="micro grn">▚▚ X-RAY · where you are</div>
+        <canvas id="xrMap" width="200" height="200" title="click where you are standing"></canvas>
+        <label class="micro cy">HEADING <b id="xrHeadVal">0°</b><input type="range" id="xrHead" min="0" max="359" value="0" /></label>
+        <label class="micro cy">TILT <b id="xrPitchVal">0°</b><input type="range" id="xrPitch" min="-40" max="40" value="0" /></label>
+        <div class="m-dim" id="xrNote">Click the map where you stand, then drag the view (or the slider) to look around. On a phone with a compass the heading follows the device.</div>
+      </div>
       <div class="ar-scanline"></div>
       <div class="ar-controls">
         <button class="btn" id="arStart">◉ ENGAGE OPTIC</button>
         <button class="btn" id="arXR" hidden>▣ IMMERSIVE AR</button>
+        <button class="btn" id="xrBtn" title="draw what SONAR senses where it is, through the walls">X-RAY OFF</button>
         <span class="ar-note" id="arNote">Kiroshi AR overlay — point the optic at the room. Camera stays on-device; nothing leaves the host.</span>
       </div>
     </div>
@@ -332,6 +346,11 @@ MK.4</div>
             <div class="field"><input id="dcName" placeholder="host name — e.g. vault.corp.internal" autocomplete="off" /><button class="btn" id="dcNameAdd">ADD</button></div>
             <div class="m-chips" id="dcNames"></div>
           </div>
+          <div class="m-group">
+            <div class="micro">TALKING DECOYS · a fake device login that lets a visitor "in" and records what they do — nothing they type is run</div>
+            <div class="field"><input id="dcTalkPort" placeholder="port — e.g. 2323 (23 needs root)" inputmode="numeric" autocomplete="off" /><button class="btn" id="dcTalkAdd">OPEN</button></div>
+            <div class="m-chips" id="dcTalk"></div>
+          </div>
           <div class="m-note" id="dcNote">Decoys have no legitimate use, so a touch is a high-confidence signal. Honeyports accept a connection, read up to 256 bytes and hang up; they never answer.</div>
         </div>
       </div>
@@ -340,6 +359,10 @@ MK.4</div>
       <div class="panel grow" style="--accent: var(--red)">
         <div class="panel-head"><span>TRIPS</span><span class="meta"><button class="hs-btn" id="dcDrill" title="touch every port and file decoy from this machine to prove the alarms work">RUN DRILL</button></span></div>
         <div class="panel-body" id="dcTrips"></div>
+      </div>
+      <div class="panel grow" style="--accent: var(--magenta)">
+        <div class="panel-head"><span>VISITS TO THE TALKING DECOYS</span><span class="meta" id="dcVisitMeta">—</span></div>
+        <div class="panel-body" id="dcVisits"></div>
       </div>
     </section>
   </main>
@@ -365,7 +388,16 @@ MK.4</div>
     <section class="col">
       <div class="panel grow" style="--accent: var(--green)">
         <div class="panel-head"><span>SPECTRUM // SCOPE</span><span class="meta" id="spMeta">—</span></div>
-        <div class="sp-scope"><svg id="spScope" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet"></svg></div>
+        <div class="sp-scope"><svg id="spScope" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="hunt" id="huntBox" hidden>
+            <div class="micro">▚▚ HUNT · carry a sensor node towards it</div>
+            <b class="hunt-name" id="huntName">—</b>
+            <div class="hunt-read"><b id="huntDbm">—</b><span class="micro cy">dBm</span><span class="hunt-trend" id="huntTrend"></span></div>
+            <div class="m-bar hunt-bar"><i id="huntBar"></i></div>
+            <div class="hunt-nodes" id="huntNodes"></div>
+            <div class="btn-row"><button class="btn" id="huntSound">TICKS ON</button><button class="btn danger" id="huntStop">STOP</button></div>
+          </div>
+        </div>
         <div class="m-note">Closer to the centre is a stronger signal. Direction is not measured — each radio keeps a fixed bearing so you can follow it.</div>
       </div>
     </section>
@@ -510,6 +542,91 @@ MK.4</div>
     </section>
   </main>
 
+  <!-- NETDIVE DECK (the network as a city you can fly through) -->
+  <main class="deck mod" data-deck="netdive" style="--cols: 1fr" hidden>
+    <div class="nd-wrap">
+      <div id="netdive3d"></div>
+      <div class="nd-hud">
+        <div class="ghud-title">NETDIVE // CYBERSPACE</div>
+        <div class="ghud-meta" id="ndMeta">—</div>
+      </div>
+      <div class="nd-info" id="ndInfo" hidden></div>
+      <div class="nd-legend"><span class="nd-k self">this machine</span><span class="nd-k gw">gateway</span><span class="nd-k ok">trusted</span><span class="nd-k unv">unverified</span><span class="nd-k bad">threat</span><span class="nd-k ext">outside</span></div>
+      <div class="nd-hint">drag to orbit · scroll to zoom · W A S D to move · click a tower · the time scrubber moves the city through time</div>
+      <div class="empty nd-none" id="ndNone" hidden>NETDIVE needs WebGL, which this browser is not providing</div>
+    </div>
+  </main>
+
+  <!-- DOJO DECK (incident rehearsal + operator watch) -->
+  <main class="deck mod" data-deck="dojo" style="--cols: 1.3fr 1fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--amber)">
+        <div class="panel-head"><span>DOJO // INCIDENT REHEARSAL</span><span class="meta" id="djMeta">nothing real is touched</span></div>
+        <div class="panel-body" id="djBody"></div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>OPERATOR</span><span class="meta" id="opMeta">watch off</span></div>
+        <div class="op-top">
+          <div class="pl-dial" id="opDial"><b id="opSharp">—</b><span class="micro" id="opLevel">NOT WATCHING</span></div>
+          <div class="op-side"><div id="opFactors" class="m-dim">Turn the watch on and the console estimates how sharp you are from time at the console, the hour, drift in your typing (if PULSE is enrolled) and critical alerts left unopened.</div><div class="op-advice" id="opAdvice"></div></div>
+        </div>
+        <div class="btn-row"><button class="btn" id="opToggle">OPERATOR WATCH OFF</button></div>
+        <div class="m-note">Kept in memory only and gone when NetWatch stops: when you last touched the console and when this sitting began. No keys, no screen contents.</div>
+      </div>
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>WHILE YOU WERE OUT</span><span class="meta" id="rcMeta">—</span></div>
+        <div class="panel-body m-prose">
+          <p>When SONAR senses nobody for ten minutes (or, with operator watch on, nobody touches the console), NetWatch marks you away. When you come back it replays what happened.</p>
+          <div class="btn-row" style="padding-left:0"><button class="btn" id="rcPlay">REPLAY THE LAST 30 MINUTES</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- REFLEX DECK (senses, and — below — scenes, gestures, light, companion) -->
+  <main class="deck mod" data-deck="reflex" style="--cols: 1fr 1.2fr" hidden>
+    <section class="col" id="rfLeft">
+      <div class="panel" style="--accent: var(--magenta)">
+        <div class="panel-head"><span>REFLEX // SENSES</span><span class="meta">this browser only</span></div>
+        <div class="btn-row">
+          <button class="btn" id="narrBtn" title="the daemon speaks each alert as it arrives">NARRATE OFF</button>
+          <button class="btn" id="sonifyBtn" title="a continuous soundscape of the network">SONIFY OFF</button>
+        </div>
+        <div class="m-note" id="senseNote">NARRATE reads each new alert aloud in a sentence and glitches the display on a critical. SONIFY turns the network into sound: a drone that opens up with traffic, a pulse that quickens, and a dissonant tone that grows with the number of critical alerts.</div>
+      </div>
+      <div class="panel" style="--accent: var(--amber)">
+        <div class="panel-head"><span>AMBIENT THREAT LIGHT</span><span class="meta" id="ltMeta">preview</span></div>
+        <div class="lt-row"><div class="lt-swatch" id="ltSwatch"></div><div><b id="ltWhy">—</b><div class="m-dim" id="ltSub">An ESP32 with an LED strip can show this colour in the room.</div></div></div>
+        <div class="field"><input id="ltAddr" placeholder="the light's address — e.g. 192.168.1.60:5577" autocomplete="off" /><button class="btn" id="ltSet">SET</button><button class="btn" id="ltTest">TEST</button></div>
+      </div>
+      <div class="panel" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>PHONE COMPANION</span><span class="meta" id="cpMeta">off</span></div>
+        <div class="panel-body m-prose" id="cpBody"></div>
+      </div>
+      <div class="panel grow" style="--accent: var(--red)">
+        <div class="panel-head"><span>RECENTLY FIRED</span><span class="meta"><button class="hs-btn" id="rfWave" title="pretend a double wave was sensed, to test gesture scenes">SIMULATE A DOUBLE WAVE</button></span></div>
+        <div class="panel-body" id="rfFired"></div>
+      </div>
+    </section>
+    <section class="col" id="rfRight">
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>SCENES · when this happens, do that</span><span class="meta" id="rfMeta">—</span></div>
+        <div class="panel-body" id="rfScenes"></div>
+        <div class="rf-form">
+          <input id="rfName" placeholder="name — e.g. Front door at night" maxlength="60" autocomplete="off" />
+          <span class="micro cy">WHEN</span><select id="rfTrigger"></select>
+          <input id="rfMatch" placeholder="which one (blank = any)" list="rfMatches" autocomplete="off" /><datalist id="rfMatches"></datalist>
+          <label class="rf-check"><input type="checkbox" id="rfArmed" /> only while armed</label>
+          <span class="micro cy">DO</span><div class="rf-actions" id="rfActions"></div>
+          <input id="rfSay" placeholder="what to say (for speak)" maxlength="200" autocomplete="off" />
+          <button class="btn" id="rfSave">SAVE SCENE</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
   <div class="scrub" id="scrub">
     <button class="scrub-live active" id="scrubLive">● LIVE</button>
     <div class="scrub-track">
@@ -526,6 +643,7 @@ MK.4</div>
     <span class="kh"><i class="kb">↑↓</i>CHANGE TARGET</span>
     <span class="kh"><i class="kb">T</i>TAGGING</span>
     <span class="kh"><i class="kb">TAB</i>SWITCH DECK</span>
+    <span class="kh"><i class="kb">Q</i>HOLD · SCANNER</span>
     <span class="msg" id="statusLine">deck online</span>
   </footer>
 </div>
@@ -534,6 +652,21 @@ MK.4</div>
 <div class="fx-vignette"></div>
 <div class="fx-flicker"></div>
 <div class="prox-banner" id="proxBanner" hidden></div>
+<div id="scanMode" hidden>
+  <div class="sc-title">SCANNER <span class="micro" id="scHint">release Q to close · click a host to pin</span></div>
+  <div class="sc-hosts" id="scHosts"></div>
+  <div class="sc-detail" id="scDetail"></div>
+</div>
+<div id="recapBox" hidden>
+  <div class="rc-card">
+    <div class="micro grn">▚▚ WHILE YOU WERE OUT</div>
+    <div class="rc-head" id="rcHead"></div>
+    <div class="rc-stats" id="rcStats"></div>
+    <div class="m-bar"><i id="rcBar"></i></div>
+    <div class="rc-events" id="rcEvents"></div>
+    <div class="btn-row"><button class="btn" id="rcClose">CLOSE</button></div>
+  </div>
+</div>
 <div class="fx-grain" id="grain"></div>
 <script src="vendor/three.min.js"></script>
 
@@ -560,5 +693,8 @@ MK.4</div>
 </div>
 
 <script src="app.js"></script>
+<script src="senses.js"></script>
+<script src="xray.js"></script>
+<script src="reflex.js"></script>
 </body>
 </html>

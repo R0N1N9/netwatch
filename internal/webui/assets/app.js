@@ -6,6 +6,9 @@ let selectedIP = null;
 let live = false;
 let tickerRefresh = null, tickerPrimed = false;
 let liveState = null, replay = false;
+// extension points for senses.js and reflex.js
+const EXTRA_COMMANDS = [], ALERT_HOOKS = [], RENDER_HOOKS = [];
+let operatorLevel = "";
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -85,6 +88,7 @@ function render() {
   if (selectedIP) fillTarget(STATE.devices.find((x) => x.ip === selectedIP));
   if (currentDeck() === "ar") renderARTags();
   if (!tickerPrimed && tickerRefresh && STATE.devices.length) { tickerPrimed = true; tickerRefresh(); }
+  RENDER_HOOKS.forEach((f) => f());
 }
 
 function threats() { return (STATE.alerts || []).filter((a) => a.severity === "CRITICAL").length; }
@@ -133,11 +137,13 @@ function renderAlerts() {
   alerts.slice(0, 60).forEach((a) => {
     const sev = (a.severity || "INFO").toLowerCase();
     const cls = sev === "critical" ? "crit" : sev === "warn" ? "warn" : "info";
-    const row = el("div", "alert sev-" + cls + (cls === "crit" ? " crit" : ""));
+    const row = el("div", "alert sev-" + cls + (cls === "crit" ? " crit" : "") + (a.acked ? " acked" : ""));
+    if (!a.acked) { row.title = "click to acknowledge"; row.onclick = () => { if (!replay) post("/api/ack", { ts: a.ts, source: a.source, kind: a.kind }); }; }
     row.appendChild(el("span", "sev", a.severity || "INFO"));
     const msg = el("div", "msg"); msg.textContent = a.message;
     const t = el("time"); t.textContent = (a.kind || "") + " · " + fmtTime(a.ts);
     msg.appendChild(t); row.appendChild(msg);
+    if (a.clip) { const b = el("button", "hs-btn", "▶ ROOM"); b.title = "replay what SONAR sensed in the room when this happened"; b.onclick = (e) => { e.stopPropagation(); selectDeck("sonar"); bdOpen(a.clip); }; row.appendChild(b); }
     list.appendChild(row);
   });
 }
@@ -225,7 +231,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 function cycleDeck() {
-  const order = ["netwatch", "breach", "killchain", "attack", "grid", "ar", "sonar", "decoy", "cortex", "spectrum", "oracle", "pulse", "ward", "quantum", "ledger"];
+  const order = ["netwatch", "breach", "killchain", "attack", "grid", "netdive", "ar", "sonar", "decoy", "cortex", "spectrum", "oracle", "pulse", "ward", "quantum", "ledger", "dojo", "reflex"];
   const cur = document.querySelector(".tab.active").dataset.deck;
   selectDeck(order[(order.indexOf(cur) + 1) % order.length]);
 }
@@ -1430,6 +1436,7 @@ async function runCommand(text) {
     if (/^(confirm|yes|do it|execute)$/.test(t) && Date.now() < p.until) { const r = await post("/api/blackwall", { ip: p.ip, action: "quarantine" }); return r && r.ok ? "BLACKWALL engaged. " + p.ip + " is quarantined." : "Quarantine failed: " + ((r && r.error) || "backend unreachable"); }
     if (/^(cancel|no|abort)$/.test(t)) return "Cancelled.";
   }
+  for (const f of EXTRA_COMMANDS) { const r = await f(t, text); if (r != null) return r; }
   if (/^(sweep|scan)( the)?( network| segment)?$/.test(t)) { if (replay) return "Go live first."; await post("/api/sweep"); return "Sweeping the segment."; }
   if ((m = t.match(/^(?:switch to|open|show|go to)\s+(?:the\s+)?(.+?)(?:\s+deck)?$/)) && DECK_WORDS[m[1]]) { selectDeck(DECK_WORDS[m[1]]); return "Switching to " + m[1].toUpperCase() + "."; }
   if ((m = t.match(/^(?:select|target|lock on(?: to)?)\s+(.+)$/))) { const d = findDevice(m[1]); if (!d) return "No host matches " + m[1] + "."; selectDeck("netwatch"); selectDevice(d.ip); return "Locked on " + (d.hostname || d.ip) + ". Threat " + threatOf(d) + " of 100."; }
@@ -1518,11 +1525,16 @@ function setAudio(on) {
   const b = $("#audioBtn"); b.classList.toggle("on", on); b.textContent = on ? "AUDIO ON" : "AUDIO OFF";
 }
 $("#audioBtn").addEventListener("click", () => { setAudio(!audioOn); if (audioOn) playAlert({ severity: "INFO", source: "self" }); });
+const seenAlerts = new Set();
 function onNewAlerts(snap) {
-  const alerts = snap.alerts || [], newest = alerts.reduce((mx, a) => Math.max(mx, a.ts || 0), 0);
-  if (lastAlertTs === null) { lastAlertTs = newest; return; }
-  alerts.filter((a) => a.ts > lastAlertTs).slice(0, 3).forEach(playAlert);
-  lastAlertTs = Math.max(lastAlertTs, newest);
+  // Alerts are told apart by time, source and kind: two raised in the same millisecond are both new.
+  const alerts = snap.alerts || [], key = (a) => a.ts + "|" + a.source + "|" + a.kind + "|" + a.message, first = lastAlertTs === null;
+  const fresh = alerts.filter((a) => !seenAlerts.has(key(a)));
+  fresh.forEach((a) => seenAlerts.add(key(a)));
+  lastAlertTs = alerts.reduce((mx, a) => Math.max(mx, a.ts || 0), lastAlertTs || 0);
+  if (first) return;
+  fresh.slice(0, 3).forEach(playAlert);
+  fresh.slice(0, 4).reverse().forEach((a) => ALERT_HOOKS.forEach((f) => f(a)));
 }
 
 // ---------- module decks: DECOY · CORTEX · SPECTRUM · ORACLE · PULSE · WARD · QUANTUM · LEDGER ----------
@@ -1550,6 +1562,7 @@ async function decoyLoad() {
   $("#dcTrips").innerHTML = r.trips.length ? r.trips.map((t) =>
     '<div class="m-row ' + (/decoy drill/i.test(t.detail) ? "info" : "crit") + '"><div class="m-row-top"><span class="badge' + (/decoy drill/i.test(t.detail) ? '">DRILL · ' : ' bad">') + esc(kinds[t.kind] || t.kind) + '</span><b>' + esc(t.source) + '</b><span class="m-dim">→ ' + esc(t.decoy) + '</span><time>' + esc(ago(new Date(t.time).getTime())) + '</time></div><div class="m-mono">' + esc(t.detail) + '</div></div>').join("")
     : '<div class="empty">no decoy has been touched</div>';
+  if (typeof decoyExtra === "function") decoyExtra(r);
 }
 function decoyInit() {
   const add = (btn, input, build) => {
@@ -1608,6 +1621,7 @@ async function cortexDecide(approve) {
   const p = r.case.proposal;
   if (replay) { status("go live first"); return "Go live first."; }
   let msg;
+  if (approve && p.action === "quarantine" && operatorLevel === "spent" && cortex.sure !== cortex.sel) { cortex.sure = cortex.sel; status("operator watch says you are spent — press APPROVE again if this cannot wait"); return "You are spent. Say approve again if this cannot wait."; }
   if (!approve) { await post("/api/ledger/note", { text: "CORTEX proposal dismissed: " + p.action + " " + p.target }); msg = "Dismissed. Nothing was changed."; }
   else if (p.action === "quarantine") { const q = await post("/api/blackwall", { ip: p.target, action: "quarantine" }); msg = q && q.ok ? "BLACKWALL engaged. " + p.target + " is quarantined." : "Quarantine failed: " + ((q && q.error) || "backend unreachable"); }
   else if (p.action === "trust") { const q = await post("/api/trust", { ip: p.target, trusted: true }); msg = q && q.ok ? p.target + " marked trusted." : "Could not mark it trusted: " + ((q && q.error) || "backend unreachable"); }
@@ -1640,9 +1654,9 @@ async function spectrumLoad() {
   });
   $("#spScope").innerHTML = svg;
   $("#spRadios").innerHTML = r.radios.length ? r.radios.map((x, i) =>
-    '<div class="m-row ' + (TAG_CLASS[x.tag] === "bad" ? "crit" : TAG_CLASS[x.tag] === "warn" ? "warn" : "") + '"><div class="m-row-top"><span class="badge' + (x.kind === "ble" ? " act" : "") + '">' + (x.kind === "ble" ? "BLE" : "WI-FI") + '</span><b>' + esc(x.name || x.id) + '</b><span class="m-verdict ' + (TAG_CLASS[x.tag] || "dim") + '">' + esc(x.tag.toUpperCase()) + '</span><time>' + x.rssi + ' dBm</time></div><div class="m-row-top"><span class="m-dim m-mono">' + esc(x.name ? x.id : x.kind === "ble" ? "no name announced" : "not on your network") + '</span>' + spark(x.history) + '<time>in range ' + (x.minutes < 1 ? Math.round(x.minutes * 60) + " s" : x.minutes.toFixed(0) + " min") + '</time>' + (x.tag === "network host" ? "" : '<button class="hs-btn" data-i="' + i + '" title="' + (x.tag === "mine" ? "stop treating this radio as yours" : "this radio is yours — never flag it") + '">' + (x.tag === "mine" ? "NOT MINE" : "MINE") + '</button>') + '</div></div>').join("")
+    '<div class="m-row ' + (TAG_CLASS[x.tag] === "bad" ? "crit" : TAG_CLASS[x.tag] === "warn" ? "warn" : "") + '"><div class="m-row-top"><span class="badge' + (x.kind === "ble" ? " act" : "") + '">' + (x.kind === "ble" ? "BLE" : "WI-FI") + '</span><b>' + esc(x.name || x.id) + '</b><span class="m-verdict ' + (TAG_CLASS[x.tag] || "dim") + '">' + esc(x.tag.toUpperCase()) + '</span><time>' + x.rssi + ' dBm</time></div><div class="m-row-top"><span class="m-dim m-mono">' + esc(x.name ? x.id : x.kind === "ble" ? "no name announced" : "not on your network") + '</span>' + spark(x.history) + '<time>in range ' + (x.minutes < 1 ? Math.round(x.minutes * 60) + " s" : x.minutes.toFixed(0) + " min") + '</time>' + (x.tag === "network host" ? "" : '<button class="hs-btn" data-i="' + i + '" title="' + (x.tag === "mine" ? "stop treating this radio as yours" : "this radio is yours — never flag it") + '">' + (x.tag === "mine" ? "NOT MINE" : "MINE") + '</button>') + '<button class="hs-btn" data-h="' + i + '" title="carry a sensor node around and home in on this radio">HUNT</button></div></div>').join("")
     : '<div class="empty">no radios heard yet — SPECTRUM listens through the SONAR sensor nodes</div>';
-  $("#spRadios").querySelectorAll("button").forEach((b) => (b.onclick = async () => { const x = r.radios[+b.dataset.i]; await post("/api/spectrum", { radio: x.id, mine: x.tag !== "mine" }); spectrumLoad(); }));
+  $("#spRadios").querySelectorAll("button").forEach((b) => (b.onclick = async () => { if (b.dataset.h) return huntStart(r.radios[+b.dataset.h]); const x = r.radios[+b.dataset.i]; await post("/api/spectrum", { radio: x.id, mine: x.tag !== "mine" }); spectrumLoad(); }));
   const approved = new Set(r.ssids);
   $("#spApMeta").textContent = approved.size ? "watching " + r.ssids.join(", ") : "no network approved yet";
   const names = [...new Set(r.aps.map((a) => a.ssid).filter((s) => s && !approved.has(s)))];
@@ -1667,7 +1681,7 @@ async function oracleLoad() {
   box.innerHTML = devs.map((d, i) => '<button class="hs-btn' + (d.ip === oracleSt.host ? " on" : "") + '" data-i="' + i + '">' + esc(d.hostname || d.ip) + '</button>').join("");
   box.querySelectorAll("button").forEach((b) => (b.onclick = () => { oracleSt.host = devs[+b.dataset.i].ip; oracleLoad(); }));
   if (!oracleSt.host) return;
-  const r = await get("/api/oracle?host=" + encodeURIComponent(oracleSt.host)); if (!r || !r.reach) return;
+  const r = await get("/api/oracle?by=operator&host=" + encodeURIComponent(oracleSt.host)); if (!r || !r.reach) return;
   const re = r.reach, names = r.names || {};
   $("#orMeta").textContent = r.edges + " conversations observed" + (r.demo ? " · sample" : "");
   const left = re.internal.map((e) => ({ e, peer: e.dst, out: true })).concat(re.inbound.map((e) => ({ e, peer: e.src, out: false })));

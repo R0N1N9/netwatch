@@ -24,11 +24,13 @@ import (
 	"github.com/r0n1n9/netwatch/internal/decoy"
 	"github.com/r0n1n9/netwatch/internal/hostwatch"
 	"github.com/r0n1n9/netwatch/internal/ledger"
+	"github.com/r0n1n9/netwatch/internal/light"
 	"github.com/r0n1n9/netwatch/internal/model"
 	"github.com/r0n1n9/netwatch/internal/oracle"
 	"github.com/r0n1n9/netwatch/internal/passive"
 	"github.com/r0n1n9/netwatch/internal/pulse"
 	"github.com/r0n1n9/netwatch/internal/quantum"
+	"github.com/r0n1n9/netwatch/internal/scenes"
 	"github.com/r0n1n9/netwatch/internal/sonar"
 	"github.com/r0n1n9/netwatch/internal/spectrum"
 	"github.com/r0n1n9/netwatch/internal/ward"
@@ -109,6 +111,9 @@ type modulesFile struct {
 	APs       []string       `json:"aps"`
 	SSIDs     []string       `json:"ssids"`
 	Mine      []string       `json:"mine"` // radios the operator said are theirs
+	Scenes    []scenes.Scene `json:"scenes"`
+	LightAddr string         `json:"lightAddr"`
+	Talking   []int          `json:"talking"` // ports of the talking decoys
 }
 
 func (s *Server) saveModules() {
@@ -121,8 +126,10 @@ func (s *Server) saveModules() {
 	f.Pulse = s.mod.pulse.Saved()
 	f.APs, f.SSIDs = s.mod.spec.Trusted()
 	f.Mine = s.mod.spec.Mine()
+	f.Scenes, f.Talking = s.ref.scenes.List(), s.ref.per.Ports()
 	s.mu.Lock()
 	f.PulseLock = s.mod.pulseLock
+	f.LightAddr = s.ref.lightAddr
 	s.mu.Unlock()
 	b, err := json.MarshalIndent(f, "", " ")
 	if err != nil {
@@ -160,8 +167,19 @@ func (s *Server) loadModules() {
 	for _, id := range f.Mine {
 		s.mod.spec.SetMine(id, true)
 	}
+	for _, sc := range f.Scenes {
+		s.ref.scenes.Put(sc)
+	}
+	for _, p := range f.Talking {
+		if err := s.ref.per.Open(p); err != nil {
+			s.emitAlert(model.Alert{Time: time.Now(), Severity: model.SevInfo, Kind: "decoy", Source: "decoy", Message: fmt.Sprintf("could not reopen the talking decoy on port %d: %v", p, err)})
+		}
+	}
 	s.mu.Lock()
 	s.mod.pulseLock = f.PulseLock
+	if light.ValidAddr(f.LightAddr) == nil {
+		s.ref.lightAddr = f.LightAddr
+	}
 	s.mu.Unlock()
 }
 
@@ -220,6 +238,7 @@ func (s *Server) handleLedgerNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e := s.mod.led.Append("note", "", "operator", req.Text, time.Now())
+	s.rehearsalAct("", "note")
 	writeJSON(w, map[string]any{"ok": true, "seq": e.Seq})
 }
 
@@ -290,9 +309,10 @@ func (s *Server) decoyView() map[string]any {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		trips := append([]decoy.Trip{}, s.mod.demoTrips...)
-		return map[string]any{"demo": true, "state": s.mod.demoDecoys, "trips": trips}
+		return map[string]any{"demo": true, "state": s.mod.demoDecoys, "trips": trips, "talking": s.ref.demoTalk, "visits": s.ref.demoVisits}
 	}
-	return map[string]any{"demo": false, "state": s.mod.dec.State(), "trips": s.mod.dec.Trips()}
+	talk, visits := s.talkView()
+	return map[string]any{"demo": false, "state": s.mod.dec.State(), "trips": s.mod.dec.Trips(), "talking": talk, "visits": visits}
 }
 
 func (s *Server) handleDecoy(w http.ResponseWriter, r *http.Request) {
@@ -311,7 +331,7 @@ func (s *Server) handleDecoy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fail := func(err error) { writeJSON(w, map[string]any{"ok": false, "error": err.Error()}) }
-	if (req.Action == "port-open" || req.Action == "port-close") && (req.Port < 1 || req.Port > 65535) {
+	if (strings.HasPrefix(req.Action, "port-") || strings.HasPrefix(req.Action, "talk-")) && (req.Port < 1 || req.Port > 65535) {
 		fail(fmt.Errorf("a port is a number from 1 to 65535"))
 		return
 	}
@@ -332,6 +352,15 @@ func (s *Server) handleDecoy(w http.ResponseWriter, r *http.Request) {
 	case "port-close":
 		s.mod.dec.ClosePort(req.Port)
 		s.logAction("decoy", fmt.Sprintf("closed decoy port %d", req.Port))
+	case "talk-open":
+		if err := s.ref.per.Open(req.Port); err != nil {
+			fail(err)
+			return
+		}
+		s.logAction("decoy", fmt.Sprintf("opened a talking decoy on port %d", req.Port))
+	case "talk-close":
+		s.ref.per.Close(req.Port)
+		s.logAction("decoy", fmt.Sprintf("closed the talking decoy on port %d", req.Port))
 	case "file-plant":
 		dir, err := decoyDirOK(req.Dir)
 		if err != nil {
@@ -407,6 +436,12 @@ func (s *Server) demoDecoyAction(action string, port int, name, path string) {
 		}
 	case "port-close":
 		d.Ports = removeInt(d.Ports, port)
+	case "talk-open":
+		if !containsInt(s.ref.demoTalk, port) && len(s.ref.demoTalk) < 8 {
+			s.ref.demoTalk = append(s.ref.demoTalk, port)
+		}
+	case "talk-close":
+		s.ref.demoTalk = removeInt(s.ref.demoTalk, port)
 	case "file-plant":
 		if name == "" {
 			name = "passwords-backup.txt"
@@ -508,7 +543,7 @@ func demoQuantum() []quantum.Finding {
 // ---- ORACLE ----
 
 // edges returns every conversation NetWatch has observed.
-func (s *Server) edges() []oracle.Edge {
+func (s *Server) observedEdges() []oracle.Edge {
 	if s.demo {
 		out := []oracle.Edge{
 			{Src: "192.168.1.50", Dst: "192.168.1.20", Port: 53, Bytes: 8200},
@@ -568,6 +603,15 @@ func (s *Server) handleOracle(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"demo": s.demo, "self": self, "edges": len(edges), "names": s.hostNames()}
 	if host := r.URL.Query().Get("host"); net.ParseIP(host) != nil {
 		out["reach"] = oracle.ReachOf(host, self, edges)
+		if r.URL.Query().Get("by") == "operator" {
+			s.rehearsalAct(host, "reach")
+		}
+	}
+	if r.URL.Query().Get("all") != "" { // every conversation, for the NETDIVE scene
+		if len(edges) > 300 {
+			edges = edges[:300]
+		}
+		out["list"] = edges
 	}
 	writeJSON(w, out)
 }
@@ -779,6 +823,7 @@ func (s *Server) evidence(a model.Alert) cortex.Evidence {
 		}
 	}
 	trips := s.mod.demoTrips
+	ev.Room = s.ref.roomFor[alertKey(a)]
 	s.mu.Unlock()
 
 	if !s.demo {
@@ -822,7 +867,7 @@ func (s *Server) handleCortex(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			c := cortex.Investigate(s.evidence(a))
-			queue = append(queue, row{wireAlert{a.Time.UnixMilli(), a.Severity.String(), a.Kind, a.Source, a.Message}, c.Verdict, c.Confidence, c.Score, c.Proposal.Action})
+			queue = append(queue, row{wireOf(a, s.isAcked(a)), c.Verdict, c.Confidence, c.Score, c.Proposal.Action})
 		}
 		writeJSON(w, map[string]any{"demo": s.demo, "queue": queue, "backend": s.cop.Name()})
 		return
@@ -841,8 +886,10 @@ func (s *Server) handleCortex(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		c := cortex.Investigate(s.evidence(a))
+		s.ack(a)
+		s.rehearsalAct(a.Source, "investigate")
 		out := map[string]any{"ok": true, "case": c, "backend": s.cop.Name(),
-			"alert": wireAlert{a.Time.UnixMilli(), a.Severity.String(), a.Kind, a.Source, a.Message}}
+			"alert": wireOf(a, s.isAcked(a))}
 		if req.Narrate {
 			out["narrative"] = s.narrate(r.Context(), a, c)
 		}
@@ -939,8 +986,12 @@ func (s *Server) handleSpectrum(w http.ResponseWriter, r *http.Request) {
 	if ssids == nil {
 		ssids = []string{}
 	}
-	writeJSON(w, map[string]any{"demo": s.demo, "radios": radios, "aps": aps, "deauth": deauth, "ssids": ssids,
-		"lingerMin": s.mod.spec.LingerAfter.Minutes(), "listening": s.SonarAddr})
+	out := map[string]any{"demo": s.demo, "radios": radios, "aps": aps, "deauth": deauth, "ssids": ssids,
+		"lingerMin": s.mod.spec.LingerAfter.Minutes(), "listening": s.SonarAddr}
+	if id := r.URL.Query().Get("hunt"); id != "" {
+		out["hunt"] = s.huntView(id)
+	}
+	writeJSON(w, out)
 }
 
 // ---- demo scene ----
@@ -1035,6 +1086,24 @@ func (s *Server) spectrumDemo(ctx context.Context) {
 			}
 			if p := math.Mod(el, 180); p > 90 && p < 93 {
 				rep.Deauth = 14
+			}
+			// While a radio is being hunted, the demo walks the wand towards it and away again.
+			s.mu.Lock()
+			hunt, hunting := s.ref.huntID, now.Sub(s.ref.huntAt) < 4*time.Second
+			s.mu.Unlock()
+			if hunting {
+				tri := math.Abs(math.Mod(el, 40)/20 - 1) // 1 → 0 → 1 every 40 s
+				near := jit(-36 - int(52*tri))
+				for i := range rep.WiFi {
+					if rep.WiFi[i].MAC == hunt {
+						rep.WiFi[i].RSSI = near
+					}
+				}
+				for i := range rep.BLE {
+					if rep.BLE[i].Addr == hunt {
+						rep.BLE[i].RSSI = near
+					}
+				}
 			}
 			s.mod.spec.Ingest(rep, s.knownMACs(), now)
 			if !trusted {
