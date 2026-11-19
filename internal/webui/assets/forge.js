@@ -8,20 +8,50 @@ function forgeRender(r) {
   st.push('<span class="m-verdict ' + (img.node && img.node.have ? "ok" : "bad") + '">' + (img.node && img.node.have ? "NODE FIRMWARE READY" : "NO NODE FIRMWARE IN THIS BUILD") + '</span>');
   st.push('<span class="m-verdict ' + (r.listening ? "ok" : "dim") + '">' + (r.listening ? "LISTENING ON " + esc(r.listening) : r.demo ? "DEMO: SIMULATED NODES" : "NOT LISTENING YET") + '</span>');
   if (!r.listening && !r.demo) st.push('<button class="hs-btn" id="fgListen">LISTEN FOR NODES NOW</button>');
-  $("#fgStatus").innerHTML = st.join("") + (r.tool ? "" : '<div class="m-dim">Install it once with <code>pipx install esptool</code> (or <code>sudo apt install esptool</code>), then reopen this panel.</div>');
+  $("#fgStatus").innerHTML = st.join("") + (r.tool ? "" : '<div class="m-dim">NetWatch looked on your PATH and in <code>~/.local/bin</code> and found no <code>esptool</code>. Install it with <code>pipx install esptool</code> (or <code>sudo apt install esptool</code>); this panel notices within a second, no restart needed.</div>');
   if ($("#fgListen")) $("#fgListen").onclick = async () => { await post("/api/forge", { listen: true }); forgeLoad(); };
   if (document.activeElement !== $("#fgSsid") && !$("#fgSsid").value && r.ssid) $("#fgSsid").value = r.ssid;
   $("#fgPass").placeholder = r.havePass ? "remembered until NetWatch stops" : "";
-  const busy = r.job && !r.job.done, box = $("#fgBoards");
-  box.innerHTML = r.boards.length ? r.boards.map((b, i) =>
-    '<div class="m-row' + (b.native ? " warn" : "") + '"><div class="m-row-top"><b>' + esc(b.port) + '</b><span class="m-dim">' + esc(b.chip) + '</span><span class="spacer"></span>' +
-    '<button class="hs-btn" data-k="node" data-i="' + i + '"' + (busy ? " disabled" : "") + '>MAKE IT A SENSOR NODE</button><button class="hs-btn" data-k="light" data-i="' + i + '"' + (busy ? " disabled" : "") + '>THREAT LIGHT</button><button class="hs-btn" data-k="node" data-s="1" data-i="' + i + '"' + (busy ? " disabled" : "") + ' title="keep the firmware, rewrite only the Wi-Fi details">SETTINGS ONLY</button></div>' +
-    (b.native ? '<div class="m-dim">This is the board\'s native USB port. It usually works, but if flashing cannot connect, move the cable to the port marked UART or COM.</div>' : "") + '</div>').join("")
-    : '<div class="m-dim">No board found. Plug one in by its UART port; if it still does not appear, try another cable (many USB-C cables carry power only).</div>';
-  box.querySelectorAll("button").forEach((b) => (b.onclick = () => forgeFlash(r.boards[+b.dataset.i].port, b.dataset.k, !!b.dataset.s)));
+  // The board list is only rebuilt when the boards change, so each button keeps its fill and can animate.
+  const box = $("#fgBoards"), sig = r.boards.map((b) => b.port + "|" + b.chip).join("\n") || "none";
+  if (r.job && !r.boards.some((b) => b.port === r.job.port)) forgeSt.stale = r.job.started; // that board has been unplugged: its result is history
+  if (sig !== forgeSt.sig) {
+    forgeSt.sig = sig;
+    const btn = (k, i, label, extra, title) => '<button class="fg-go' + (extra ? "" : " main") + '" data-k="' + k + '" data-i="' + i + '"' + (extra || "") + (title ? ' title="' + title + '"' : "") + ' data-label="' + label + '"><i></i><span>' + label + '</span></button>';
+    box.innerHTML = r.boards.length ? r.boards.map((b, i) =>
+      '<div class="m-row' + (b.native ? " warn" : "") + '"><div class="m-row-top"><b>' + esc(b.port) + '</b><span class="m-dim">' + esc(b.chip) + '</span><span class="spacer"></span>' +
+      btn("node", i, "MAKE IT A SENSOR NODE") + btn("light", i, "THREAT LIGHT", ' data-x="1"') + btn("node", i, "SETTINGS ONLY", ' data-s="1"', "keep the firmware, rewrite only the Wi-Fi details") + '</div>' +
+      (b.native ? '<div class="m-dim">This is the board\'s native USB port. It usually works, but if flashing cannot connect, move the cable to the port marked UART or COM.</div>' : "") + '</div>').join("")
+      : '<div class="m-dim">No board found. Plug one in by its UART port; if it still does not appear, try another cable (many USB-C cables carry power only).</div>';
+    box.querySelectorAll("button").forEach((b) => (b.onclick = () => { const bd = forgeSt.data.boards[+b.dataset.i]; if (bd) forgeFlash(bd.port, b.dataset.k, !!b.dataset.s); }));
+  }
+  forgeButtons(r);
   forgeProgress(r.job);
   const log = $("#fgLog");
   if (r.job) { log.hidden = false; log.textContent = r.job.lines.join("\n") + (r.job.done ? "\n" + (r.job.ok ? "✓ finished" : "✕ " + r.job.error) : "\n…"); log.className = "fg-log" + (r.job.done ? (r.job.ok ? " ok" : " bad") : ""); log.scrollTop = log.scrollHeight; }
+}
+// How full a board's button is, what colour, and what it says, for a flash job.
+function forgeFill(j) {
+  const reached = j.stage === "write" ? 8 + j.progress * 0.76 : j.stage === "verify" ? 87 : j.stage === "restart" ? 91 : 5;
+  if (!j.done) return { pct: reached, cls: "run", label: j.stage === "write" ? "WRITING " + j.progress + "%" : j.stage === "verify" ? "VERIFYING…" : j.stage === "restart" ? "RESTARTING…" : "CONNECTING…" };
+  if (!j.ok) return { pct: Math.max(10, reached), cls: "bad", label: "✕ FAILED — PRESS TO RETRY" };
+  if (j.kind !== "node") return { pct: 100, cls: "ok", label: "✓ THREAT LIGHT" };
+  if (j.online) return { pct: 100, cls: "ok", label: "✓ SENSOR NODE · " + j.online.toUpperCase() };
+  if (j.stalled) return { pct: 100, cls: "warn", label: "FLASHED · NOT REPORTING" };
+  return { pct: Math.min(99, 92 + j.waitSec), cls: "wait", label: "JOINING WI-FI… " + j.waitSec + " S" };
+}
+// Paint every board button: the one being flashed fills up; the rest wait.
+function forgeButtons(r) {
+  const j = r.job && r.job.started !== forgeSt.stale ? r.job : null, busy = !!(j && !j.done);
+  document.querySelectorAll("#fgBoards .fg-go").forEach((b) => {
+    const bd = r.boards[+b.dataset.i], mine = j && bd && j.port === bd.port && j.kind === b.dataset.k && !!j.settingsOnly === !!b.dataset.s;
+    const f = mine ? forgeFill(j) : { pct: 0, cls: "", label: b.dataset.label }, fill = b.firstChild;
+    b.className = "fg-go" + (b.dataset.s || b.dataset.x ? "" : " main") + (f.cls ? " " + f.cls : "");
+    fill.style.width = f.pct + "%";
+    fill.style.opacity = f.cls === "run" || f.cls === "wait" ? (0.12 + 0.6 * (f.pct / 100)).toFixed(2) : "";
+    b.lastChild.textContent = f.label;
+    b.disabled = busy;
+  });
 }
 // The steps of a flash, what each looks like when it is the current one, and the big result line.
 const FG_STEPS = [["connect", "CONNECT"], ["write", "WRITE"], ["verify", "VERIFY"], ["restart", "RESTART"], ["online", "ONLINE"]];
@@ -79,4 +109,4 @@ EXTRA_COMMANDS.push(async (t) => {
   if (/^(listen|listen for nodes)$/.test(t)) { const r = await post("/api/forge", { listen: true }); return r && r.ok ? "Listening for sensor nodes." : (r && r.error) || "I could not start listening."; }
   return null;
 });
-Object.assign(window.netwatch, { forgeSt, forgeOpen, forgeClose, forgeFlash, forgeLoad, forgeState });
+Object.assign(window.netwatch, { forgeSt, forgeOpen, forgeClose, forgeFlash, forgeLoad, forgeState, forgeFill, forgeRender });

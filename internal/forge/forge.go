@@ -80,11 +80,38 @@ func Boards() []Board {
 	return out
 }
 
+// toolDirs lists the places esptool is commonly installed that may not be on
+// PATH: pipx and pip put it in ~/.local/bin, which many shells do not include.
+func toolDirs() []string {
+	var homes []string
+	if h, err := os.UserHomeDir(); err == nil && h != "" {
+		homes = append(homes, h)
+	}
+	if u := os.Getenv("SUDO_USER"); u != "" { // started with sudo: the tool belongs to the person, not to root
+		homes = append(homes, filepath.Join("/home", u))
+	}
+	var dirs []string
+	for _, h := range homes {
+		dirs = append(dirs, filepath.Join(h, ".local", "bin"), filepath.Join(h, ".local", "share", "pipx", "venvs", "esptool", "bin"),
+			filepath.Join(h, ".local", "pipx", "venvs", "esptool", "bin"))
+	}
+	return append(dirs, "/usr/local/bin", "/usr/bin", "/opt/homebrew/bin")
+}
+
 // Tool finds esptool. It returns the command to run and a name to show.
 func Tool() ([]string, string) {
-	for _, name := range []string{"esptool", "esptool.py"} {
+	names := []string{"esptool", "esptool.py"}
+	for _, name := range names {
 		if p, err := exec.LookPath(name); err == nil {
 			return []string{p}, name
+		}
+	}
+	for _, dir := range toolDirs() {
+		for _, name := range names {
+			p := filepath.Join(dir, name)
+			if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+				return []string{p}, name + " (" + dir + ")"
+			}
 		}
 	}
 	if py, err := exec.LookPath("python3"); err == nil && exec.Command(py, "-c", "import esptool").Run() == nil {

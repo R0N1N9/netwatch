@@ -643,15 +643,35 @@ body.crit-glitch #app { animation: critglitch 0.9s steps(2) 1; }
 .fg-card .m-note { padding: 8px 0 0; } .fg-card .m-note b { color: var(--cyan); }
 .fg-run { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--c, var(--cyan)); background: color-mix(in srgb, var(--c, var(--cyan)) 7%, transparent); }
 .fg-run[hidden] { display: none; }
-.fg-run.run, .fg-run.wait { --c: var(--amber); } .fg-run.ok { --c: var(--green); animation: fgdone 0.9s ease-out 1; } .fg-run.bad { --c: var(--red); } .fg-run.warn { --c: var(--amber); }
+.fg-run.run, .fg-run.wait { --c: var(--cyan); } .fg-run.ok { --c: var(--green); animation: fgdone 0.9s ease-out 1; } .fg-run.bad { --c: var(--red); } .fg-run.warn { --c: var(--amber); }
 @keyframes fgdone { 0% { box-shadow: 0 0 0 0 rgba(29, 255, 161, 0.9); } 100% { box-shadow: 0 0 0 26px rgba(29, 255, 161, 0); } }
 .fg-steps { display: flex; align-items: center; gap: 8px; }
 .fg-steps i { flex: 1; height: 1px; background: rgba(94, 246, 255, 0.25); }
 .fg-step { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--dim); padding: 1px 8px; border: 1px solid rgba(94, 246, 255, 0.2); white-space: nowrap; }
 .fg-step.done { color: var(--green); border-color: var(--green); }
-.fg-step.now { color: #1a1204; background: var(--amber); border-color: var(--amber); animation: riskpulse 1s ease-in-out infinite; }
+.fg-step.now { color: #04121a; background: var(--cyan); border-color: var(--cyan); animation: riskpulse 1s ease-in-out infinite; }
+.fg-step.now.warn { color: #1a1204; background: var(--amber); border-color: var(--amber); animation: none; }
 .fg-step.now.bad { background: var(--red); border-color: var(--red); animation: none; }
 .fg-bar { flex: none; height: 12px; } .fg-bar i { background: var(--c, var(--cyan)); box-shadow: 0 0 12px var(--c, var(--cyan)); transition: width 0.3s; }
 .fg-banner { display: flex; flex-direction: column; gap: 2px; }
 .fg-banner b { font-size: 24px; font-weight: 700; letter-spacing: 0.08em; color: var(--c, var(--cyan)); text-shadow: 0 0 14px color-mix(in srgb, var(--c, var(--cyan)) 50%, transparent); }
 .fg-banner span { font-size: 14px; color: var(--fg); }
+
+/* ---------- node forge: the button is the progress bar ---------- */
+.fg-go { position: relative; overflow: hidden; cursor: pointer; font-family: var(--ui); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--dim); background: transparent;
+  border: 1px solid rgba(94, 246, 255, 0.3); padding: 4px 14px; min-width: 140px; white-space: nowrap; transition: color 0.4s, border-color 0.4s, box-shadow 0.4s; }
+.fg-go.main { min-width: 300px; }
+.fg-go:hover:not(:disabled) { color: var(--cyan-soft); border-color: var(--cyan); }
+.fg-go i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--fc, var(--green)); opacity: 0.25; transition: width 0.7s ease, opacity 0.6s, background 0.4s; }
+.fg-go span { position: relative; }
+.fg-go:disabled { cursor: default; }
+.fg-go:disabled:not(.run):not(.wait) { opacity: 0.3; }
+.fg-go.run, .fg-go.wait { color: var(--green); border-color: rgba(29, 255, 161, 0.55); }
+.fg-go.wait i { animation: fgbreathe 1.1s ease-in-out infinite; }
+@keyframes fgbreathe { 50% { filter: brightness(1.7); } }
+.fg-go.ok { color: #04121a; border-color: var(--green); box-shadow: 0 0 18px rgba(29, 255, 161, 0.55); }
+.fg-go.ok i { opacity: 1; }
+.fg-go.bad { --fc: var(--red); color: var(--red); border-color: var(--red); box-shadow: 0 0 14px rgba(255, 84, 73, 0.4); }
+.fg-go.bad i { opacity: 0.4; }
+.fg-go.warn { --fc: var(--amber); color: #1a1204; border-color: var(--amber); }
+.fg-go.warn i { opacity: 0.9; }

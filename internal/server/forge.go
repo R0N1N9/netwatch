@@ -33,6 +33,9 @@ type forgeJob struct {
 	OK    bool     `json:"ok"`
 	Error string   `json:"error"`
 
+	Started      int64 `json:"started"`      // unix ms; tells one flash from the next on the same port
+	SettingsOnly bool  `json:"settingsOnly"` // only the settings were written, not the firmware
+
 	Stage    string `json:"stage"`    // connect | write | verify | restart
 	Progress int    `json:"progress"` // percent written
 	// After a sensor node is flashed NetWatch waits for it to report in.
@@ -174,7 +177,7 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		fail(err.Error())
 		return
 	}
-	job := &forgeJob{Port: req.Flash, Kind: req.Kind, Lines: []string{}}
+	job := &forgeJob{Port: req.Flash, Kind: req.Kind, Lines: []string{}, Started: time.Now().UnixMilli(), SettingsOnly: req.SettingsOnly, Stage: "connect"}
 	add := func(line string) {
 		s.mu.Lock()
 		job.track(line)
@@ -207,8 +210,9 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 		go func() { // a pretend flash: nothing is run and nothing is written
 			for _, l := range []string{"demo mode: no board is touched", "esptool.py v4.8.1", "Serial port " + req.Flash, "Connecting....", "Chip is ESP32-S3 (QFN56) (revision v0.2)",
-				"Writing at 0x00010000... (25 %)", "Writing at 0x00080000... (70 %)", "Writing at 0x000f0000... (100 %)", "Hash of data verified.", "Hard resetting via RTS pin...", "Done (simulated). On a real board this takes about twenty seconds."} {
-				time.Sleep(350 * time.Millisecond)
+				"Writing at 0x00010000... (8 %)", "Writing at 0x00028000... (21 %)", "Writing at 0x00040000... (34 %)", "Writing at 0x00058000... (47 %)", "Writing at 0x00070000... (60 %)",
+				"Writing at 0x00088000... (73 %)", "Writing at 0x000a0000... (86 %)", "Writing at 0x000cc000... (100 %)", "Hash of data verified.", "Hard resetting via RTS pin...", "Done (simulated). On a real board this takes about twenty seconds."} {
+				time.Sleep(420 * time.Millisecond)
 				add(l)
 			}
 			finish(nil)

@@ -635,7 +635,9 @@ expect to find problems the first time, and tell me what the board logs.
 
 ![Node forge](screens/forge.jpg)
 
-You need `esptool` once (`pipx install esptool`, or `sudo apt install esptool`)
+You need `esptool` once (`pipx install esptool`, or `sudo apt install esptool`;
+NetWatch looks on your PATH and in `~/.local/bin` and pipx's own folder, so it
+does not matter whether pipx put it on the PATH)
 and your user in the `dialout` group (`sudo usermod -aG dialout $USER`, then
 log out and in).
 
@@ -647,7 +649,12 @@ log out and in).
 3. Type your Wi-Fi name and password (2.4 GHz only) and press **MAKE IT A
    SENSOR NODE**. If it cannot connect, hold the board's **BOOT** button, tap
    **RESET**, release BOOT and try again.
-4. Watch the panel. The steps light up in turn — **CONNECT → WRITE → VERIFY →
+4. Watch the button you pressed: it is the progress bar. It fills with green
+   as the board is written, pulses while the board joins your Wi-Fi, and turns
+   solid green reading **✓ SENSOR NODE · NODE-A1B2** when the node is online.
+   If the flash fails it stops where it was and turns red (**✕ FAILED — PRESS
+   TO RETRY**); if the board was written but never reports, it turns amber.
+   Below it, the steps light up in turn — **CONNECT → WRITE → VERIFY →
    RESTART → ONLINE** — with a bar that fills while it writes (about twenty
    seconds). Leave the cable in: the board restarts, joins your Wi-Fi, and
    when its first frames arrive the panel turns green, says **✓ NODE-A1B2 IS
@@ -827,6 +834,7 @@ can read your alerts and the SONAR view over your network.
 | SPECTRUM is empty | No sensor nodes are reporting, or their firmware predates access-point reporting. |
 | WARD stays on LEARNING | It needs 300 observations *and* 24 hours per device, and live capture. |
 | PULSE flags you | Your rhythm changed (another keyboard, one hand). FORGET PROFILE and enrol again. |
+| The panel says esptool is not installed, but it is | NetWatch could not find it on your PATH, in `~/.local/bin` or in pipx's folder. Run `pipx ensurepath`, open a new terminal and start NetWatch from it. |
 | ADD A NODE shows no board | The cable carries power only, the board is on a port NetWatch does not recognise, or you are not in the `dialout` group. |
 | Flashing fails to connect | Hold BOOT, tap RESET, release BOOT, and try again; or move the cable to the UART port. |
 | The panel says FLASHED, BUT IT HAS NOT REPORTED IN | The board's light blinking red means it cannot join the Wi-Fi: fix the details and press SETTINGS ONLY. Green but not reported means something between it and NetWatch is blocking UDP 5566. |

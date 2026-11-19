@@ -151,3 +151,21 @@ func TestStageReadsBothEsptoolDialects(t *testing.T) {
 		}
 	}
 }
+
+// pipx installs esptool into ~/.local/bin, which is often not on PATH.
+func TestToolIsFoundOffThePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir()) // an empty PATH: nothing to find there
+	t.Setenv("SUDO_USER", "")
+	if tool, _ := Tool(); tool != nil && strings.HasPrefix(tool[0], home) {
+		t.Fatalf("found a tool before one was installed: %v", tool)
+	}
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0o755)
+	os.WriteFile(filepath.Join(bin, "esptool"), []byte("#!/bin/sh\n"), 0o755)
+	tool, name := Tool()
+	if len(tool) != 1 || tool[0] != filepath.Join(bin, "esptool") || !strings.Contains(name, ".local/bin") {
+		t.Errorf("Tool() = %v, %q", tool, name)
+	}
+}
