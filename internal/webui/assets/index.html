@@ -29,13 +29,27 @@ MK.4</div>
   <header class="hud-top">
     <div class="brand"><span class="word"><span class="net">NET</span><span class="watch">WATCH</span></span><span class="bug">_</span></div>
     <nav class="tabs">
-      <div class="tab active" data-deck="netwatch">WATCHTOWER</div>
-      <div class="tab" data-deck="breach">BREACH</div>
-      <div class="tab" data-deck="killchain">KILL&nbsp;CHAIN</div>
-      <div class="tab" data-deck="attack">ATT&amp;CK</div>
-      <div class="tab" data-deck="grid">GRID</div>
-      <div class="tab" data-deck="ar">AR</div>
-      <div class="tab" data-deck="sonar">SONAR</div>
+      <div class="tab-row">
+        <span class="tab-label">DECKS</span>
+        <div class="tab active" data-deck="netwatch">WATCHTOWER</div>
+        <div class="tab" data-deck="breach">BREACH</div>
+        <div class="tab" data-deck="killchain">KILL&nbsp;CHAIN</div>
+        <div class="tab" data-deck="attack">ATT&amp;CK</div>
+        <div class="tab" data-deck="grid">GRID</div>
+        <div class="tab" data-deck="ar">AR</div>
+        <div class="tab" data-deck="sonar">SONAR</div>
+      </div>
+      <div class="tab-row">
+        <span class="tab-label">MODULES</span>
+        <div class="tab" data-deck="decoy">DECOY</div>
+        <div class="tab" data-deck="cortex">CORTEX</div>
+        <div class="tab" data-deck="spectrum">SPECTRUM</div>
+        <div class="tab" data-deck="oracle">ORACLE</div>
+        <div class="tab" data-deck="pulse">PULSE</div>
+        <div class="tab" data-deck="ward">WARD</div>
+        <div class="tab" data-deck="quantum">QUANTUM</div>
+        <div class="tab" data-deck="ledger">LEDGER</div>
+      </div>
     </nav>
     <div class="spacer"></div>
     <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">WATCH ACTIVE</span></div>
@@ -295,6 +309,205 @@ MK.4</div>
         <div class="bd-list" id="bdList"></div>
       </div>
     </div>
+  </main>
+
+  <!-- DECOY DECK (deception: honeyports, canary files, canary names) -->
+  <main class="deck mod" data-deck="decoy" style="--cols: 1fr 1.25fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--amber)">
+        <div class="panel-head"><span>DECOY // PLANTED</span><span class="meta" id="dcMeta">—</span></div>
+        <div class="panel-body">
+          <div class="m-group">
+            <div class="micro">HONEYPORTS · a port with no service behind it — any connection is someone probing</div>
+            <div class="field"><input id="dcPort" placeholder="port — e.g. 2323" inputmode="numeric" autocomplete="off" /><button class="btn" id="dcPortAdd">OPEN</button></div>
+            <div class="m-chips" id="dcPorts"></div>
+          </div>
+          <div class="m-group">
+            <div class="micro">CANARY FILES · a tempting file in your home folder — opening it raises the alarm</div>
+            <div class="field"><input id="dcFile" placeholder="file name — e.g. passwords-backup.txt" autocomplete="off" /><button class="btn" id="dcFileAdd">PLANT</button></div>
+            <div class="m-chips" id="dcFiles"></div>
+          </div>
+          <div class="m-group">
+            <div class="micro">CANARY NAMES · a host name nothing real uses — any lookup of it is flagged</div>
+            <div class="field"><input id="dcName" placeholder="host name — e.g. vault.corp.internal" autocomplete="off" /><button class="btn" id="dcNameAdd">ADD</button></div>
+            <div class="m-chips" id="dcNames"></div>
+          </div>
+          <div class="m-note" id="dcNote">Decoys have no legitimate use, so a touch is a high-confidence signal. Honeyports accept a connection, read up to 256 bytes and hang up; they never answer.</div>
+        </div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--red)">
+        <div class="panel-head"><span>TRIPS</span><span class="meta"><button class="hs-btn" id="dcDrill" title="touch every port and file decoy from this machine to prove the alarms work">RUN DRILL</button></span></div>
+        <div class="panel-body" id="dcTrips"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- CORTEX DECK (investigating agent) -->
+  <main class="deck mod" data-deck="cortex" style="--cols: 0.85fr 1.5fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>CORTEX // CASE QUEUE</span><span class="meta" id="cxMeta">—</span></div>
+        <div class="panel-body" id="cxQueue"></div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--magenta)">
+        <div class="panel-head"><span id="cxTitle">SELECT A CASE</span><span class="meta" id="cxBackend">reasoning: built-in</span></div>
+        <div class="panel-body" id="cxCase"><div class="empty">pick an alert — CORTEX gathers the evidence, argues both sides and proposes one action for you to approve</div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- SPECTRUM DECK (radio inventory) -->
+  <main class="deck mod" data-deck="spectrum" style="--cols: 1.05fr 1.15fr 0.9fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>SPECTRUM // SCOPE</span><span class="meta" id="spMeta">—</span></div>
+        <div class="sp-scope"><svg id="spScope" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet"></svg></div>
+        <div class="m-note">Closer to the centre is a stronger signal. Direction is not measured — each radio keeps a fixed bearing so you can follow it.</div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>RADIOS IN RANGE</span><span class="meta" id="spCount">—</span></div>
+        <div class="panel-body" id="spRadios"></div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--amber)">
+        <div class="panel-head"><span>ACCESS POINTS</span><span class="meta" id="spApMeta">—</span></div>
+        <div class="panel-body" id="spAps"></div>
+      </div>
+      <div class="panel" style="--accent: var(--red)">
+        <div class="panel-head"><span>DISCONNECT FRAMES</span><span class="meta">last 10 s</span></div>
+        <div class="sp-deauth"><b id="spDeauth">0</b><div class="m-bar"><i id="spDeauthBar"></i></div><span class="m-dim" id="spDeauthNote">quiet</span></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ORACLE DECK (reach map + what-if) -->
+  <main class="deck mod" data-deck="oracle" style="--cols: 1.5fr 0.9fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>ORACLE // REACH MAP</span><span class="meta" id="orMeta">—</span></div>
+        <div class="m-chips or-hosts" id="orHosts"></div>
+        <div class="or-map"><svg id="orMap" viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet"></svg></div>
+        <div class="m-note" id="orIso">Pick a host to see everything it has been seen talking to, and what cutting it off would actually stop.</div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>WHAT IF</span><span class="meta">replayed against observed traffic</span></div>
+        <div class="field"><input id="orRule" placeholder="rule — e.g. port 23" autocomplete="off" /><button class="btn" id="orRun">TEST</button></div>
+        <div class="m-chips" id="orExamples"></div>
+        <div class="panel-body" id="orResult"><div class="m-dim">Try a rule before you make it real: ORACLE shows which conversations it would have caught. Nothing is blocked from here.</div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- PULSE DECK (typing rhythm) -->
+  <main class="deck mod" data-deck="pulse" style="--cols: 1.4fr 0.9fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--red)">
+        <div class="panel-head"><span>PULSE // TYPING RHYTHM</span><span class="meta" id="plMeta">off</span></div>
+        <div class="pl-top">
+          <div class="pl-dial"><b id="plMatch">—</b><span class="micro" id="plMatchLabel">NOT ENROLLED</span></div>
+          <div class="pl-side">
+            <div class="micro" id="plProgLabel">ENROLMENT · 0 / 150 keystrokes</div>
+            <div class="m-bar"><i id="plProg"></i></div>
+            <canvas id="plTrace" width="900" height="150"></canvas>
+            <div class="micro cy">▚ bars: how long each key was held · line: gap to the next key</div>
+          </div>
+        </div>
+        <div class="field"><textarea id="plPad" rows="4" placeholder="Turn PULSE on, then type anything here — a few sentences. Only the timing between keys is measured, never which keys."></textarea></div>
+        <div class="btn-row">
+          <button class="btn" id="plToggle">PULSE OFF</button>
+          <button class="btn" id="plLock">LOCK ON MISMATCH: OFF</button>
+          <button class="btn danger" id="plReset">FORGET PROFILE</button>
+        </div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>WHAT IS MEASURED</span><span class="meta">stays on this machine</span></div>
+        <div class="panel-body m-prose">
+          <p><b>Measured:</b> how long each key is held and the gap before the next one, in milliseconds, while this console has focus and PULSE is on.</p>
+          <p><b>Never recorded:</b> which keys you press, or anything typed outside this page. The browser pairs a press with its release and sends only the two numbers.</p>
+          <p><b>Kept:</b> four numbers — your typical hold time and gap, and how much each varies. They are saved in <code>modules.json</code> so the profile survives a restart. FORGET PROFILE deletes them.</p>
+          <p><b>What happens on a mismatch:</b> two consecutive 50-key windows that do not look like the enrolled rhythm raise a critical alert and, if you turn it on, lock the screen.</p>
+          <p class="m-dim">This is a tripwire for someone else sitting down at an unlocked machine, not proof of identity. Being tired, typing one-handed or using another keyboard all change your rhythm.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- WARD DECK (learned device behaviour) -->
+  <main class="deck mod" data-deck="ward" style="--cols: 1.25fr 1fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>WARD // LEARNED PROFILES</span><span class="meta" id="wdMeta">—</span></div>
+        <div class="panel-body" id="wdProfiles"></div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--amber)">
+        <div class="panel-head"><span>STEPS OUTSIDE THE PROFILE</span><span class="meta" id="wdDevMeta">—</span></div>
+        <div class="panel-body" id="wdDevs"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- QUANTUM DECK (cryptography inventory) -->
+  <main class="deck mod" data-deck="quantum" style="--cols: 1fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--magenta)">
+        <div class="panel-head"><span>QUANTUM // CRYPTOGRAPHY INVENTORY</span><span class="meta" id="qtMeta">—</span></div>
+        <div class="qt-top">
+          <div class="qt-stat"><b id="qtTotal">0</b><span class="micro cy">SERVICES</span></div>
+          <div class="qt-stat"><b id="qtPQ" class="ok">0</b><span class="micro grn">POST-QUANTUM READY</span></div>
+          <div class="qt-stat"><b id="qtHNDL" class="bad">0</b><span class="micro">HARVEST-NOW, DECRYPT-LATER EXPOSED</span></div>
+          <div class="qt-stat"><b id="qtOther" class="warn">0</b><span class="micro">OTHER WEAKNESSES</span></div>
+          <div class="spacer"></div>
+          <button class="btn" id="qtScan">⌁ INVENTORY THE NETWORK</button>
+        </div>
+        <div class="panel-body" id="qtList"></div>
+        <div class="m-note">Reads what each TLS and SSH service on your own network offers in the handshake — nothing is logged in to. A service is "ready" when it accepts a hybrid post-quantum key exchange (ML-KEM); the rest can be recorded today and decrypted once a large quantum computer exists.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- LEDGER DECK (tamper-evident log + incident report) -->
+  <main class="deck mod" data-deck="ledger" style="--cols: 1.3fr 1fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--amber)">
+        <div class="panel-head"><span>LEDGER // HASH CHAIN</span><span class="meta" id="lgMeta">—</span></div>
+        <div class="lg-top">
+          <span class="lg-seal" id="lgSeal">—</span>
+          <span class="lg-head">HEAD <code id="lgHead">—</code></span>
+          <div class="spacer"></div>
+          <button class="hs-btn" id="lgVerify" title="re-read the file on disk and check every link">VERIFY</button>
+        </div>
+        <div class="panel-body" id="lgList"></div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>ADD A NOTE</span><span class="meta">goes into the chain</span></div>
+        <div class="field"><input id="lgNote" placeholder="what you saw or did — e.g. unplugged the camera" autocomplete="off" maxlength="500" /><button class="btn" id="lgNoteAdd">RECORD</button></div>
+      </div>
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>INCIDENT REPORT</span><span class="meta" id="lgRepMeta">from the chain</span></div>
+        <div class="btn-row">
+          <button class="btn" data-mins="60">LAST HOUR</button>
+          <button class="btn" data-mins="1440">LAST 24 H</button>
+          <button class="btn" data-mins="0">EVERYTHING</button>
+          <button class="btn" id="lgCopy" disabled>COPY</button>
+        </div>
+        <div class="panel-body"><pre class="lg-report" id="lgReport">Pick a span. The report is written from the chain's entries, so it cannot say anything the log does not.</pre></div>
+      </div>
+    </section>
   </main>
 
   <div class="scrub" id="scrub">

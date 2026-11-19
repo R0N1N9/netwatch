@@ -9,6 +9,12 @@
 // overhears on the channel, so NetWatch can place network hosts on the map:
 //   {"node":"node-A","seen":[{"mac":"aa:bb:cc:dd:ee:ff","rssi":-52}, ...]}
 //
+// For the SPECTRUM deck it also reports, once a second, the access points it
+// hears announcing themselves on its channel and how many disconnect
+// (deauthentication / disassociation) frames went past:
+//   {"node":"node-A","deauth":0,"aps":[{"ssid":"home","bssid":"aa:..","rssi":-41}]}
+// It only hears its own Wi-Fi channel, and it does not scan Bluetooth.
+//
 // If the access point is an 802.11mc (FTM) responder, the node also measures
 // its distance to it every couple of seconds and includes it as dist_cm.
 //
@@ -90,11 +96,62 @@ typedef struct {
 static seen_t s_seen[MAX_SEEN];
 static portMUX_TYPE s_seen_lock = portMUX_INITIALIZER_UNLOCKED;
 
+// ---- access points and disconnect frames, for the SPECTRUM deck ----
+#define MAX_APS 8
+typedef struct {
+    uint8_t bssid[6];
+    char ssid[33];
+    int8_t rssi;
+    int64_t at_us;
+} ap_t;
+static ap_t s_aps[MAX_APS];
+static uint32_t s_deauth;
+
+// Looks at one management frame: counts disconnects, remembers beacons.
+static void note_mgmt(const wifi_promiscuous_pkt_t *pkt, int64_t now) {
+    const uint8_t *p = pkt->payload;
+    int len = (int)pkt->rx_ctrl.sig_len - 4; // without the frame check sequence
+    uint8_t subtype = p[0] & 0xFC;
+    if (subtype == 0xC0 || subtype == 0xA0) { // deauthentication, disassociation
+        portENTER_CRITICAL(&s_seen_lock);
+        s_deauth++;
+        portEXIT_CRITICAL(&s_seen_lock);
+        return;
+    }
+    // Beacon: 24-byte header, 12 bytes of fixed fields, then tagged parameters.
+    // Tag 0 is the network name.
+    if (subtype != 0x80 || len < 38 || p[36] != 0 || p[37] > 32 || 38 + p[37] > len) {
+        return;
+    }
+    const uint8_t *bssid = p + 16;
+    char ssid[33];
+    int n = p[37];
+    for (int i = 0; i < n; i++) { // the name is untrusted bytes: keep plain printable characters only
+        uint8_t c = p[38 + i];
+        ssid[i] = (c >= 0x20 && c < 0x7f && c != '"' && c != '\\') ? (char)c : '?';
+    }
+    ssid[n] = 0;
+    portENTER_CRITICAL(&s_seen_lock);
+    int slot = -1, oldest = 0;
+    for (int i = 0; i < MAX_APS; i++) {
+        if (memcmp(s_aps[i].bssid, bssid, 6) == 0) { slot = i; break; }
+        if (s_aps[i].at_us < s_aps[oldest].at_us) { oldest = i; }
+    }
+    if (slot < 0) { slot = oldest; memcpy(s_aps[slot].bssid, bssid, 6); }
+    memcpy(s_aps[slot].ssid, ssid, sizeof(ssid));
+    s_aps[slot].rssi = pkt->rx_ctrl.rssi;
+    s_aps[slot].at_us = now;
+    portEXIT_CRITICAL(&s_seen_lock);
+}
+
 // Runs in the Wi-Fi task for every frame heard on the channel.
 static void sniff_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     if (pkt->rx_ctrl.sig_len < 24) {
         return;
+    }
+    if (type == WIFI_PKT_MGMT) {
+        note_mgmt(pkt, esp_timer_get_time());
     }
     const uint8_t *tx = pkt->payload + 10; // 802.11 address 2: the transmitter
     if (memcmp(tx, s_ap_bssid, 6) == 0 || (tx[0] & 0x01)) {
@@ -120,10 +177,14 @@ static void seen_task(void *arg) {
     inet_pton(AF_INET, NETWATCH_HOST, &dst.sin_addr);
     static char json[1400];
     static seen_t copy[MAX_SEEN];
+    static ap_t aps[MAX_APS];
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         portENTER_CRITICAL(&s_seen_lock);
         memcpy(copy, s_seen, sizeof(copy));
+        memcpy(aps, s_aps, sizeof(aps));
+        uint32_t deauth = s_deauth;
+        s_deauth = 0;
         portEXIT_CRITICAL(&s_seen_lock);
         int64_t now = esp_timer_get_time();
         int len = snprintf(json, sizeof(json), "{\"node\":\"%s\",\"seen\":[", NODE_NAME), n = 0;
@@ -137,6 +198,22 @@ static void seen_task(void *arg) {
         }
         len += snprintf(json + len, sizeof(json) - len, "]}");
         if (n > 0) {
+            sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
+        }
+
+        // access points and disconnect frames go in their own small datagram
+        len = snprintf(json, sizeof(json), "{\"node\":\"%s\",\"deauth\":%u,\"aps\":[", NODE_NAME, (unsigned)deauth);
+        n = 0;
+        for (int i = 0; i < MAX_APS && len < (int)sizeof(json) - 96; i++) {
+            if (aps[i].at_us == 0 || now - aps[i].at_us > 10000000) {
+                continue;
+            }
+            const uint8_t *m = aps[i].bssid;
+            len += snprintf(json + len, sizeof(json) - len, "%s{\"ssid\":\"%s\",\"bssid\":\"%02x:%02x:%02x:%02x:%02x:%02x\",\"rssi\":%d}",
+                            n++ ? "," : "", aps[i].ssid, m[0], m[1], m[2], m[3], m[4], m[5], aps[i].rssi);
+        }
+        len += snprintf(json + len, sizeof(json) - len, "]}");
+        if (n > 0 || deauth > 0) {
             sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
         }
     }

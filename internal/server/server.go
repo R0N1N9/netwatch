@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -86,6 +87,8 @@ type Server struct {
 	sleep   *sonar.SleepLog
 	moves   map[string]int // movement onsets this minute, per node
 	surface hostwatch.SurfaceStore
+
+	mod modules // the module decks (modules.go)
 }
 
 type histEntry struct {
@@ -119,6 +122,7 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 	s.mon = passive.NewMonitor(info.Iface, info.IP, s.emitAlert)
 	s.son.OnMotion = s.onPresence
 	s.son.OnFall = s.onFall
+	s.initModules()
 	return s
 }
 
@@ -127,6 +131,7 @@ func (s *Server) CopilotName() string { return s.cop.Name() }
 
 // emitAlert records an alert (from the passive monitor) and pushes to clients.
 func (s *Server) emitAlert(a model.Alert) {
+	s.logAlert(a)
 	s.mu.Lock()
 	s.alerts = append([]model.Alert{a}, s.alerts...)
 	if len(s.alerts) > 200 {
@@ -181,6 +186,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/kc/drill", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "lines": drill.Lines(drill.Run())})
 	})
+	s.moduleRoutes(mux)
 	return mux
 }
 
@@ -202,6 +208,9 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 	if s.demo {
 		s.loadDemo()
 		s.demoRoom() // after the sample hosts exist, so yesterday's snapshot includes them
+	}
+	s.startModules(ctx)
+	if s.demo {
 		go s.sonarDemo(ctx)
 	} else {
 		if s.SonarAddr != "" {
@@ -277,6 +286,7 @@ func (s *Server) doSweep(ctx context.Context) {
 		s.devices = devices
 		newAlerts := s.engine.Observe(devices, trusted)
 		for _, a := range newAlerts {
+			s.logAlert(a)
 			s.alerts = append([]model.Alert{a}, s.alerts...)
 		}
 		if len(s.alerts) > 200 {
@@ -386,6 +396,11 @@ func (s *Server) handleTrust(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mu.Unlock()
+	if req.Trusted {
+		s.logAction(req.IP, "marked "+req.IP+" trusted")
+	} else {
+		s.logAction(req.IP, "removed trust from "+req.IP)
+	}
 	s.broadcast()
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -409,22 +424,27 @@ func (s *Server) handleBlackwall(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Action {
 	case "quarantine":
-		err = s.wall.Quarantine(req.IP)
+		if !s.demo { // the demo never touches the firewall
+			err = s.wall.Quarantine(req.IP)
+		}
 		if err == nil {
+			a := model.Alert{Time: time.Now(), Severity: model.SevWarn, Kind: "blackwall",
+				Source: req.IP, Message: "BLACKWALL engaged — " + req.IP + " quarantined at the firewall"}
 			s.mu.Lock()
 			s.quarantined[req.IP] = true
-			s.alerts = append([]model.Alert{{
-				Time: time.Now(), Severity: model.SevWarn, Kind: "blackwall",
-				Source: req.IP, Message: "BLACKWALL engaged — " + req.IP + " quarantined at the firewall",
-			}}, s.alerts...)
+			s.alerts = append([]model.Alert{a}, s.alerts...)
 			s.mu.Unlock()
+			s.logAction(req.IP, "quarantined "+req.IP+" at the firewall")
 		}
 	case "release":
-		err = s.wall.Release(req.IP)
+		if !s.demo {
+			err = s.wall.Release(req.IP)
+		}
 		if err == nil {
 			s.mu.Lock()
 			delete(s.quarantined, req.IP)
 			s.mu.Unlock()
+			s.logAction(req.IP, "released "+req.IP+" from quarantine")
 		}
 	default:
 		err = fmt.Errorf("unknown action")
@@ -831,11 +851,29 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return false
 	}
+	if !sameOrigin(r) {
+		http.Error(w, "cross-site request refused", http.StatusForbidden)
+		return false
+	}
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": "bad request"})
 		return false
 	}
 	return true
+}
+
+// sameOrigin refuses requests another web page made the browser send: the
+// console's actions (firewall, decoys, trust) must only answer the console.
+func sameOrigin(r *http.Request) bool {
+	if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" || site == "same-site" {
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // not a browser, or a same-origin request from an old one
+	}
+	u, err := url.Parse(origin)
+	return err == nil && u.Host == r.Host
 }
 
 func auditHandler(fn func() []string) http.HandlerFunc {

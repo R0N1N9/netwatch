@@ -54,6 +54,21 @@ sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
 | **AR** | Host tags over your camera feed. |
 | **SONAR** | Presence sensing from ESP32-S3 Wi-Fi nodes: a 3D room view, tripwires, located hosts, breathing, and braindance recordings you can replay. |
 
+The second row of tabs holds the modules:
+
+| Module | What it is |
+|---|---|
+| **DECOY** | Honeyports, canary files and canary host names: things with no legitimate use, so any touch is an alarm. |
+| **CORTEX** | Investigates an alert: gathers the evidence, argues for and against a threat, and proposes one action that waits for your approval. |
+| **SPECTRUM** | Every Wi-Fi and Bluetooth radio the sensor nodes hear; flags strangers that linger, tracker tags, look-alike access points and disconnect floods. |
+| **ORACLE** | What each host really talks to, what a quarantine would stop, and a what-if box for testing a rule against observed traffic. |
+| **PULSE** | Learns your typing rhythm (timing only, never the keys) and alerts when someone else is at the keyboard. |
+| **WARD** | Learns each device's normal destinations, ports and hours, then flags steps outside them. |
+| **QUANTUM** | Inventories the TLS and SSH on your own network and shows what is exposed to record-now, decrypt-later. |
+| **LEDGER** | A hash-chained record of every alert and action, with a verify button and an incident report. |
+
+![CORTEX](docs/screens/cortex.jpg)
+
 ![SONAR](docs/screens/sonar-3d.jpg)
 
 ## How proven is it?
@@ -63,11 +78,15 @@ Much of NetWatch runs ahead of what has been tested on real hardware. The
 tested only on simulated data, or written but never run. In short:
 
 - The network console, firewall quarantine, host audits, process lineage and
-  the interface have run on real data.
+  the interface have run on real data. So have the honeyports, canary files
+  and the LEDGER's hash chain, on this machine only.
 - Everything on SONAR has only seen the built-in simulator, and the ESP32-S3
   firmware has not been compiled or flashed yet.
 - The passive traffic analyzers, the local-model Copilot, voice, spatial audio,
   USB watch and the proximity lock are tested with synthetic input only.
+- CORTEX, SPECTRUM, ORACLE, PULSE, WARD and QUANTUM have only seen sample or
+  scripted input: PULSE has never been tried on a human typist, and nothing
+  yet sends SPECTRUM any Bluetooth data.
 
 ## Privacy
 
@@ -75,4 +94,5 @@ Nothing leaves your machine unless you turn on voice in Chrome (speech goes to
 Google) or point the Copilot at an Ollama host that is not yours. SONAR
 recordings and the respiration log describe when people moved and breathed in
 your space; they are stored locally, and the [guide](docs/GUIDE.md#files-and-privacy)
-says where.
+says where. PULSE keeps four numbers describing your typing rhythm and never
+records which keys you press.

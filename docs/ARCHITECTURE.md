@@ -20,7 +20,7 @@ step.
 | Package | Responsibility |
 |---|---|
 | `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
-| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring. |
+| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks. |
 | `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, vendored three.js and fonts). |
 | `model` | Shared types: `Device`, `Alert`, `Severity`. |
 | `netif` | Finds the interface, subnet and gateway. |
@@ -40,6 +40,14 @@ step.
 | `hostwatch` | USB watch, typing-rate rule, daily surface snapshots and diff, screen lock. |
 | `sysmon` | CPU and memory of this machine. |
 | `drill` | The detector fire drill. |
+| `decoy` | Honeyports, canary files (inotify) and canary names; calls back on every touch. |
+| `cortex` | Turns the evidence around one alert into weighted reasoning steps, for/against arguments, a verdict and one proposed action. Pure; it never acts. |
+| `spectrum` | Inventory of Wi-Fi and Bluetooth radios and access points from node reports; lingering radios, tracker tags, look-alike access points, disconnect floods. Does not import `sonar` (`sonar` imports it for the frame fields). |
+| `oracle` | A host's reach over observed conversations, and what-if rules evaluated against them. |
+| `ward` | Per-device learned profile (destinations, ports, hours, volume, TLS fingerprint) and deviations from it. |
+| `pulse` | Typing-rhythm profile from key hold and gap timings (median and spread), window scoring, mismatch callback. |
+| `quantum` | TLS and SSH inventory of private addresses, including whether a hybrid post-quantum key exchange is accepted. |
+| `ledger` | Append-only hash chain of alerts, actions and notes; verification and the incident report text. |
 | `tui`, `theme` | The terminal view and shared colours. |
 
 `firmware/esp32s3-csi` is the ESP-IDF project for the sensor nodes.
@@ -68,6 +76,17 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/braindance`, `/save`, `/rec`, `/clip`, `/delete` | List, save, record, load and delete clips. |
 | `/api/usb`, `/api/surface`, `/api/drill`, `/api/lock` | USB list, surface diff, fire drill, lock the screen. |
 | `/api/kc/*` | The same audits as text lines for the Kill Chain and ATT&CK ops consoles. |
+| `/api/decoy` | `GET` planted decoys and trips; `POST` `port-open`, `port-close`, `file-plant`, `file-remove`, `name-add`, `name-remove`, `test`. |
+| `/api/cortex` | `GET` the triaged queue; `POST` one alert (`ts`, `source`, `kind`, optional `narrate`) for its full case. |
+| `/api/spectrum` | `GET` radios, access points and the disconnect count; `POST` approve access points (`ssids`), clear approvals, or mark a radio as mine. |
+| `/api/oracle`, `/api/oracle/whatif` | A host's reach (`?host=`); evaluate a rule. |
+| `/api/pulse` | `GET` state; `POST` key timings (`strokes`), `reset`, or `lock`. |
+| `/api/ward` | `GET` profiles and deviations; `POST` `accept` or `relearn`. |
+| `/api/quantum` | `GET` findings; `POST` starts an inventory. |
+| `/api/ledger`, `/note`, `/report` | The chain (`?recheck=1` re-reads the file), add a note, the incident report (`?mins=`). |
+
+Every `POST` handled by `decode()` is refused with 403 if the browser marks it
+cross-site or its `Origin` is not the console's own address.
 
 ## Background loops
 
@@ -79,6 +98,9 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | Minute | 60 s | Appends to the respiration log. |
 | Daily | start-up + 24 h | Surface diff and fire drill, each reported as an alert. |
 | USB watch | 2 s | New-device alerts. |
+| WARD | 30 s | Feeds each known device's active conversations into its profile; saves `modules.json` every fifth minute. Not started in demo mode. |
+| Honeyport accept, canary-file watch | event-driven | One goroutine per decoy; each touch becomes an alert (at most one a minute per source and decoy). |
+| Demo radio scene | 1 s | Demo mode only: feeds SPECTRUM a simulated set of radios. |
 | System monitor | 1 s | CPU sample. |
 
 ## Adding a feature
@@ -106,3 +128,8 @@ Reads are `GET`; actions are `POST` with a JSON body.
   artifacts and planning briefs.
 - Sensing features that record people default to off or disarmed, and store
   only on the local machine.
+- Every alert goes through `emitAlert` (or calls `logAlert`), and every
+  operator action calls `logAction`, so the LEDGER stays complete. A new
+  action endpoint should do the same.
+- Module state that must survive a restart goes in `modules.json` through
+  `saveModules` / `loadModules`; demo mode never reads or writes it.

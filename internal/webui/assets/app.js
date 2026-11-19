@@ -28,6 +28,7 @@ function selectDeck(name) {
   if (name === "ar") renderARTags();
   if (name === "sonar") { bdRefresh(); setTimeout(sleepPoll, 300); }
   if (name === "sonar") setTimeout(() => { if (!sonarMode) setSonarMode(sonarPref()); sonarResize(); }, 40);
+  if (MOD_DECKS[name]) setTimeout(MOD_DECKS[name], 30);
 }
 function currentDeck() { return document.querySelector(".tab.active").dataset.deck; }
 
@@ -224,7 +225,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 function cycleDeck() {
-  const order = ["netwatch", "breach", "killchain", "attack", "grid", "ar", "sonar"];
+  const order = ["netwatch", "breach", "killchain", "attack", "grid", "ar", "sonar", "decoy", "cortex", "spectrum", "oracle", "pulse", "ward", "quantum", "ledger"];
   const cur = document.querySelector(".tab.active").dataset.deck;
   selectDeck(order[(order.indexOf(cur) + 1) % order.length]);
 }
@@ -1410,7 +1411,7 @@ async function setProx(on) {
 $("#proxBtn").addEventListener("click", () => setProx(!prox.on));
 
 // ================= COMMANDS: typed or spoken =================
-const DECK_WORDS = { watchtower: "netwatch", watch: "netwatch", breach: "breach", "kill chain": "killchain", killchain: "killchain", "attack": "attack", "att&ck": "attack", mitre: "attack", grid: "grid", globe: "grid", ar: "ar", optic: "ar", sonar: "sonar" };
+const DECK_WORDS = { watchtower: "netwatch", watch: "netwatch", breach: "breach", "kill chain": "killchain", killchain: "killchain", "attack": "attack", "att&ck": "attack", mitre: "attack", grid: "grid", globe: "grid", ar: "ar", optic: "ar", sonar: "sonar", decoy: "decoy", decoys: "decoy", cortex: "cortex", cases: "cortex", spectrum: "spectrum", radios: "spectrum", oracle: "oracle", pulse: "pulse", ward: "ward", quantum: "quantum", ledger: "ledger" };
 let pendingConfirm = null;
 function findDevice(words) {
   const w = words.toLowerCase().replace(/^the\s+/, "").trim(); if (!w) return null;
@@ -1452,6 +1453,18 @@ async function runCommand(text) {
   if (/^(proximity|prox) lock (on|off)$/.test(t)) return await setProx(/on$/.test(t));
   if (/^(how many people|who is (home|here)|anyone (home|here))/.test(t)) { await sonarPoll(); const r = await get("/api/sonar"); if (!r || !r.nodes.length) return "SONAR has no nodes reporting."; const still = r.nodes.filter((n) => n.breath).length; return "About " + r.people + " present" + (still ? ", " + still + " of them still and breathing" : "") + ". " + r.nodes.filter((n) => n.state === "motion").length + " links disturbed."; }
   if (/^(sleep|respiration) (report|log)$/.test(t)) { const r = await get("/api/sonar/sleep"); if (!r || r.series.length < 2) return "There is no respiration data yet."; const b = r.series.filter((p) => p.b).map((p) => p.b); return "On " + r.node + ": " + ((r.series[r.series.length - 1].t - r.series[0].t) / 3600000).toFixed(1) + " hours logged, average " + (b.reduce((a, v) => a + v, 0) / Math.max(1, b.length)).toFixed(1) + " breaths a minute, " + r.series.filter((p) => p.m).length + " restless minutes."; }
+  if ((m = t.match(/^(?:investigate|why)(?:\s+(.+))?$/))) { await cortexLoad(); const d = m[1] ? findDevice(m[1]) : null; const a = cortex.queue.find((x) => (d ? x.source === d.ip : true)); if (!a) return "There is no alert to investigate" + (d ? " for " + (d.hostname || d.ip) : "") + "."; selectDeck("cortex"); const r = await cortexOpen(a); return r ? "Verdict: " + r.case.verdict + ", " + r.case.confidence + " percent sure. Proposed: " + r.case.proposal.action + " " + r.case.proposal.target + ". Say approve or dismiss." : "I could not open that case."; }
+  if (/^(approve|dismiss)$/.test(t) && currentDeck() === "cortex") return await cortexDecide(t === "approve");
+  if ((m = t.match(/^(?:open|plant) (?:a )?(?:honeyport|decoy port)(?: on)?(?: port)? (\d+)$/))) { const r = await decoyAct({ action: "port-open", port: +m[1] }); return r && r.ok ? "Decoy port " + m[1] + " is listening. " + (r.note || "") : "Could not open it: " + ((r && r.error) || "backend unreachable"); }
+  if (/^(decoy drill|test (the )?decoys)$/.test(t)) { const r = await decoyAct({ action: "test" }); return r && r.ok ? (r.note || "Drill sent.") : "The drill did not run."; }
+  if (/^(quantum scan|inventory (the )?(crypto|cryptography|encryption))$/.test(t)) { selectDeck("quantum"); const r = await quantumScan(); return r && r.ok ? "Reading the TLS and SSH handshakes on your network." : "An inventory is already running."; }
+  if (/^verify( the)? (ledger|chain|log)$/.test(t)) { const r = await ledgerLoad(true); return r ? (r.intact ? "The chain is intact: " + r.len + " entries." : "The chain is broken at entry " + r.bad + ".") + (r.disk ? " " + r.disk + "." : "") : "I could not read the ledger."; }
+  if ((m = t.match(/^(?:note|log)[: ]\s*(.+)$/))) { const r = await post("/api/ledger/note", { text: text.replace(/^\s*\S+[: ]\s*/, "") }); return r && r.ok ? "Recorded as entry " + r.seq + "." : "I could not record that."; }
+  if ((m = t.match(/^(?:incident )?report(?: (?:for|of))?(?: the)?(?: last)?(?: (hour|day|24 hours))?$/))) { const r = await ledgerReport(m[1] === "hour" ? 60 : m[1] ? 1440 : 0); return r ? r.report : "I could not write the report."; }
+  if ((m = t.match(/^(?:reach|who does|what does)\s+(.+?)(?:\s+talk to)?$/))) { const d = findDevice(m[1]); if (!d) return "No host matches " + m[1] + "."; oracleSt.host = d.ip; selectDeck("oracle"); const r = await get("/api/oracle?host=" + encodeURIComponent(d.ip)); return r && r.reach ? (d.hostname || d.ip) + " talks to " + r.reach.internal.length + " hosts inside and " + r.reach.external.length + " outside. " + r.reach.isolating : "I have not seen it talk yet."; }
+  if ((m = t.match(/^what if\s+(.+)$/))) { selectDeck("oracle"); const r = await oracleWhatIf(m[1]); return r && r.ok ? "That rule would have matched " + r.result.matches.length + " of " + r.result.of + " conversations from " + r.result.hosts.length + " hosts." : "I do not understand that rule. Try: port 23, unnamed, fanout > 3, bytes > 1000000."; }
+  if ((m = t.match(/^pulse (on|off)$/))) return setPulse(m[1] === "on");
+  if (/^(radios|what radios|who is in range|spectrum)$/.test(t)) { const r = await get("/api/spectrum"); if (!r) return "I could not read the spectrum."; const fl = r.radios.filter((x) => x.tag === "lingering" || x.tag === "tracker?"); return r.radios.length + " radios in range, " + fl.length + " flagged" + (fl.length ? ": " + fl.map((x) => (x.name || x.id) + " (" + x.tag + ")").join(", ") : "") + "."; }
   if (/^(audio on|unmute)$/.test(t)) { setAudio(true); return "Spatial audio on."; }
   if (/^(audio off|mute)$/.test(t)) { setAudio(false); return "Spatial audio off."; }
   return null;
@@ -1512,8 +1525,332 @@ function onNewAlerts(snap) {
   lastAlertTs = Math.max(lastAlertTs, newest);
 }
 
+// ---------- module decks: DECOY · CORTEX · SPECTRUM · ORACLE · PULSE · WARD · QUANTUM · LEDGER ----------
+// Everything that came off the network goes through esc() before it becomes HTML.
+const ago = (ts) => { const s = Math.max(0, (Date.now() - ts) / 1000); return s < 90 ? Math.round(s) + "s ago" : s < 5400 ? Math.round(s / 60) + "m ago" : s < 129600 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago"; };
+const named = (ip, names) => (names && names[ip] ? names[ip] : ip);
+const sevClass = (s) => (s === "CRITICAL" ? "crit" : s === "WARN" ? "warn" : "info");
+function hashAngle(id) { let h = 2166136261; for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); } h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15; return ((h >>> 0) % 3600) / 10; }
+
+// ---- DECOY ----
+async function decoyAct(body) { const r = await post("/api/decoy", body); if (r && r.ok && r.note) status(r.note); await decoyLoad(); return r; }
+async function decoyLoad() {
+  const r = await get("/api/decoy"); if (!r) return;
+  const st = r.state, total = st.ports.length + st.files.length + st.names.length;
+  $("#dcMeta").textContent = total + " planted" + (r.demo ? " · sample · nothing real is opened" : "");
+  const chips = (sel, items, label, onRemove) => {
+    const box = $(sel);
+    box.innerHTML = items.length ? items.map((x, i) => '<span class="m-chip">' + esc(label(x)) + '<b data-i="' + i + '" title="remove">✕</b></span>').join("") : '<span class="m-dim">none planted</span>';
+    box.querySelectorAll("b").forEach((b) => (b.onclick = () => onRemove(items[+b.dataset.i])));
+  };
+  chips("#dcPorts", st.ports, (p) => "tcp/" + p, (p) => decoyAct({ action: "port-close", port: p }));
+  chips("#dcFiles", st.files, (f) => f, (f) => decoyAct({ action: "file-remove", path: f }));
+  chips("#dcNames", st.names, (n) => n, (n) => decoyAct({ action: "name-remove", name: n }));
+  const kinds = { honeyport: "HONEYPORT", "canary-file": "CANARY FILE", "canary-name": "CANARY NAME" };
+  $("#dcTrips").innerHTML = r.trips.length ? r.trips.map((t) =>
+    '<div class="m-row ' + (/decoy drill/i.test(t.detail) ? "info" : "crit") + '"><div class="m-row-top"><span class="badge' + (/decoy drill/i.test(t.detail) ? '">DRILL · ' : ' bad">') + esc(kinds[t.kind] || t.kind) + '</span><b>' + esc(t.source) + '</b><span class="m-dim">→ ' + esc(t.decoy) + '</span><time>' + esc(ago(new Date(t.time).getTime())) + '</time></div><div class="m-mono">' + esc(t.detail) + '</div></div>').join("")
+    : '<div class="empty">no decoy has been touched</div>';
+}
+function decoyInit() {
+  const add = (btn, input, build) => {
+    const go = async () => { const v = $(input).value.trim(); const body = build(v); if (!body) return; const r = await decoyAct(body); if (r && r.ok) $(input).value = ""; };
+    $(btn).onclick = go; $(input).addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  };
+  add("#dcPortAdd", "#dcPort", (v) => { const p = parseInt(v, 10); if (!(p >= 1 && p <= 65535)) { status("a port is a number from 1 to 65535"); return null; } return { action: "port-open", port: p }; });
+  add("#dcFileAdd", "#dcFile", (v) => ({ action: "file-plant", name: v }));
+  add("#dcNameAdd", "#dcName", (v) => (v ? { action: "name-add", name: v } : null));
+  $("#dcDrill").onclick = () => decoyAct({ action: "test" });
+}
+
+// ---- CORTEX ----
+const cortex = { sel: null, queue: [], shown: null };
+const cxKey = (a) => a.ts + "|" + a.source + "|" + a.kind;
+const verdictClass = (v) => (v === "likely threat" ? "bad" : v === "needs a look" ? "warn" : "ok");
+async function cortexLoad() {
+  const r = await get("/api/cortex"); if (!r) return;
+  cortex.queue = r.queue; cortex.backend = r.backend;
+  $("#cxMeta").textContent = r.queue.length + " alerts triaged";
+  $("#cxBackend").textContent = "reasoning: built-in rules · summary: " + (/^local model/.test(r.backend) ? r.backend : "none (no local model)");
+  const box = $("#cxQueue");
+  box.innerHTML = r.queue.length ? r.queue.map((a, i) =>
+    '<div class="m-row cx-item ' + sevClass(a.severity) + (cortex.sel === cxKey(a) ? " sel" : "") + '" data-i="' + i + '"><div class="m-row-top"><span class="m-verdict ' + verdictClass(a.verdict) + '">' + esc(a.verdict.toUpperCase()) + '</span><span class="m-dim">' + a.confidence + '% sure</span><time>' + esc(fmtTime(a.ts)) + '</time></div><div class="m-mono">' + esc(a.message) + '</div></div>').join("")
+    : '<div class="empty">no alerts to investigate</div>';
+  box.querySelectorAll(".cx-item").forEach((n) => (n.onclick = () => cortexOpen(cortex.queue[+n.dataset.i])));
+  if (!cortex.sel && r.queue.length) cortexOpen(r.queue.find((a) => a.verdict === "likely threat") || r.queue[0]);
+}
+async function cortexOpen(a, narrate) {
+  cortex.sel = cxKey(a);
+  document.querySelectorAll(".cx-item").forEach((n) => n.classList.toggle("sel", cxKey(cortex.queue[+n.dataset.i]) === cortex.sel));
+  if (narrate) $("#cxNarr").textContent = "asking the local model…";
+  const r = await post("/api/cortex", { ts: a.ts, source: a.source, kind: a.kind, narrate: !!narrate });
+  if (!r || !r.ok) return null;
+  cortex.shown = r;
+  const c = r.case, p = c.proposal, vc = verdictClass(c.verdict);
+  $("#cxTitle").textContent = "CASE // " + a.kind.toUpperCase() + " · " + a.source;
+  const w = (n) => '<span class="cx-w ' + (n > 0 ? "up" : n < 0 ? "down" : "") + '">' + (n > 0 ? "+" : "") + n + '</span>';
+  const canAct = p.action === "quarantine" || p.action === "trust";
+  $("#cxCase").innerHTML =
+    '<div class="cx-verdict ' + vc + '"><div><span class="micro">VERDICT</span><b>' + esc(c.verdict.toUpperCase()) + '</b></div><div class="cx-conf"><span class="micro cy">CONFIDENCE ' + c.confidence + '%</span><div class="m-bar"><i style="width:' + c.confidence + '%"></i></div></div><div><span class="micro cy">SCORE</span><b class="cx-score">' + c.score + '</b></div></div>' +
+    '<div class="m-mono cx-alert">' + esc(r.alert.message) + '</div>' +
+    '<div class="micro cy cx-h">▚ CHAIN OF REASONING</div>' +
+    c.steps.map((s, i) => '<div class="cx-step"><span class="cx-n">' + (i + 1) + '</span>' + w(s.weight) + '<div><b>' + esc(s.title) + '</b><span>' + esc(s.finding) + '</span></div></div>').join("") +
+    '<div class="cx-sides"><div class="cx-side for"><div class="micro">▚ THE CASE FOR A THREAT</div>' + c.for.map((x) => '<p>' + esc(x) + '</p>').join("") + '</div><div class="cx-side against"><div class="micro grn">▚ THE SCEPTIC</div>' + (c.against || []).map((x) => '<p>' + esc(x) + '</p>').join("") + '</div></div>' +
+    '<div class="cx-prop ' + vc + '"><div><span class="micro">PROPOSED ACTION</span><b>' + esc(p.action.toUpperCase()) + ' · ' + esc(p.target) + '</b><p>' + esc(p.why) + '</p></div><div class="cx-btns"><button class="btn' + (p.action === "quarantine" ? " danger" : "") + '" id="cxApprove">' + (canAct ? "APPROVE" : "ACKNOWLEDGE") + '</button><button class="btn" id="cxDismiss">DISMISS</button></div></div>' +
+    '<div class="m-note">CORTEX never acts on its own: nothing changes until you approve, and both choices are written to the LEDGER.' + (/^local model/.test(r.backend) ? ' <button class="hs-btn" id="cxAsk">SUMMARISE WITH THE LOCAL MODEL</button>' : "") + '</div>' +
+    '<div class="m-mono cx-narr" id="cxNarr">' + esc(r.narrative || "") + '</div>';
+  $("#cxApprove").onclick = () => cortexDecide(true);
+  $("#cxDismiss").onclick = () => cortexDecide(false);
+  if ($("#cxAsk")) $("#cxAsk").onclick = () => cortexOpen(a, true);
+  return r;
+}
+async function cortexDecide(approve) {
+  const r = cortex.shown; if (!r) return "No case is open.";
+  const p = r.case.proposal;
+  if (replay) { status("go live first"); return "Go live first."; }
+  let msg;
+  if (!approve) { await post("/api/ledger/note", { text: "CORTEX proposal dismissed: " + p.action + " " + p.target }); msg = "Dismissed. Nothing was changed."; }
+  else if (p.action === "quarantine") { const q = await post("/api/blackwall", { ip: p.target, action: "quarantine" }); msg = q && q.ok ? "BLACKWALL engaged. " + p.target + " is quarantined." : "Quarantine failed: " + ((q && q.error) || "backend unreachable"); }
+  else if (p.action === "trust") { const q = await post("/api/trust", { ip: p.target, trusted: true }); msg = q && q.ok ? p.target + " marked trusted." : "Could not mark it trusted: " + ((q && q.error) || "backend unreachable"); }
+  else { await post("/api/ledger/note", { text: "CORTEX: acknowledged — " + p.action + " " + p.target }); msg = "Acknowledged and noted in the LEDGER."; }
+  status(msg);
+  const a = cortex.queue.find((x) => cxKey(x) === cortex.sel);
+  await cortexLoad(); if (a) await cortexOpen(a);
+  return msg;
+}
+
+// ---- SPECTRUM ----
+const TAG_CLASS = { "network host": "ok", mine: "ok", "unknown radio": "", bluetooth: "", lingering: "warn", "tracker?": "bad" };
+function spark(hist) {
+  if (!hist || hist.length < 2) return "";
+  const pts = hist.map((v, i) => ((i / (hist.length - 1)) * 80).toFixed(1) + "," + (18 - ((Math.max(-100, Math.min(-30, v)) + 100) / 70) * 16).toFixed(1)).join(" ");
+  return '<svg class="m-spark" viewBox="0 0 80 20"><polyline points="' + pts + '"/></svg>';
+}
+async function spectrumLoad() {
+  const r = await get("/api/spectrum"); if (!r) return;
+  const flagged = r.radios.filter((x) => x.tag === "lingering" || x.tag === "tracker?").length;
+  $("#spMeta").textContent = r.demo ? "simulated air" : (r.radios.length ? "live from the sensor nodes" : "waiting for sensor nodes");
+  $("#spCount").textContent = r.radios.length + " radios · " + flagged + " flagged";
+  // scope: radius is signal strength
+  const R = (rssi) => 18 + ((Math.max(-95, Math.min(-35, rssi)) + 35) / -60) * 160;
+  let svg = '<g class="sp-rings">' + [-50, -65, -80, -95].map((d) => '<circle cx="200" cy="200" r="' + R(d).toFixed(0) + '"/><text x="203" y="' + (200 - R(d) + 11).toFixed(0) + '">' + d + ' dBm</text>').join("") + '<line x1="200" y1="14" x2="200" y2="386"/><line x1="14" y1="200" x2="386" y2="200"/></g><g class="sp-sweep"><path d="M200 200 L200 22 A178 178 0 0 1 290 46 Z"/></g><circle class="sp-me" cx="200" cy="200" r="4"/>';
+  r.radios.forEach((x) => {
+    const a = (hashAngle(x.id) * Math.PI) / 180, rr = R(x.rssi), cx = 200 + rr * Math.cos(a), cy = 200 + rr * Math.sin(a), cls = TAG_CLASS[x.tag] || "";
+    svg += x.kind === "ble" ? '<rect class="sp-dot ' + cls + '" x="' + (cx - 4).toFixed(1) + '" y="' + (cy - 4).toFixed(1) + '" width="8" height="8" transform="rotate(45 ' + cx.toFixed(1) + " " + cy.toFixed(1) + ')"/>' : '<circle class="sp-dot ' + cls + '" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="5"/>';
+    if (x.name || cls === "warn" || cls === "bad") svg += '<text class="sp-lbl ' + cls + '" x="' + (cx + 9).toFixed(1) + '" y="' + (cy + 4).toFixed(1) + '">' + esc(x.name || x.tag) + '</text>';
+  });
+  $("#spScope").innerHTML = svg;
+  $("#spRadios").innerHTML = r.radios.length ? r.radios.map((x, i) =>
+    '<div class="m-row ' + (TAG_CLASS[x.tag] === "bad" ? "crit" : TAG_CLASS[x.tag] === "warn" ? "warn" : "") + '"><div class="m-row-top"><span class="badge' + (x.kind === "ble" ? " act" : "") + '">' + (x.kind === "ble" ? "BLE" : "WI-FI") + '</span><b>' + esc(x.name || x.id) + '</b><span class="m-verdict ' + (TAG_CLASS[x.tag] || "dim") + '">' + esc(x.tag.toUpperCase()) + '</span><time>' + x.rssi + ' dBm</time></div><div class="m-row-top"><span class="m-dim m-mono">' + esc(x.name ? x.id : x.kind === "ble" ? "no name announced" : "not on your network") + '</span>' + spark(x.history) + '<time>in range ' + (x.minutes < 1 ? Math.round(x.minutes * 60) + " s" : x.minutes.toFixed(0) + " min") + '</time>' + (x.tag === "network host" ? "" : '<button class="hs-btn" data-i="' + i + '" title="' + (x.tag === "mine" ? "stop treating this radio as yours" : "this radio is yours — never flag it") + '">' + (x.tag === "mine" ? "NOT MINE" : "MINE") + '</button>') + '</div></div>').join("")
+    : '<div class="empty">no radios heard yet — SPECTRUM listens through the SONAR sensor nodes</div>';
+  $("#spRadios").querySelectorAll("button").forEach((b) => (b.onclick = async () => { const x = r.radios[+b.dataset.i]; await post("/api/spectrum", { radio: x.id, mine: x.tag !== "mine" }); spectrumLoad(); }));
+  const approved = new Set(r.ssids);
+  $("#spApMeta").textContent = approved.size ? "watching " + r.ssids.join(", ") : "no network approved yet";
+  const names = [...new Set(r.aps.map((a) => a.ssid).filter((s) => s && !approved.has(s)))];
+  $("#spAps").innerHTML = (r.aps.length ? r.aps.map((a) => {
+    const twin = approved.has(a.ssid) && !a.trusted;
+    return '<div class="m-row ' + (twin ? "crit" : "") + '"><div class="m-row-top"><b>' + esc(a.ssid || "(hidden)") + '</b><span class="m-verdict ' + (twin ? "bad" : a.trusted ? "ok" : "dim") + '">' + (twin ? "LOOK-ALIKE" : a.trusted ? "APPROVED" : "NEIGHBOUR") + '</span><time>' + a.rssi + ' dBm</time></div><div class="m-dim m-mono">' + esc(a.bssid) + '</div></div>';
+  }).join("") : '<div class="m-dim">no access points heard yet</div>') +
+    '<div class="m-chips sp-approve">' + names.slice(0, 6).map((s, i) => '<button class="hs-btn" data-i="' + i + '">THIS IS MINE: ' + esc(s) + '</button>').join("") + (approved.size ? '<button class="hs-btn" data-clear="1">FORGET APPROVALS</button>' : "") + '</div>';
+  $("#spAps").querySelectorAll("button").forEach((b) => (b.onclick = async () => { await post("/api/spectrum", b.dataset.clear ? { clear: true } : { ssids: [names[+b.dataset.i]] }); spectrumLoad(); }));
+  $("#spDeauth").textContent = r.deauth;
+  $("#spDeauthBar").style.width = Math.min(100, r.deauth * 5) + "%";
+  $("#spDeauthBar").parentElement.classList.toggle("hot", r.deauth >= 20);
+  $("#spDeauthNote").textContent = r.deauth >= 20 ? "flood — devices are being forced off the network" : r.deauth > 0 ? "a few — normal when devices roam" : "quiet";
+}
+
+// ---- ORACLE ----
+const oracleSt = { host: null };
+async function oracleLoad() {
+  const devs = STATE.devices || [];
+  if (!oracleSt.host && devs.length) oracleSt.host = (devs.slice().sort((a, b) => threatOf(b) - threatOf(a))[0] || devs[0]).ip;
+  const box = $("#orHosts");
+  box.innerHTML = devs.map((d, i) => '<button class="hs-btn' + (d.ip === oracleSt.host ? " on" : "") + '" data-i="' + i + '">' + esc(d.hostname || d.ip) + '</button>').join("");
+  box.querySelectorAll("button").forEach((b) => (b.onclick = () => { oracleSt.host = devs[+b.dataset.i].ip; oracleLoad(); }));
+  if (!oracleSt.host) return;
+  const r = await get("/api/oracle?host=" + encodeURIComponent(oracleSt.host)); if (!r || !r.reach) return;
+  const re = r.reach, names = r.names || {};
+  $("#orMeta").textContent = r.edges + " conversations observed" + (r.demo ? " · sample" : "");
+  const left = re.internal.map((e) => ({ e, peer: e.dst, out: true })).concat(re.inbound.map((e) => ({ e, peer: e.src, out: false })));
+  const right = re.external.map((e) => ({ e, peer: e.name || e.dst, out: true, ext: true }));
+  const maxB = Math.max(1, ...left.concat(right).map((x) => x.e.bytes));
+  const row = (list, x, anchor) => list.slice(0, 9).map((it, i) => {
+    const n = Math.min(9, list.length), y = 230 + (i - (n - 1) / 2) * Math.min(46, 400 / n), sw = (1 + 4 * Math.log10(1 + (9 * it.e.bytes) / maxB)).toFixed(1);
+    const self = it.peer === r.self, cls = it.ext ? "ext" : self ? "self" : "int";
+    const lx = anchor === "end" ? x - 12 : x + 12, mid = (450 + x) / 2;
+    return '<path class="or-edge ' + cls + '" stroke-width="' + sw + '" d="M450 230 C' + mid + ' 230 ' + mid + ' ' + y + ' ' + x + ' ' + y + '"/>' +
+      '<circle class="or-node ' + cls + '" cx="' + x + '" cy="' + y + '" r="6"/>' +
+      '<text class="or-lbl" text-anchor="' + anchor + '" x="' + lx + '" y="' + (y - 3) + '">' + esc(it.ext ? it.peer : named(it.peer, names)) + (self ? " (this machine)" : "") + '</text>' +
+      '<text class="or-sub" text-anchor="' + anchor + '" x="' + lx + '" y="' + (y + 10) + '">' + (it.out ? "→" : "←") + " port " + it.e.port + " · " + fmtBytes(it.e.bytes) + '</text>';
+  }).join("");
+  $("#orMap").innerHTML = '<text class="or-col" x="150" y="22" text-anchor="middle">INSIDE YOUR NETWORK · ' + left.length + '</text><text class="or-col" x="750" y="22" text-anchor="middle">OUTSIDE · ' + right.length + '</text>' +
+    row(left, 250, "end") + row(right, 650, "start") +
+    '<circle class="or-core" cx="450" cy="230" r="26"/><circle class="or-core2" cx="450" cy="230" r="34"/><text class="or-me" x="450" y="282" text-anchor="middle">' + esc(named(re.host, names)) + '</text><text class="or-sub" x="450" y="296" text-anchor="middle">' + esc(re.host) + ' · ' + fmtBytes(re.bytes) + '</text>';
+  $("#orIso").textContent = re.isolating;
+}
+async function oracleWhatIf(rule) {
+  if (rule != null) $("#orRule").value = rule;
+  const text = $("#orRule").value.trim(); if (!text) return null;
+  const r = await post("/api/oracle/whatif", { rule: text });
+  if (!r || !r.ok) { $("#orResult").innerHTML = '<div class="m-row warn"><b>' + esc((r && r.error) || "could not evaluate that rule") + '</b></div>'; return r; }
+  const w = r.result, names = r.names || {};
+  $("#orResult").innerHTML = '<div class="or-sum"><b>' + w.matches.length + '</b> of ' + w.of + ' conversations would have matched · ' + fmtBytes(w.bytes) + ' · ' + w.hosts.length + ' host' + (w.hosts.length === 1 ? "" : "s") + '</div>' +
+    (w.hosts.length ? '<div class="m-chips">' + w.hosts.map((h) => '<span class="m-chip">' + esc(named(h, names)) + '</span>').join("") + '</div>' : "") +
+    w.matches.map((e) => '<div class="m-row"><div class="m-row-top"><b>' + esc(named(e.src, names)) + '</b><span class="m-dim">→ ' + esc(e.name || named(e.dst, names)) + '</span><time>port ' + e.port + ' · ' + fmtBytes(e.bytes) + '</time></div></div>').join("") +
+    (w.matches.length ? "" : '<div class="m-dim">Nothing observed so far matches. The rule would have been silent.</div>');
+  return r;
+}
+function oracleInit() {
+  const ex = ["port 23", "unnamed", "fanout > 3", "bytes > 1000000", "src 192.168.1.99"];
+  $("#orExamples").innerHTML = ex.map((x, i) => '<button class="hs-btn" data-i="' + i + '">' + esc(x) + '</button>').join("");
+  $("#orExamples").querySelectorAll("button").forEach((b) => (b.onclick = () => oracleWhatIf(ex[+b.dataset.i])));
+  $("#orRun").onclick = () => oracleWhatIf();
+  $("#orRule").addEventListener("keydown", (e) => { if (e.key === "Enter") oracleWhatIf(); });
+}
+
+// ---- PULSE ----
+// Key identity is used here only to pair a press with its release. It is never stored or sent.
+const pulseCap = { on: false, down: new Map(), lastUp: 0, buf: [], trace: [], state: null, lock: false };
+function pulsePref() { try { return localStorage.getItem("nw.pulse") === "on"; } catch (_) { return false; } }
+function setPulse(on) {
+  pulseCap.on = on; pulseCap.down.clear(); pulseCap.lastUp = 0;
+  try { localStorage.setItem("nw.pulse", on ? "on" : "off"); } catch (_) {}
+  $("#plToggle").textContent = on ? "PULSE ON" : "PULSE OFF"; $("#plToggle").classList.toggle("on", on);
+  pulseRender();
+  return on ? "PULSE on. Only key timing is measured." : "PULSE off.";
+}
+function pulseStroke(dwell, flight) {
+  pulseCap.trace.push({ dwell, flight }); if (pulseCap.trace.length > 90) pulseCap.trace.shift();
+  pulseCap.buf.push({ dwell: Math.round(dwell), flight: Math.round(flight) });
+  if (pulseCap.buf.length >= 10) pulseFlush();
+  if (currentDeck() === "pulse") pulseDraw();
+}
+async function pulseFlush() {
+  if (!pulseCap.buf.length) return;
+  const strokes = pulseCap.buf.splice(0);
+  const r = await post("/api/pulse", { strokes });
+  if (r && r.ok) { pulseCap.state = r.state; pulseCap.lock = r.lock; pulseRender(); }
+}
+document.addEventListener("keydown", (e) => {
+  if (!pulseCap.on || e.repeat || e.ctrlKey || e.metaKey || e.altKey || (e.key.length !== 1 && e.key !== "Backspace" && e.key !== "Enter")) return;
+  pulseCap.down.set(e.code, performance.now());
+}, true);
+document.addEventListener("keyup", (e) => {
+  const t0 = pulseCap.down.get(e.code); if (t0 == null) return;
+  pulseCap.down.delete(e.code);
+  const now = performance.now();
+  if (pulseCap.on && pulseCap.lastUp) pulseStroke(now - t0, t0 - pulseCap.lastUp);
+  pulseCap.lastUp = now;
+}, true);
+function pulseDraw() {
+  const c = $("#plTrace"), g = c.getContext("2d"), W = c.width, H = c.height, tr = pulseCap.trace;
+  g.clearRect(0, 0, W, H);
+  g.strokeStyle = "rgba(94,246,255,0.14)"; g.lineWidth = 1;
+  for (let y = 0; y <= H; y += H / 4) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); g.stroke(); }
+  const bw = W / 90;
+  tr.forEach((s, i) => { const h = Math.min(H - 4, (s.dwell / 300) * H); g.fillStyle = "rgba(255,84,73,0.75)"; g.fillRect(i * bw + 1, H - h, bw - 3, h); });
+  g.strokeStyle = "#5ef6ff"; g.lineWidth = 2; g.beginPath();
+  tr.forEach((s, i) => { const y = H - Math.min(H - 4, (Math.max(0, s.flight) / 600) * H) - 2; if (i) g.lineTo(i * bw + bw / 2, y); else g.moveTo(bw / 2, y); });
+  g.stroke();
+}
+function pulseRender() {
+  const st = pulseCap.state || { enrolled: false, progress: 0, needed: 150, match: 0 };
+  $("#plMeta").textContent = pulseCap.on ? (st.enrolled ? "watching" : "enrolling") : "off";
+  $("#plProgLabel").textContent = st.enrolled ? "ENROLLED · comparing every " + (pulseCap.window || 50) + " keystrokes" : "ENROLMENT · " + st.progress + " / " + st.needed + " keystrokes";
+  $("#plProg").style.width = Math.round((100 * st.progress) / st.needed) + "%";
+  const dial = $("#plMatch").parentElement;
+  $("#plMatch").textContent = st.enrolled ? Math.round(st.match) + "%" : "—";
+  $("#plMatchLabel").textContent = !st.enrolled ? "NOT ENROLLED" : st.mismatch ? "NOT THE OWNER" : "MATCH TO OWNER";
+  dial.classList.toggle("bad", !!st.mismatch); dial.classList.toggle("ok", st.enrolled && !st.mismatch);
+  $("#plLock").textContent = "LOCK ON MISMATCH: " + (pulseCap.lock ? "ON" : "OFF"); $("#plLock").classList.toggle("on", pulseCap.lock);
+}
+async function pulseLoad() {
+  const r = await get("/api/pulse"); if (!r) return;
+  pulseCap.state = r.state; pulseCap.lock = r.lock; pulseCap.window = r.window;
+  pulseRender(); pulseDraw();
+}
+function pulseInit() {
+  $("#plToggle").onclick = () => setPulse(!pulseCap.on);
+  $("#plLock").onclick = async () => { const r = await post("/api/pulse", { lock: !pulseCap.lock }); if (r && r.ok) { pulseCap.lock = r.lock; pulseRender(); } };
+  $("#plReset").onclick = async () => { const r = await post("/api/pulse", { reset: true }); if (r && r.ok) { pulseCap.state = r.state; pulseCap.trace = []; pulseRender(); pulseDraw(); status("typing rhythm forgotten"); } };
+  if (pulsePref()) setPulse(true);
+}
+
+// ---- WARD ----
+async function wardLoad() {
+  const r = await get("/api/ward"); if (!r) return;
+  const names = r.names || {}, enforcing = r.profiles.filter((p) => !p.learning).length;
+  $("#wdMeta").textContent = enforcing + " enforced · " + (r.profiles.length - enforcing) + " learning" + (r.demo ? " · sample" : "");
+  const top = (m, n) => Object.entries(m || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+  const box = $("#wdProfiles");
+  box.innerHTML = r.profiles.length ? r.profiles.map((p, i) => {
+    const mx = Math.max(1, ...p.hours);
+    return '<div class="wd-card' + (p.learning ? " learning" : "") + '"><div class="m-row-top"><b>' + esc(named(p.host, names)) + '</b><span class="m-dim m-mono">' + esc(p.host) + '</span><span class="m-verdict ' + (p.learning ? "warn" : "ok") + '">' + (p.learning ? "LEARNING" : "ENFORCED") + '</span><time>' + p.samples + ' observations</time><button class="hs-btn" data-i="' + i + '" title="forget this profile and learn it again">RELEARN</button></div>' +
+      '<div class="wd-kv"><span class="micro cy">TALKS TO</span><span class="m-mono">' + (top(p.dsts, 5).map(([d]) => esc(d)).join(" · ") || "—") + '</span></div>' +
+      '<div class="wd-kv"><span class="micro cy">PORTS</span><span class="m-mono">' + (top(p.ports, 8).map(([d]) => esc(d)).join(" · ") || "—") + '</span></div>' +
+      '<div class="wd-kv"><span class="micro cy">ACTIVE HOURS</span><span class="wd-hours">' + p.hours.map((h, k) => '<i title="' + String(k).padStart(2, "0") + ':00" style="height:' + (h ? 4 + Math.round((10 * h) / mx) : 2) + 'px" class="' + (h ? "" : "off") + '"></i>').join("") + '</span></div></div>';
+  }).join("") : '<div class="empty">no device has been watched long enough yet — WARD learns from live traffic</div>';
+  box.querySelectorAll("button").forEach((b) => (b.onclick = async () => { await post("/api/ward", { action: "relearn", host: r.profiles[+b.dataset.i].host }); wardLoad(); }));
+  $("#wdDevMeta").textContent = r.deviations.length + " open";
+  const dv = $("#wdDevs");
+  dv.innerHTML = r.deviations.length ? r.deviations.map((d, i) =>
+    '<div class="m-row warn"><div class="m-row-top"><span class="badge resp">' + esc(d.kind.toUpperCase()) + '</span><b>' + esc(named(d.host, names)) + '</b><time>' + esc(ago(new Date(d.time).getTime())) + '</time></div><div class="m-mono">' + esc(d.detail) + '</div><div class="m-row-top"><span class="m-dim m-mono">saw: ' + esc(d.seen.dst) + ' port ' + d.seen.port + '</span><span class="spacer"></span><button class="hs-btn" data-i="' + i + '" title="this is fine — add it to the profile">ACCEPT AS NORMAL</button></div></div>').join("")
+    : '<div class="empty">every enforced device is inside its profile</div>';
+  dv.querySelectorAll("button").forEach((b) => (b.onclick = async () => { await post("/api/ward", { action: "accept", seen: r.deviations[+b.dataset.i].seen }); wardLoad(); }));
+}
+
+// ---- QUANTUM ----
+let quantumWasBusy = false;
+async function quantumLoad() {
+  const r = await get("/api/quantum"); if (!r) return null;
+  const f = r.findings, names = r.names || {}, isHNDL = (x) => /quantum-vulnerable/.test(x);
+  const hndl = f.filter((x) => !x.pq).length, other = f.filter((x) => x.issues.some((i) => !isHNDL(i))).length;
+  $("#qtMeta").textContent = r.busy ? "inventory running…" : r.at ? "last inventory " + ago(r.at) + (r.demo ? " · sample" : "") : "not run yet";
+  $("#qtTotal").textContent = f.length; $("#qtPQ").textContent = r.pq; $("#qtHNDL").textContent = hndl; $("#qtOther").textContent = other;
+  $("#qtScan").disabled = r.busy; $("#qtScan").textContent = r.busy ? "… READING HANDSHAKES" : "⌁ INVENTORY THE NETWORK";
+  if (quantumWasBusy && !r.busy) status("inventory finished: " + f.length + " services, " + r.pq + " post-quantum ready");
+  quantumWasBusy = r.busy;
+  $("#qtList").innerHTML = f.length ? '<div class="qt-row qt-headrow"><span>SERVICE</span><span>PROTOCOL</span><span>KEY</span><span>KEY EXCHANGE</span><span>CERT</span><span>FINDINGS</span></div>' + f.map((x) => {
+    const host = x.addr.replace(/:\d+$/, ""), port = x.addr.slice(host.length + 1), bad = x.issues.filter((i) => !isHNDL(i));
+    return '<div class="qt-row ' + (x.pq ? "ok" : bad.length ? "bad" : "warn") + '"><span><b>' + esc(named(host, names)) + '</b><i class="m-mono">' + esc(host) + ' : ' + esc(port) + '</i></span><span><b>' + esc(x.proto.toUpperCase()) + '</b><i class="m-mono">' + esc(x.version) + '</i></span><span class="m-mono">' + esc(x.key || "—") + '</span><span><span class="m-verdict ' + (x.pq ? "ok" : "bad") + '">' + (x.pq ? "POST-QUANTUM" : "CLASSICAL") + '</span><i class="m-mono">' + esc(x.kex || "") + '</i></span><span class="m-mono">' + (x.proto === "tls" ? (x.daysLeft < 0 ? "expired " + -x.daysLeft + " d ago" : x.daysLeft + " d left") : "—") + '</span><span>' + (x.issues.length ? x.issues.map((i) => '<p class="' + (isHNDL(i) ? "hndl" : "") + '">' + esc(i) + '</p>').join("") : '<p class="fine">nothing to fix</p>') + '</span></div>';
+  }).join("") : '<div class="empty">' + (r.busy ? "reading handshakes…" : "run an inventory to see what your network's encryption would be worth against a quantum computer") + '</div>';
+  return r;
+}
+async function quantumScan() { const r = await post("/api/quantum"); if (r && r.ok) status("reading TLS and SSH handshakes on your network…"); await quantumLoad(); return r; }
+
+// ---- LEDGER ----
+const KIND_BADGE = { alert: "bad", action: "", note: "act" };
+async function ledgerLoad(recheck) {
+  const r = await get("/api/ledger" + (recheck ? "?recheck=1" : "")); if (!r) return null;
+  $("#lgMeta").textContent = r.len + " entries · " + (r.stored ? "written to ledger.jsonl" : "in memory only");
+  const seal = $("#lgSeal");
+  seal.textContent = r.intact ? "✓ CHAIN INTACT" : "✕ CHAIN BROKEN AT #" + r.bad;
+  seal.className = "lg-seal " + (r.intact ? "ok" : "bad");
+  $("#lgHead").textContent = r.head ? r.head.slice(0, 16) + "…" : "—"; $("#lgHead").title = r.head || "";
+  if (recheck) status(r.intact ? "every link checks out" + (r.disk ? " · " + r.disk : "") : "the chain is broken at entry " + r.bad + (r.disk ? " · " + r.disk : ""));
+  $("#lgList").innerHTML = r.entries.length ? r.entries.map((e) =>
+    '<div class="lg-entry ' + (e.kind === "alert" ? sevClass(e.severity) : e.kind) + (!r.intact && e.seq >= r.bad ? " broken" : "") + '"><div class="lg-link"><i></i></div><div class="lg-body"><div class="m-row-top"><span class="lg-seq">#' + e.seq + '</span><span class="badge ' + (KIND_BADGE[e.kind] || "") + '">' + esc((e.kind === "alert" ? e.severity : e.kind).toUpperCase()) + '</span>' + (e.source ? '<b>' + esc(e.source) + '</b>' : "") + '<time>' + esc(new Date(e.time).toLocaleString("en-GB")) + '</time></div><div class="m-mono">' + esc(e.text) + '</div><div class="lg-hash m-mono">' + esc((e.prev || "genesis").slice(0, 12)) + ' → ' + esc(e.hash.slice(0, 12)) + '</div></div></div>').join("")
+    : '<div class="empty">nothing recorded yet</div>';
+  return r;
+}
+async function ledgerReport(mins) {
+  const r = await get("/api/ledger/report" + (mins ? "?mins=" + mins : "")); if (!r) return null;
+  $("#lgReport").textContent = r.report; $("#lgRepMeta").textContent = r.entries + " entries"; $("#lgCopy").disabled = false;
+  return r;
+}
+function ledgerInit() {
+  const note = async () => { const v = $("#lgNote").value.trim(); if (!v) return; const r = await post("/api/ledger/note", { text: v }); if (r && r.ok) { $("#lgNote").value = ""; status("recorded as entry #" + r.seq); ledgerLoad(); } };
+  $("#lgNoteAdd").onclick = note; $("#lgNote").addEventListener("keydown", (e) => { if (e.key === "Enter") note(); });
+  $("#lgVerify").onclick = () => ledgerLoad(true);
+  document.querySelectorAll('[data-deck="ledger"] [data-mins]').forEach((b) => (b.onclick = () => ledgerReport(+b.dataset.mins)));
+  $("#lgCopy").onclick = async () => { try { await navigator.clipboard.writeText($("#lgReport").textContent); status("report copied"); } catch (_) { status("copy is not available here — select the text instead"); } };
+}
+
+const MOD_DECKS = { decoy: decoyLoad, cortex: cortexLoad, spectrum: spectrumLoad, oracle: oracleLoad, pulse: pulseLoad, ward: wardLoad, quantum: quantumLoad, ledger: () => ledgerLoad() };
+function modPoll() { const f = MOD_DECKS[currentDeck()]; if (f && !document.hidden) f(); }
+function modInit() { decoyInit(); oracleInit(); pulseInit(); ledgerInit(); $("#qtScan").onclick = quantumScan; }
+
 // test hooks (also handy from the browser console)
-window.netwatch = { room, addSegment, proxIndex, proxStep, sonarHosts: () => sonarHosts, dance, bdOpen, bdExit, sonarNodes: () => sonarState.nodes, sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
+window.netwatch = { room, addSegment, proxIndex, proxStep, sonarHosts: () => sonarHosts, dance, bdOpen, bdExit, sonarNodes: () => sonarState.nodes, sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE, cortex, cortexOpen, cortexDecide, oracleWhatIf, pulseCap, setPulse, pulseStroke, pulseFlush, quantumScan, ledgerLoad, ledgerReport, decoyAct };
 
 // ---------- boot ----------
 initNeural();
@@ -1521,6 +1858,7 @@ runBoot();
 initTicker();
 killchainDeck.init();
 attackDeck.init();
+modInit();
 connect();
 setTimeout(() => { if (!live) loadMock(); }, 600);
 setTimeout(loadHistory, 900);
@@ -1529,6 +1867,8 @@ setInterval(sonarPoll, 400);
 sysPoll(); setInterval(sysPoll, 1500);
 setInterval(() => { if (currentDeck() === "sonar") bdRefresh(); }, 2000);
 setInterval(sleepPoll, 30000);
+setInterval(modPoll, 2000);
+setInterval(pulseFlush, 4000);
 (function sonarLoop() {
   bdTick();
   if (currentDeck() === "sonar") { const t = performance.now() / 1000; if (sonarMode === "3d") sonar3dRender(t); else sonarDraw(t); }

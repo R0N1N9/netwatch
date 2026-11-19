@@ -12,6 +12,7 @@ are authorised to do.
 - [Install and run](#install-and-run)
 - [The console](#the-console)
 - [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [AR](#ar) · [SONAR](#sonar)
+- [Modules](#modules): [DECOY](#decoy) · [CORTEX](#cortex) · [SPECTRUM](#spectrum) · [ORACLE](#oracle) · [PULSE](#pulse) · [WARD](#ward) · [QUANTUM](#quantum) · [LEDGER](#ledger)
 - [Commands and voice](#commands-and-voice)
 - [The Copilot and local models](#the-copilot-and-local-models)
 - [Host features](#host-features)
@@ -62,12 +63,12 @@ The console opens at `http://127.0.0.1:7979`.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--demo` | off | Sample data; no capture, no firewall changes, the screen is never locked. |
+| `--demo` | off | Sample data; no capture, no firewall changes, no decoys opened or planted, no hosts probed, the screen is never locked. |
 | `--addr` | `127.0.0.1:7979` | Where the console listens. |
 | `--auto` | `20s` | How often to sweep the network (`0` disables). |
 | `--no-open` | off | Do not open the browser. |
 | `--sonar-udp` | off | Accept sensor frames on this UDP address, e.g. `0.0.0.0:5566`. |
-| `--data-dir` | `~/.local/share/netwatch` | Where clips, the room layout, the respiration log and surface snapshots are kept. Empty keeps everything in memory. |
+| `--data-dir` | `~/.local/share/netwatch` | Where clips, the room layout, the respiration log, surface snapshots, the ledger and module settings are kept. Empty keeps everything in memory. |
 
 ### Environment
 
@@ -83,7 +84,7 @@ The console opens at `http://127.0.0.1:7979`.
 
 ![Watchtower](screens/watchtower.jpg)
 
-- **Top bar** — deck tabs, watch status, clock.
+- **Top bar** — two rows of tabs (the decks, then the modules), watch status, clock.
 - **Strip below it** — a link trace that turns red on intrusion; **RAM** and
   **CPU** gauges showing what this machine has left (full when idle, draining
   as it is used, red when under 15% remains); host integrity, packets per
@@ -200,6 +201,188 @@ and movement.
 
 ---
 
+## Modules
+
+The second row of tabs. Each module is its own deck. All of them work in
+`--demo` with sample data, and in demo mode none of them opens a port, writes a
+file, probes a host or locks the screen.
+
+### DECOY
+
+![DECOY](screens/decoy.jpg)
+
+Things that have no legitimate use, so any touch is a strong signal.
+
+- **Honeyports** — type a port and press **OPEN**. NetWatch listens on it with
+  no service behind it. A connection raises a critical alert with the caller's
+  address and the first bytes it sent; NetWatch reads up to 256 bytes, never
+  answers, and hangs up. Ports under 1024 need root. The port is open to your
+  whole network, which is the point.
+- **Canary files** — type a file name and press **PLANT**. NetWatch writes a
+  small file of made-up credentials into `~/Documents` (or your home folder)
+  and watches it. Opening it raises the alarm. It will not overwrite an
+  existing file, and it only plants inside your home folder. Backup and
+  indexing tools open files too, so expect them to trip it. Linux only.
+- **Canary names** — add a host name nothing real uses, then leave it where an
+  intruder would find it (a note, a config file, a bookmark). Any DNS lookup of
+  it that NetWatch can see is flagged with the address that asked.
+- **✕** on a chip removes a decoy (and deletes the canary file).
+- **RUN DRILL** touches every port and file decoy from this machine. Those
+  touches are reported as an informational *drill*, so you can see the alarm
+  works without raising a real one.
+
+Decoys are saved and come back after a restart. If a canary file was deleted or
+changed while NetWatch was not running, you get a warning at start-up.
+
+### CORTEX
+
+![CORTEX](screens/cortex.jpg)
+
+An investigator for alerts. The queue on the left lists recent alerts with a
+verdict already worked out; click one to open the case.
+
+- **Chain of reasoning** — each line is one piece of evidence and the weight it
+  adds (red, towards a threat) or removes (green): what the alert means, who
+  the device is, whether it has a name and a maker, its behaviour score,
+  regular call-backs, other alerts from the same source, decoys it touched,
+  steps outside its WARD profile, and local programs talking to it.
+- **The case for a threat / The sceptic** — the same evidence argued both ways,
+  including the ordinary explanation for this kind of alert.
+- **Verdict** — *likely threat*, *needs a look* or *likely benign*, from the
+  total. The weights are hand-set; treat the verdict as a second opinion.
+- **Proposed action** — one of quarantine, trust, verify or watch. Nothing
+  happens until you press **APPROVE**; **DISMISS** leaves everything as it is.
+  Either way your decision goes into the LEDGER. CORTEX never proposes
+  quarantining the gateway or this machine.
+- With a local model running (see [the Copilot](#the-copilot-and-local-models)),
+  **SUMMARISE WITH THE LOCAL MODEL** asks it for a three-sentence summary. The
+  verdict still comes from the rules.
+
+### SPECTRUM
+
+![SPECTRUM](screens/spectrum.jpg)
+
+The radios around you, as heard by the SONAR sensor nodes. Without nodes (and
+outside demo mode) this deck is empty.
+
+- **Scope** — each radio is a dot; closer to the centre is a stronger signal.
+  Direction is not measured: each radio just keeps a fixed bearing. Circles are
+  Wi-Fi, diamonds are Bluetooth.
+- **Radios in range** — tagged *network host* (it is on your network), *mine*
+  (you said so), *bluetooth*, *unknown radio*, *lingering* (a Wi-Fi radio that
+  has stayed close for five minutes without joining your network) or
+  *tracker?* (a Bluetooth tag advertising the way location trackers do).
+  **MINE** stops a radio from ever being flagged.
+- **Access points** — press **THIS IS MINE: \<name\>** once while only your own
+  access points carry that name. From then on, any other access point
+  announcing it is flagged as a **LOOK-ALIKE**. Approve again after adding a
+  mesh node.
+- **Disconnect frames** — a count over the last ten seconds. A few are normal;
+  a burst means devices are being forced off the network.
+
+Limits worth knowing: a node hears only the Wi-Fi channel it is on, phones
+change their address, and the node firmware does not scan Bluetooth yet, so on
+real hardware the Bluetooth rows stay empty for now.
+
+### ORACLE
+
+![ORACLE](screens/oracle.jpg)
+
+- **Reach map** — pick a host. Everything it has been seen talking to inside
+  your network is on the left, everything outside on the right; thicker lines
+  carried more data. Green lines are conversations with this machine. The line
+  underneath says how many of those conversations a BLACKWALL quarantine would
+  really stop — it only blocks traffic to and from *this* machine — and how
+  many need the router.
+- **What if** — type a rule and press **TEST** to see which observed
+  conversations it would have matched. Nothing is blocked.
+
+| Rule | Matches |
+|---|---|
+| `port 23` | Conversations to that port. |
+| `dst 185.220.101.44` · `src 192.168.1.99` | To or from an address. |
+| `bytes > 1000000` | Conversations larger than that. |
+| `fanout > 3` | Every conversation of a host that talks to more than that many destinations. |
+| `unnamed` | Outside conversations where no server name was seen. |
+
+### PULSE
+
+![PULSE](screens/pulse.jpg)
+
+A tripwire for someone else sitting down at your unlocked machine.
+
+1. Press **PULSE OFF** to turn it on, click the text box and type a few
+   sentences. After 150 keystrokes you are enrolled.
+2. From then on every 50 keystrokes typed anywhere in the console are scored
+   against your rhythm. Two windows in a row that do not match raise a critical
+   alert, and lock the screen if **LOCK ON MISMATCH** is on.
+3. **FORGET PROFILE** deletes the enrolment.
+
+**What is recorded:** how long each key was held and the gap before the next
+one, in milliseconds. **Which keys you pressed is never recorded or sent** —
+the browser uses the key only to pair a press with its release. Four numbers
+are kept (typical hold, typical gap, and how much each varies). PULSE is off
+until you turn it on, and only measures while the console has keyboard focus.
+
+It has not been tried on a human typist yet. Being tired, typing one-handed or
+using another keyboard changes anyone's rhythm, so expect false alarms.
+
+### WARD
+
+![WARD](screens/ward.jpg)
+
+Learns what each device normally does and flags the first step outside it —
+useful for gadgets that should be boring.
+
+- A device is **LEARNING** until it has been seen 300 times over at least 24
+  hours; after that its profile is **ENFORCED**.
+- An enforced device is flagged for a destination it has never used, a new
+  port, activity at an hour it is normally silent, a conversation over three
+  times its usual size, or a changed TLS fingerprint (new firmware, or
+  different software at that address).
+- **ACCEPT AS NORMAL** adds what was seen to the profile. **RELEARN** throws
+  the profile away and starts again — do that after you reconfigure a device.
+
+WARD needs live capture, and can only learn from traffic that reaches this
+machine.
+
+### QUANTUM
+
+![QUANTUM](screens/quantum.jpg)
+
+Press **INVENTORY THE NETWORK**. NetWatch opens a TLS handshake with every
+known host on ports 443, 8443, 993 and 8883, and reads the SSH banner and
+algorithm list on port 22. It does not log in to anything, and it only talks to
+private addresses.
+
+For each service it shows the protocol version, the key type and size, days
+until the certificate expires, and whether the key exchange is **POST-QUANTUM**
+(the server accepts a hybrid ML-KEM exchange) or **CLASSICAL**. A classical
+exchange can be recorded today and decrypted once a large quantum computer
+exists; for most home traffic that matters less than the other findings it
+lists — expired certificates, RSA keys under 2048 bits, TLS 1.0, SHA-1.
+
+### LEDGER
+
+![LEDGER](screens/ledger.jpg)
+
+A record that shows when it has been altered. Every alert, every action you
+take (trust, quarantine, decoys, approvals) and any note you add becomes an
+entry carrying the hash of the entry before it.
+
+- **CHAIN INTACT / CHAIN BROKEN AT #n** — the result of checking every link.
+  **VERIFY** also re-reads the file from disk, which is what catches an edit
+  made behind NetWatch's back.
+- **HEAD** — the hash of the newest entry. Someone who can rewrite the whole
+  file can rebuild a consistent chain, so if you need to rule that out, copy
+  the head somewhere else from time to time.
+- **Add a note** — record what you saw or did.
+- **Incident report** — **LAST HOUR**, **LAST 24 H** or **EVERYTHING** writes a
+  plain-text summary and timeline from the chain. **COPY** puts it on the
+  clipboard.
+
+---
+
 ## Commands and voice
 
 The Copilot box is also a command line. Anything it does not recognise is
@@ -227,6 +410,13 @@ commands by speech and reads the reply aloud.
 | `lock` | Lock the screen. |
 | `proximity lock on` · `off` | Ultrasonic proximity lock. |
 | `audio on` · `audio off` | Spatial audio alerts. |
+| `investigate` · `investigate <host>` then `approve` or `dismiss` | Open the newest case (or a host's) in CORTEX and decide on its proposal. |
+| `open honeyport 2323` · `decoy drill` | Open a decoy port; run the decoy drill. |
+| `radios` | What SPECTRUM hears, and which radios are flagged. |
+| `reach <host>` · `what if port 23` | ORACLE: a host's reach; test a rule. |
+| `pulse on` · `pulse off` | Typing-rhythm watch. |
+| `quantum scan` | Start the cryptography inventory. |
+| `verify ledger` · `note: <text>` · `report` · `report last hour` | LEDGER: check the chain, add a note, write the incident report. |
 
 Voice uses the browser's speech recognition. In Chrome that sends audio to
 Google; type the commands if you want everything to stay on your machine.
@@ -329,6 +519,17 @@ and once a second, the devices the node overheard:
 {"node":"node-A","seen":[{"mac":"aa:bb:cc:dd:ee:ff","rssi":-52}]}
 ```
 
+For SPECTRUM the node also reports the access points it hears and how many
+disconnect frames went past in the last second:
+
+```json
+{"node":"node-A","deauth":0,"aps":[{"ssid":"home","bssid":"aa:bb:cc:dd:ee:f0","rssi":-41}]}
+```
+
+The console also accepts Bluetooth advertisements in the same datagram, as
+`"ble":[{"addr":"…","rssi":-70,"name":"…","company":76,"type":18}]`, but the
+firmware here does not scan Bluetooth, so nothing sends them yet.
+
 ---
 
 ## Files and privacy
@@ -342,6 +543,12 @@ Everything NetWatch stores is under the data directory
 | `room.json` | Node positions, walls and tripwires. |
 | `sleep.json` | The respiration log. |
 | `surface/surface-YYYY-MM-DD.json` | Daily surface snapshots. |
+| `ledger.jsonl` | The LEDGER: one hash-chained entry per line for every alert, action and note. |
+| `modules.json` | Planted decoys, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, and radios you marked as yours. |
+
+Canary files are the one thing NetWatch writes outside that directory: they go
+where you plant them, inside your home folder, and are deleted when you remove
+the decoy.
 
 Nothing is sent off the machine. Two features involve other services if you
 turn them on: voice in Chrome (speech goes to Google) and a Copilot pointed at
@@ -350,6 +557,12 @@ an Ollama host that is not your own machine.
 Braindance clips and the respiration log record when people moved and breathed
 in your space. Keep them private, and tell the people you live or work with
 that SONAR is running.
+
+PULSE stores a description of how you type — typical key hold time and gap, and
+how much each varies — and never which keys. It is off until you turn it on.
+SPECTRUM's list of nearby radios is kept in memory only; just the radios you
+mark as yours and the access points you approve are saved. The ledger holds
+every alert, so it includes the addresses and names of devices on your network.
 
 ---
 
@@ -365,3 +578,9 @@ that SONAR is running.
 | VOICE button is disabled | The browser has no speech recognition; type commands instead. |
 | Trust or quarantine is refused | A presence key is set and that device is off the network. |
 | Process names are missing | The connection belongs to another user; run NetWatch as root to see it. |
+| A honeyport will not open | Something already uses that port, or it is under 1024 and NetWatch is not root. |
+| A canary file keeps tripping | A backup, search indexer or antivirus is opening it; plant it somewhere they skip, or remove it. |
+| SPECTRUM is empty | No sensor nodes are reporting, or their firmware predates access-point reporting. |
+| WARD stays on LEARNING | It needs 300 observations *and* 24 hours per device, and live capture. |
+| PULSE flags you | Your rhythm changed (another keyboard, one hand). FORGET PROFILE and enrol again. |
+| An action returns "cross-site request refused" | The request did not come from the console's own page. Open the console at the address it was started on. |

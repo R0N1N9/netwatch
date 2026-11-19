@@ -15,6 +15,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/r0n1n9/netwatch/internal/spectrum"
 )
 
 // Frame is one CSI sample from a node: the amplitude of each subcarrier.
@@ -24,6 +26,11 @@ type Frame struct {
 	Amp    []float64  `json:"amp"`
 	DistCM float64    `json:"dist_cm,omitempty"` // Wi-Fi FTM range to the access point, if the node measured one
 	Seen   []Sighting `json:"seen,omitempty"`    // other devices this node overheard, with signal strength
+
+	// What else the node heard on the air, for the SPECTRUM deck.
+	BLE    []spectrum.BLE    `json:"ble,omitempty"`
+	APs    []spectrum.Beacon `json:"aps,omitempty"`
+	Deauth int               `json:"deauth,omitempty"` // disconnect frames since the last report
 }
 
 // NodeState is the current reading for one node.
@@ -99,6 +106,8 @@ type Engine struct {
 	OnMotion func(node string, score float64)
 	// OnFall fires when a short, violent movement is followed by stillness.
 	OnFall func(node string)
+	// OnAir receives every frame that reports other radios (called without the lock).
+	OnAir func(f Frame, now time.Time)
 
 	radios radioBook
 }
@@ -110,6 +119,9 @@ func New() *Engine { return &Engine{nodes: map[string]*node{}} }
 func (e *Engine) Ingest(f Frame, now time.Time) {
 	if f.Node == "" || len(f.Node) > 32 {
 		return
+	}
+	if e.OnAir != nil && (len(f.Seen) > 0 || len(f.BLE) > 0 || len(f.APs) > 0 || f.Deauth > 0) {
+		e.OnAir(f, now)
 	}
 	if len(f.Seen) > 0 {
 		if len(f.Seen) > 64 {

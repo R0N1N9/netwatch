@@ -54,6 +54,11 @@ type Monitor struct {
 
 	pktCtr  uint64
 	ppsLast uint64
+
+	names map[string]string // "src>dst" -> server name seen in that conversation's TLS hello
+
+	// OnDNS, if set, is called for every DNS question seen on the wire.
+	OnDNS func(src, name string)
 }
 
 // NewMonitor builds a monitor for iface.
@@ -61,7 +66,7 @@ func NewMonitor(iface *net.Interface, selfIP net.IP, emit func(model.Alert)) *Mo
 	return &Monitor{
 		iface: iface, selfIP: selfIP, emit: emit,
 		ft: NewFlowTable(), anom: anomaly.New(),
-		enr: map[string]*Enrichment{}, throttle: map[string]time.Time{},
+		enr: map[string]*Enrichment{}, throttle: map[string]time.Time{}, names: map[string]string{},
 	}
 }
 
@@ -106,6 +111,7 @@ func (m *Monitor) handle(data []byte, t time.Time) {
 		if IsClientHello(tcp.Payload) {
 			if _, hash, sni, ok := JA3(tcp.Payload); ok {
 				m.setTLS(src, hash, sni)
+				m.nameFlow(src, dst, sni)
 			}
 		}
 		return
@@ -115,6 +121,9 @@ func (m *Monitor) handle(data []byte, t time.Time) {
 		if udp.SrcPort == 53 || udp.DstPort == 53 {
 			if dns, ok := pkt.Layer(layers.LayerTypeDNS).(*layers.DNS); ok {
 				for _, q := range dns.Questions {
+					if m.OnDNS != nil && !dns.QR {
+						m.OnDNS(src, string(q.Name))
+					}
 					m.inspectDNS(src, string(q.Name), q.Type.String())
 				}
 			}
@@ -254,6 +263,37 @@ func (m *Monitor) Externals() []External {
 		e := m.Enrichment(f.Key.Src)
 		out = append(out, External{Src: f.Key.Src, Dst: f.Key.Dst, DPort: f.Key.DPort, Bytes: f.Bytes, SNI: e.SNI, JA3: e.JA3})
 	}
+	return out
+}
+
+// nameFlow remembers the server name a conversation asked for.
+func (m *Monitor) nameFlow(src, dst, sni string) {
+	if sni == "" || len(sni) > 253 {
+		return
+	}
+	m.mu.Lock()
+	if len(m.names) > 4000 {
+		m.names = map[string]string{}
+	}
+	m.names[src+">"+dst] = sni
+	m.mu.Unlock()
+}
+
+// NamedFlow is a conversation with the server name it used, if one was seen.
+type NamedFlow struct {
+	Flow
+	Name string
+}
+
+// Flows returns every tracked conversation.
+func (m *Monitor) Flows() []NamedFlow {
+	flows := m.ft.Snapshot()
+	out := make([]NamedFlow, len(flows))
+	m.mu.Lock()
+	for i, f := range flows {
+		out[i] = NamedFlow{f, m.names[f.Key.Src+">"+f.Key.Dst]}
+	}
+	m.mu.Unlock()
 	return out
 }
 

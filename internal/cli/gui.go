@@ -82,7 +82,7 @@ func init() {
 	guiCmd.Flags().BoolVar(&guiDemo, "demo", false, "serve sample data instead of live capture (no privileges needed)")
 	guiCmd.Flags().BoolVar(&guiNoOpen, "no-open", false, "do not auto-open the browser")
 	guiCmd.Flags().StringVar(&guiSonar, "sonar-udp", "", "ingest ESP32 CSI frames on this UDP address, e.g. 0.0.0.0:5566 (off by default)")
-	guiCmd.Flags().StringVar(&guiData, "data-dir", defaultDataDir(), "where braindance clips are stored (empty = memory only)")
+	guiCmd.Flags().StringVar(&guiData, "data-dir", defaultDataDir(), "where clips, the room, logs, the ledger and module settings are stored (empty = memory only)")
 	rootCmd.AddCommand(guiCmd)
 }
 
