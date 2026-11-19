@@ -213,6 +213,9 @@ func TestCompanionNeedsThePairingCode(t *testing.T) {
 	if w := get("/"); w.Code != 200 || !strings.Contains(w.Body.String(), "NetWatch") {
 		t.Errorf("companion page: %d", w.Code)
 	}
+	if w := get("/favicon.svg"); w.Code != 200 || !strings.Contains(w.Header().Get("Content-Type"), "svg") {
+		t.Errorf("companion favicon: %d %s", w.Code, w.Header().Get("Content-Type"))
+	}
 	for _, p := range []string{"/api/blackwall", "/api/stream", "/app.js", "/index.html"} {
 		if w := get(p); w.Code != 404 {
 			t.Errorf("%s is reachable through the companion listener (%d)", p, w.Code)

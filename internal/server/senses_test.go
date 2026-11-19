@@ -2,6 +2,8 @@ package server
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -141,5 +143,16 @@ func TestAckRecapAndOperator(t *testing.T) {
 	}
 	if len(sc) != 5 {
 		t.Errorf("%d scanner rows", len(sc))
+	}
+}
+
+func TestConsoleServesItsIcon(t *testing.T) {
+	s := demoServer(t)
+	for path, ctype := range map[string]string{"/favicon.svg": "image/svg+xml", "/favicon.png": "image/png", "/apple-touch-icon.png": "image/png"} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Type"), ctype) || w.Body.Len() < 500 {
+			t.Errorf("%s: %d %q %d bytes", path, w.Code, w.Header().Get("Content-Type"), w.Body.Len())
+		}
 	}
 }

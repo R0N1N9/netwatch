@@ -145,6 +145,8 @@ func (s *Server) companionHandler() http.Handler {
 		page(w, r)
 	})
 	mux.HandleFunc("/xray.js", file("xray.js", "application/javascript"))
+	mux.HandleFunc("/favicon.svg", file("favicon.svg", "image/svg+xml"))
+	mux.HandleFunc("/apple-touch-icon.png", file("apple-touch-icon.png", "image/png"))
 	mux.HandleFunc("/sonar", func(w http.ResponseWriter, r *http.Request) {
 		if ok, code := s.paired(r); !ok {
 			http.Error(w, "pairing code required", code)

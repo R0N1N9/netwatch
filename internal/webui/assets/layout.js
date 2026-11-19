@@ -68,6 +68,18 @@ fitScreen();
   layoutRefit();
 })();
 
+// ---- the tab icon: its dot turns from green to red while a critical alert is unopened ----
+const favi = { svg: null, state: "" };
+fetch("favicon.svg").then((r) => (r.ok ? r.text() : null)).then((t) => { favi.svg = t; faviUpdate(); }).catch(() => {});
+function faviUpdate() {
+  if (!favi.svg) return;
+  const hot = ((liveState && liveState.alerts) || []).some((a) => a.severity === "CRITICAL" && !a.acked), state = hot ? "alert" : "calm";
+  if (state === favi.state) return;
+  favi.state = state;
+  $("#favicon").href = "data:image/svg+xml," + encodeURIComponent(hot ? favi.svg.replace(/#1dffa1/g, "#ff5449") : favi.svg);
+}
+RENDER_HOOKS.push(faviUpdate);
+
 EXTRA_COMMANDS.push(async (t) => {
   let m;
   if ((m = t.match(/^compact (on|off)$/))) return setCompact(m[1] === "on");
@@ -75,4 +87,4 @@ EXTRA_COMMANDS.push(async (t) => {
   if ((m = t.match(/^pop ?out\s+(.+)$/)) && DECK_WORDS[m[1]]) { popOut(DECK_WORDS[m[1]]); return "Opened " + m[1].toUpperCase() + " in its own window."; }
   return null;
 });
-Object.assign(window.netwatch, { layout, panelsOf, panelMax, popOut, setCompact, fitScreen });
+Object.assign(window.netwatch, { layout, panelsOf, panelMax, popOut, setCompact, fitScreen, favi });

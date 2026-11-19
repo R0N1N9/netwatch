@@ -87,6 +87,9 @@ The console opens at `http://127.0.0.1:7979`.
 ![Watchtower](screens/watchtower.jpg)
 
 - **Top bar** — two rows of tabs (the decks, then the modules), watch status, clock.
+- **Browser tab icon** — the dot in the middle is green when all is well and
+  turns red while a critical alert is unopened, so you can tell from another
+  tab or a popped-out window.
 - **Strip below it** — a link trace that turns red on intrusion; **RAM** and
   **CPU** gauges showing what this machine has left (full when idle, draining
   as it is used, red when under 15% remains); host integrity, packets per
