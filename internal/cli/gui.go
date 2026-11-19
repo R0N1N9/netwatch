@@ -26,7 +26,7 @@ var (
 
 var guiCmd = &cobra.Command{
 	Use:   "gui",
-	Short: "GUI — launch the Cyberpunk NetWatch web console",
+	Short: "GUI — launch the NetWatch web console",
 	Long:  "GUI starts the NetWatch console (embedded web UI) on localhost and streams live\nnetwork state to it. Use --demo to preview with sample data (no privileges needed).",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var info *netif.Info

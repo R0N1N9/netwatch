@@ -16,7 +16,7 @@ var watchAuto time.Duration
 
 var watchCmd = &cobra.Command{
 	Use:   "watch",
-	Short: "WATCH — launch the live NetWatch deck (TUI)",
+	Short: "WATCH — launch the terminal Watchtower deck (TUI)",
 	Long:  "WATCH opens the full-screen NetWatch deck: live device map, ICE alerts and stats.\nNeeds raw-socket access: run with sudo, or grant cap_net_raw (see README).",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		info, err := netif.Discover()
@@ -27,7 +27,7 @@ var watchCmd = &cobra.Command{
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			if strings.Contains(err.Error(), "operation not permitted") {
-				return fmt.Errorf("permission denied opening raw socket.\n  fix: sudo setcap cap_net_raw,cap_net_admin+eip $(which netrunner)   (or run with sudo)")
+				return fmt.Errorf("permission denied opening raw socket.\n  fix: sudo setcap cap_net_raw,cap_net_admin+eip $(which netwatch)   (or run with sudo)")
 			}
 			return err
 		}

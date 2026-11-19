@@ -34,7 +34,7 @@ func PortScan(ctx context.Context, target string) []string {
 	if !isLabScope(ip) {
 		return []string{
 			"⊘ SCOPE DENIED — " + target + " is a public address.",
-			"netrunner recon is locked to private/lab space (10/8, 172.16/12, 192.168/16, loopback).",
+			"netwatch recon is locked to private/lab space (10/8, 172.16/12, 192.168/16, loopback).",
 			"Point it at hosts you own or are authorized to test.",
 		}
 	}

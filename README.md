@@ -1,10 +1,10 @@
-# netrunner
+# NetWatch
 
 > A cyberpunk network console. Futuristic, experimental, AI-native security tooling —
 > inspired by NetWatch and the netrunners of Cyberpunk 2077.
 
-`netrunner` is the **R&D sandbox** counterpart to a grounded, enterprise suite
-(*Ronin Suite*). Where that suite is modern-day production security, `netrunner`
+`netwatch` is the **R&D sandbox** counterpart to a grounded, enterprise suite
+(*Ronin Suite*). Where that suite is modern-day production security, NetWatch
 is where the bleeding-edge gets prototyped: AI-driven detection, agentic
 response, and hardware/RF/3D fusion — behind a sleek Cyberpunk-2077-style HUD.
 
@@ -12,16 +12,16 @@ One binary, multiple **decks**:
 
 | Deck | Stance | Status |
 |------|--------|--------|
-| **NetWatch** | Defensive — watch the segment, guard the wall | ✅ working (GUI + TUI) |
+| **Watchtower** | Defensive — watch the segment, guard the wall | ✅ working (GUI + TUI) |
 | **Netrunner** | Offensive — authorized recon & lab testing | 🟡 recon seed (scope-locked) |
 | **RUView** | Spatial — fuse ESP32-S3 sensors into a live 3D map | 🔭 scaffold |
 
-> **Scope & ethics.** `netrunner` is for **defense, your own networks, lab
+> **Scope & ethics.** NetWatch is for **defense, your own networks, lab
 > environments, CTFs, and engagements you are authorized to perform**. The
 > offensive deck is scope-locked to private/lab address space and refuses public
 > targets. Don't point it at things you don't own or have permission to test.
 
-![NetWatch deck](docs/netwatch.png)
+![Watchtower deck](docs/netwatch.png)
 ![Kill Chain deck](docs/killchain.png)
 ![GRID connection globe](docs/grid.png)
 
@@ -38,13 +38,13 @@ make build
 
 ```bash
 # Preview the console with sample data — no privileges needed:
-./bin/netrunner gui --demo
+./bin/netwatch gui --demo
 ```
 
 ```bash
 # Live watch (needs raw sockets + nftables). Grant caps instead of running as root:
-sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netrunner
-./bin/netrunner gui
+sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
+./bin/netwatch gui
 ```
 
 The GUI serves on `http://127.0.0.1:7979` and auto-opens your browser.
@@ -53,9 +53,9 @@ The GUI serves on `http://127.0.0.1:7979` and auto-opens your browser.
 ### Commands
 
 ```
-netrunner gui     # Cyberpunk web console (NetWatch deck)  — primary UI
-netrunner watch   # lightweight terminal deck (TUI fallback)
-netrunner sweep   # one-shot device discovery, printed to the terminal
+netwatch gui     # Cyberpunk web console — primary UI
+netwatch watch    # lightweight terminal deck (TUI fallback)
+netwatch sweep    # one-shot device discovery, printed to the terminal
 ```
 
 `gui` flags: `--demo`, `--addr 127.0.0.1:7979`, `--auto 20s` (sweep interval,
@@ -63,7 +63,7 @@ netrunner sweep   # one-shot device discovery, printed to the terminal
 
 ---
 
-## The NetWatch deck (built)
+## The Watchtower deck (defensive)
 
 Defensive situational awareness for your LAN, rendered as a neon command deck.
 
@@ -171,7 +171,7 @@ internal/
   webui/      embedded Cyberpunk web console (assets/ baked in with go:embed)
   tui/        terminal deck (Bubble Tea) — fallback
   theme/      cyberpunk palette + banner
-  cli/        cobra command tree (netrunner gui | watch | sweep)
+  cli/        cobra command tree (netwatch gui | watch | sweep)
 ```
 
 The capture + model + ICE engine is deck-agnostic: the GUI, the TUI, and the

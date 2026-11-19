@@ -1,6 +1,6 @@
 // Package blackwall quarantines hosts at the firewall via nftables.
 //
-// It keeps one dedicated table (inet netrunner) and rebuilds it atomically on
+// It keeps one dedicated table (inet netwatch) and rebuilds it atomically on
 // every change, so the live set of quarantined IPs is always exactly what the
 // operator asked for. Requires CAP_NET_ADMIN (or root) and the `nft` binary.
 package blackwall
@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-const tableName = "netrunner"
+const tableName = "netwatch"
 
 // Wall is the BLACKWALL controller.
 type Wall struct {
@@ -82,7 +82,7 @@ func (w *Wall) apply() error {
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if strings.Contains(msg, "permission") || strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("blackwall needs nft + CAP_NET_ADMIN (run: sudo setcap cap_net_raw,cap_net_admin+eip $(which netrunner)): %s", msg)
+			return fmt.Errorf("blackwall needs nft + CAP_NET_ADMIN (run: sudo setcap cap_net_raw,cap_net_admin+eip $(which netwatch)): %s", msg)
 		}
 		return fmt.Errorf("nft failed: %v: %s", err, msg)
 	}

@@ -1,4 +1,4 @@
-// Package passive is netrunner's passive intelligence engine: live packet
+// Package passive is netwatch's passive intelligence engine: live packet
 // capture feeding a flow table and a set of analyzers (OS fingerprint, TLS/JA3,
 // DNS/DGA, beaconing) plus a behavioral anomaly model. All observation only.
 package passive

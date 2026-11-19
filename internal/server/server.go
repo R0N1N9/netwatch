@@ -233,6 +233,23 @@ func (s *Server) broadcast() {
 // ---- action endpoints ----
 
 func (s *Server) handleSweep(w http.ResponseWriter, r *http.Request) {
+	if s.demo {
+		// No real interface in demo mode: show the scan state, keep sample data.
+		go func() {
+			s.mu.Lock()
+			s.sweeping = true
+			s.mu.Unlock()
+			s.broadcast()
+			time.Sleep(1500 * time.Millisecond)
+			s.mu.Lock()
+			s.sweeping = false
+			s.lastSweep = time.Now()
+			s.mu.Unlock()
+			s.broadcast()
+		}()
+		writeJSON(w, map[string]any{"ok": true})
+		return
+	}
 	go s.doSweep(context.Background())
 	writeJSON(w, map[string]any{"ok": true})
 }

@@ -54,7 +54,7 @@ var sweepCmd = &cobra.Command{
 		devices, err := sweep.Run(ctx, info, opt)
 		if err != nil {
 			if errors.Is(err, os.ErrPermission) || strings.Contains(err.Error(), "operation not permitted") {
-				return fmt.Errorf("permission denied opening raw socket.\n  fix: sudo setcap cap_net_raw,cap_net_admin+eip $(which netrunner)   (or run with sudo)")
+				return fmt.Errorf("permission denied opening raw socket.\n  fix: sudo setcap cap_net_raw,cap_net_admin+eip $(which netwatch)   (or run with sudo)")
 			}
 			return err
 		}

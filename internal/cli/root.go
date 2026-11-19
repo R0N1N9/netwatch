@@ -1,6 +1,6 @@
-// Package cli wires up the netrunner command tree.
+// Package cli wires up the netwatch command tree.
 //
-// netrunner is the umbrella console. Its first deck is NetWatch (defensive).
+// NetWatch is the umbrella console. Its first deck is Watchtower (defensive).
 // Offensive (recon/lab) and RUView (3D spatial) decks hang off the same shell.
 package cli
 
@@ -14,8 +14,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:           "netrunner",
-	Short:         "netrunner — a cyberpunk network console (NetWatch defensive deck)",
+	Use:           "netwatch",
+	Short:         "NetWatch — a cyberpunk network security console",
 	Long:          theme.Banner(),
 	SilenceUsage:  true,
 	SilenceErrors: true,

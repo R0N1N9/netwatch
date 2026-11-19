@@ -1,6 +1,6 @@
-// netrunner — a cyberpunk network console.
+// netwatch — a cyberpunk network console.
 //
-// The NetWatch deck (defensive) watches your local network and guards the wall.
+// The Watchtower deck (defensive) watches your local network and guards the wall.
 // Offensive (authorized recon/lab) and RUView (3D spatial) decks build on the
 // same shell.
 package main

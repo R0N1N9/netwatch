@@ -1,4 +1,4 @@
-BINARY := netrunner
+BINARY := netwatch
 BINDIR := bin
 PKG    := .
 

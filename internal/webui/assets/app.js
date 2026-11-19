@@ -241,7 +241,7 @@ function scramble(elm, text, dur = 650) {
 function runBoot() {
   const boot = $("#boot");
   if (!boot) return;
-  $("#bootLogo").textContent = "KIROSHI OPTIC  ·  MK.4  //  NETRUNNER NEURAL UPLINK";
+  $("#bootLogo").textContent = "KIROSHI OPTIC  ·  MK.4  //  NETWATCH NEURAL UPLINK";
   const seq = [
     ["> establishing neural link", "ok"],
     ["> mounting sensory cortex", "ok"],
@@ -347,7 +347,7 @@ const KILLCHAIN = [
     { side: "blue", ttl: "AV / EDR validation", att: "DS0013", type: "info", info: ["Drop the EICAR string to a file — a healthy scanner must quarantine it.", "If nothing fires, your endpoint protection has a blind spot."] },
   ]},
   { name: "DELIVERY", attck: "T1566 · T1091", actions: [
-    { side: "red", ttl: "Delivery vector brief", att: "T1566", type: "info", info: ["Common vectors: spear-phish attachment/link, watering-hole, removable media, supply-chain.", "PLANNING ONLY — netrunner does not build phishing or delivery infrastructure."] },
+    { side: "red", ttl: "Delivery vector brief", att: "T1566", type: "info", info: ["Common vectors: spear-phish attachment/link, watering-hole, removable media, supply-chain.", "PLANNING ONLY — NetWatch does not build phishing or delivery infrastructure."] },
     { side: "blue", ttl: "Ingress monitoring brief", att: "DS0022", type: "info", info: ["Watch: new executables in Downloads, macro-enabled docs, USB mass-storage mounts.", "Pair with the persistence + connection audits below to catch what slips through."] },
   ]},
   { name: "EXPLOIT", attck: "T1203 · T1190", actions: [
