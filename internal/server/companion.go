@@ -6,7 +6,6 @@ package server
 // code shown in the REFLEX deck. The console itself stays on localhost.
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -27,6 +26,7 @@ import (
 	"time"
 
 	"github.com/r0n1n9/netwatch/internal/webui"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 // companion is guarded by Server.mu.
@@ -37,13 +37,17 @@ type companion struct {
 	port        string
 	bad         int
 	badSince    time.Time
+	srv         *http.Server
+	linked      int           // phones with the alert stream open right now
+	kick        chan struct{} // closed to drop every open phone stream (a new pairing code)
 }
 
 func (s *Server) companionView() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := map[string]any{"on": s.comp.on, "flag": "--companion 0.0.0.0:7443"}
+	out := map[string]any{"on": s.comp.on, "flag": "--companion 0.0.0.0:7443", "linked": s.comp.linked}
 	if s.comp.on {
+		out["addr"] = net.JoinHostPort(s.companionIP().String(), s.comp.port)
 		out["code"], out["fingerprint"] = s.comp.code, s.comp.fingerprint
 		out["url"] = "https://" + net.JoinHostPort(s.companionIP().String(), s.comp.port) + "/?code=" + s.comp.code
 	}
@@ -209,10 +213,19 @@ func (s *Server) companionHandler() http.Handler {
 		s.clientsMu.Lock()
 		s.clients[ch] = struct{}{}
 		s.clientsMu.Unlock()
+		s.mu.Lock()
+		s.comp.linked++
+		kick := s.comp.kick
+		s.mu.Unlock()
 		defer func() {
 			s.clientsMu.Lock()
 			delete(s.clients, ch)
 			s.clientsMu.Unlock()
+			s.mu.Lock()
+			if s.comp.linked > 0 {
+				s.comp.linked--
+			}
+			s.mu.Unlock()
 		}()
 		send := func(snap []byte) { // the phone gets the alerts and nothing else
 			var v struct {
@@ -238,6 +251,8 @@ func (s *Server) companionHandler() http.Handler {
 			select {
 			case <-r.Context().Done():
 				return
+			case <-kick:
+				return
 			case b := <-ch:
 				send(b)
 			case <-keep.C:
@@ -249,32 +264,121 @@ func (s *Server) companionHandler() http.Handler {
 	return mux
 }
 
-func (s *Server) runCompanion(ctx context.Context) {
-	_, port, err := net.SplitHostPort(s.CompanionAddr)
-	if err != nil {
-		log.Printf("companion: bad address %q: %v", s.CompanionAddr, err)
-		return
+const companionDefault = "0.0.0.0:7443"
+
+// startCompanion opens the phone listener on addr. It can be called at start-up
+// (the --companion flag, or a remembered choice) or from the MOBILE deck.
+func (s *Server) startCompanion(addr string) error {
+	s.mu.Lock()
+	if s.comp.on {
+		s.mu.Unlock()
+		return nil
 	}
+	ctx := s.fg.ctx
+	s.mu.Unlock()
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("bad address %q: %v", addr, err)
+	}
+	s.CompanionAddr = addr
 	cert, fp, err := selfSigned([]net.IP{s.companionIP(), s.info.IP, net.IPv4(127, 0, 0, 1)})
 	if err != nil {
-		log.Printf("companion: cannot make a certificate: %v", err)
-		return
+		return fmt.Errorf("cannot make a certificate: %v", err)
 	}
-	ln, err := tls.Listen("tcp", s.CompanionAddr, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+	ln, err := tls.Listen("tcp", addr, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 	if err != nil {
-		log.Printf("companion: cannot listen on %s: %v", s.CompanionAddr, err)
+		return fmt.Errorf("cannot listen on %s: %v", addr, err)
+	}
+	srv := &http.Server{Handler: s.companionHandler(), ReadHeaderTimeout: 5 * time.Second}
+	s.mu.Lock()
+	s.comp = companion{on: true, code: pairingCode(), fingerprint: fp, port: port, srv: srv, kick: make(chan struct{})}
+	s.mu.Unlock()
+	if ctx != nil {
+		go func() {
+			<-ctx.Done()
+			srv.Close()
+		}()
+	}
+	go func() {
+		log.Printf("companion: listening on %s (QR code and pairing code in the MOBILE deck)", addr)
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Printf("companion: %v", err)
+		}
+	}()
+	return nil
+}
+
+// stopCompanion closes the phone listener and drops every linked phone.
+func (s *Server) stopCompanion() {
+	s.mu.Lock()
+	srv := s.comp.srv
+	s.comp = companion{}
+	s.mu.Unlock()
+	if srv != nil {
+		srv.Close()
+	}
+}
+
+// handleMobile is the MOBILE deck: the phone link's state, switching it on and off, a new pairing code.
+func (s *Server) handleMobile(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			On      *bool `json:"on"`
+			NewCode bool  `json:"newCode"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		switch {
+		case req.On != nil && *req.On:
+			if s.demo && s.CompanionAddr == "" {
+				writeJSON(w, map[string]any{"ok": false, "error": "demo mode does not open a port on your network from here — start it with: netwatch gui --demo --companion " + companionDefault})
+				return
+			}
+			addr := s.CompanionAddr
+			if addr == "" {
+				addr = companionDefault
+			}
+			if err := s.startCompanion(addr); err != nil {
+				writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			s.logAction("mobile", "switched the phone link on ("+addr+")")
+		case req.On != nil:
+			s.stopCompanion()
+			s.logAction("mobile", "switched the phone link off")
+		case req.NewCode:
+			s.mu.Lock()
+			if s.comp.on {
+				s.comp.code, s.comp.bad = pairingCode(), 0
+				if s.comp.kick != nil {
+					close(s.comp.kick) // phones linked with the old code lose their stream now
+				}
+				s.comp.kick = make(chan struct{})
+			}
+			s.mu.Unlock()
+			s.logAction("mobile", "issued a new pairing code; phones linked with the old one were cut off")
+		}
+		s.saveModules()
+	}
+	v := s.companionView()
+	v["ok"], v["demo"] = true, s.demo
+	writeJSON(w, v)
+}
+
+// handleMobileQR draws the phone link as a QR code. It is served by the console only.
+func (s *Server) handleMobileQR(w http.ResponseWriter, r *http.Request) {
+	url, _ := s.companionView()["url"].(string)
+	if url == "" {
+		http.Error(w, "the phone link is off", http.StatusNotFound)
 		return
 	}
-	s.mu.Lock()
-	s.comp = companion{on: true, code: pairingCode(), fingerprint: fp, port: port}
-	s.mu.Unlock()
-	srv := &http.Server{Handler: s.companionHandler(), ReadHeaderTimeout: 5 * time.Second}
-	go func() {
-		<-ctx.Done()
-		srv.Close()
-	}()
-	log.Printf("companion: listening on %s (pairing code in the REFLEX deck)", s.CompanionAddr)
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		log.Printf("companion: %v", err)
+	png, err := qrcode.Encode(url, qrcode.Medium, 640)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(png)
 }

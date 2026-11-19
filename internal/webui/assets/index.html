@@ -42,6 +42,7 @@ MK.4</div>
         <div class="tab" data-deck="netdive">NETDIVE</div>
         <div class="tab" data-deck="ar">AR</div>
         <div class="tab" data-deck="sonar">SONAR</div>
+        <div class="tab" data-deck="mobile">MOBILE</div>
       </div>
       <div class="tab-row">
         <span class="tab-label">MODULES</span>
@@ -627,6 +628,36 @@ MK.4</div>
           <span class="micro cy">DO</span><div class="rf-actions" id="rfActions"></div>
           <input id="rfSay" placeholder="what to say (for speak)" maxlength="200" autocomplete="off" />
           <button class="btn" id="rfSave">SAVE SCENE</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MOBILE DECK (the phone link: QR code, pairing code, what the phone can do) -->
+  <main class="deck mod" data-deck="mobile" style="--cols: 0.85fr 1.2fr" hidden>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--cyan)">
+        <div class="panel-head"><span>MOBILE // PHONE LINK</span><span class="meta" id="mbMeta">off</span></div>
+        <div class="panel-body mb-link" id="mbLink"></div>
+      </div>
+    </section>
+    <section class="col">
+      <div class="panel grow" style="--accent: var(--green)">
+        <div class="panel-head"><span>WHAT YOUR PHONE CAN DO</span><span class="meta">read-only · your network only</span></div>
+        <div class="panel-body">
+          <div class="mb-cards">
+            <div class="mb-card"><b>ALERTS</b><span>The latest alerts, with a different vibration pattern for each kind, so you can tell them apart in your pocket.</span></div>
+            <div class="mb-card"><b>FIND</b><span>Pick a device on your network and a compass arrow and distance lead you to where the sensor nodes place it.</span></div>
+            <div class="mb-card"><b>X-RAY</b><span>What SONAR senses — presence, nodes, located devices — drawn over the phone's camera.</span></div>
+          </div>
+          <div class="micro cy" style="margin: 14px 0 6px">▚ GETTING IN</div>
+          <ol class="mb-steps">
+            <li>Put the phone on the <b>same Wi-Fi</b> as this machine.</li>
+            <li>Point its camera at the QR code and open the link (or type the address and the pairing code).</li>
+            <li>The browser warns about the certificate, because NetWatch makes its own. Check the fingerprint if you like, then accept it once.</li>
+            <li>Press <b>START</b> on the phone.</li>
+          </ol>
+          <div class="m-note">The phone gets a page of its own, served on a separate port. It can read alerts and positions but cannot change anything here, and every request needs the pairing code. The code changes each time NetWatch starts; <b>NEW CODE</b> changes it now and cuts off phones using the old one. If this machine runs a firewall, allow incoming TCP on the port shown.</div>
         </div>
       </div>
     </section>

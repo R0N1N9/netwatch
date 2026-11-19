@@ -94,7 +94,8 @@ type Server struct {
 
 	CompanionAddr string // HTTPS address for the phone companion ("" = off)
 	fg            forgeState
-	wantListen    bool // listen for nodes at start-up, remembered from an earlier run
+	wantListen    bool   // listen for nodes at start-up, remembered from an earlier run
+	wantCompanion string // the phone link's address, if it was switched on from the console earlier
 	comp          companion
 }
 
@@ -200,6 +201,8 @@ func (s *Server) Handler() http.Handler {
 	s.senseRoutes(mux)
 	s.reflexRoutes(mux)
 	mux.HandleFunc("/api/forge", s.handleForge)
+	mux.HandleFunc("/api/mobile", s.handleMobile)
+	mux.HandleFunc("/api/mobile/qr.png", s.handleMobileQR)
 	mux.HandleFunc("/api/finder", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.finderView(r.RemoteAddr)) })
 	return mux
 }

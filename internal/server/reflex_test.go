@@ -291,3 +291,51 @@ func TestFinderPlacesHostsAndThePhoneItself(t *testing.T) {
 		t.Errorf("/finder without a code: %d", w.Code)
 	}
 }
+
+func TestPhoneLinkFromTheConsole(t *testing.T) {
+	s := demoServer(t)
+	if r := call(t, s.handleMobile, `{"on":true}`); r["ok"] != false {
+		t.Fatal("demo mode opened a port on the network from the console")
+	}
+	s.demo = false
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("no loopback networking here")
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	s.CompanionAddr = addr
+	qr := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		s.handleMobileQR(w, httptest.NewRequest(http.MethodGet, "/api/mobile/qr.png", nil))
+		return w
+	}
+	if qr().Code != 404 {
+		t.Error("a QR code was served while the phone link was off")
+	}
+	r := call(t, s.handleMobile, `{"on":true}`)
+	if r["ok"] != true || r["on"] != true || r["addr"] != addr || len(r["code"].(string)) != 6 {
+		t.Fatalf("switch on: %v", r)
+	}
+	t.Cleanup(s.stopCompanion)
+	if w := qr(); w.Code != 200 || !strings.HasPrefix(w.Body.String(), "\x89PNG") || w.Body.Len() < 300 {
+		t.Errorf("QR code: %d, %d bytes", w.Code, w.Body.Len())
+	}
+	first := r["code"]
+	if r = call(t, s.handleMobile, `{"newCode":true}`); r["code"] == first || r["on"] != true {
+		t.Errorf("new code: %v (was %v)", r["code"], first)
+	}
+	c, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("nothing is listening for phones on %s: %v", addr, err)
+	}
+	c.Close()
+	if r = call(t, s.handleMobile, `{"on":false}`); r["on"] != false {
+		t.Errorf("switch off: %v", r)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond); err == nil {
+		c.Close()
+		t.Error("the phone listener is still open after being switched off")
+	}
+}

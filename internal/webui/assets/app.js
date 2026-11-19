@@ -231,7 +231,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 function cycleDeck() {
-  const order = ["netwatch", "breach", "killchain", "attack", "grid", "netdive", "ar", "sonar", "decoy", "cortex", "spectrum", "oracle", "pulse", "ward", "quantum", "ledger", "dojo", "reflex"];
+  const order = ["netwatch", "breach", "killchain", "attack", "grid", "netdive", "ar", "sonar", "mobile", "decoy", "cortex", "spectrum", "oracle", "pulse", "ward", "quantum", "ledger", "dojo", "reflex"];
   const cur = document.querySelector(".tab.active").dataset.deck;
   selectDeck(order[(order.indexOf(cur) + 1) % order.length]);
 }

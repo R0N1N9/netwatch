@@ -11,7 +11,7 @@ are authorised to do.
 
 - [Install and run](#install-and-run)
 - [The console](#the-console)
-- [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [NETDIVE](#netdive) · [AR](#ar) · [SONAR](#sonar)
+- [Decks](#decks): [Watchtower](#watchtower) · [Breach](#breach) · [Kill Chain and ATT&CK](#kill-chain-and-attck) · [GRID](#grid) · [NETDIVE](#netdive) · [AR](#ar) · [SONAR](#sonar) · [MOBILE](#phone-companion)
 - [Modules](#modules): [DECOY](#decoy) · [CORTEX](#cortex) · [SPECTRUM](#spectrum) · [ORACLE](#oracle) · [PULSE](#pulse) · [WARD](#ward) · [QUANTUM](#quantum) · [LEDGER](#ledger) · [DOJO](#dojo) · [REFLEX](#reflex) · [Phone companion](#phone-companion)
 - [Commands and voice](#commands-and-voice)
 - [The Copilot and local models](#the-copilot-and-local-models)
@@ -517,14 +517,23 @@ moment. **REPLAY THE LAST 30 MINUTES** shows one on demand. `Esc` closes it.
 
 ![Phone companion](screens/companion.jpg)
 
-A read-only page for your phone. Start NetWatch with a second address:
+A read-only page for your phone. Open the **MOBILE** deck (next to SONAR) and
+press **SWITCH ON THE PHONE LINK**. The deck then shows a **QR code**, the
+address and a six-digit **pairing code**; point the phone's camera at the QR
+code, with the phone on the same network. NetWatch remembers that the link is
+on and starts it again next time, until you press **SWITCH OFF**. **NEW CODE**
+changes the pairing code and drops any phone linked with the old one. The
+deck's header says how many phones are linked.
+
+![MOBILE deck](screens/mobile.jpg)
+
+You can also start it from the terminal, which is the only way in demo mode:
 
 ```bash
 ./bin/netwatch gui --companion 0.0.0.0:7443
 ```
 
-The REFLEX deck then shows a link and a six-digit **pairing code**. Open the
-link on a phone on the same network. The certificate is self-signed, so the
+Opening the link: The certificate is self-signed, so the
 browser warns once; the deck shows the certificate's first bytes if you want to
 compare. Press **START**.
 
@@ -599,7 +608,7 @@ commands by speech and reads the reply aloud.
 | `xray on` · `xray off` | X-RAY in the AR deck. |
 | `scenes` · `fire scene <name>` · `light test` | REFLEX scenes and the threat light. |
 | `open talking decoy 2323` | Open a talking decoy. |
-| `companion` | Read out the phone companion's link and pairing code. |
+| `mobile` · `qr` · `phone link on` · `phone link off` | Open the MOBILE deck and read out the link and pairing code; switch the phone link on or off. |
 | `add a node` · `cancel flash` · `listen for nodes` | Open the board flasher; stop a flash in progress; start accepting sensor nodes. |
 
 Voice uses the browser's speech recognition. In Chrome that sends audio to
@@ -832,7 +841,7 @@ Everything NetWatch stores is under the data directory
 | `surface/surface-YYYY-MM-DD.json` | Daily surface snapshots. |
 | `ledger.jsonl` | The LEDGER: one hash-chained entry per line for every alert, action and note. |
 | `firmware/*.bin` | Optional: a firmware image placed here (`sonar-node.bin`, `threat-light.bin`) is flashed instead of the one built into NetWatch. |
-| `modules.json` | Whether to listen for sensor nodes at start-up, planted decoys and talking-decoy ports, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, radios you marked as yours, your scenes, and the threat light's address. |
+| `modules.json` | Whether to listen for sensor nodes and whether the phone link is on at start-up, planted decoys and talking-decoy ports, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, radios you marked as yours, your scenes, and the threat light's address. |
 
 Canary files are the one thing NetWatch writes outside that directory: they go
 where you plant them, inside your home folder, and are deleted when you remove

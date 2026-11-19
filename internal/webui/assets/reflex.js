@@ -47,8 +47,8 @@ function reflexRender(r) {
   const cp = r.companion || {};
   $("#cpMeta").textContent = cp.on ? "listening" : "off";
   $("#cpBody").innerHTML = cp.on
-    ? '<p>Open this on a phone on your network, accept the certificate warning once, and press START:</p><p class="m-mono cp-url">' + esc(cp.url) + '</p><p><b>Pairing code</b> <span class="cp-code">' + esc(cp.code) + '</span> · <b>certificate</b> <span class="m-mono">' + esc(cp.fingerprint) + '…</span></p><p class="m-dim">The phone gets alerts (as vibration patterns) and the X-RAY view, read-only. It cannot reach the console or change anything.</p>'
-    : '<p>A read-only page for your phone: each kind of alert buzzes in its own pattern, and X-RAY shows what SONAR senses through the phone\'s camera.</p><p class="m-dim">It is off. Start NetWatch with <code>' + esc(cp.flag) + '</code> to serve it over HTTPS on your network, behind a pairing code. The console itself stays on localhost.</p>';
+    ? '<p>On. The QR code is in the <b>MOBILE</b> deck. Or open this on a phone on your network:</p><p class="m-mono cp-url">' + esc(cp.url) + '</p><p><b>Pairing code</b> <span class="cp-code">' + esc(cp.code) + '</span> · <b>certificate</b> <span class="m-mono">' + esc(cp.fingerprint) + '…</span></p><p class="m-dim">The phone gets alerts (as vibration patterns) and the X-RAY view, read-only. It cannot reach the console or change anything.</p>'
+    : '<p>A read-only page for your phone: alerts with a vibration pattern each, FIND, and X-RAY through the camera.</p><p class="m-dim">It is off. Switch it on, and get the QR code, in the <b>MOBILE</b> deck.</p>';
 }
 function reflexMatches() {
   const r = reflex.data; if (!r) return;
@@ -198,4 +198,35 @@ EXTRA_COMMANDS.push(async (t) => {
   return null;
 });
 
-Object.assign(window.netwatch, { reflex, reflexLoad, reflexSave, cueSt, hunt, huntStart, huntStop, huntInterval, xr, setXray, xrDraw, talk, talkReplay });
+// ---------- MOBILE deck: the phone link ----------
+const mobile = { sig: "" };
+function mobileRender(r) {
+  mobile.data = r;
+  $("#mbMeta").textContent = r.on ? (r.linked ? r.linked + " phone" + (r.linked === 1 ? "" : "s") + " linked" : "on · no phone linked yet") : "off";
+  const sig = [r.on, r.url, r.code, r.demo].join("|");
+  if (sig !== mobile.sig) { // rebuilt only when something changes, so the QR code does not flicker
+    mobile.sig = sig;
+    $("#mbLink").innerHTML = r.on
+      ? '<div class="mb-qr"><img id="mbQR" alt="QR code for the phone link" src="/api/mobile/qr.png?c=' + encodeURIComponent(r.code) + '" /></div>' +
+        '<div class="micro cy">OR OPEN</div><div class="m-mono mb-url">https://' + esc(r.addr) + '</div>' +
+        '<div class="micro cy">PAIRING CODE</div><div class="mb-code">' + esc(r.code) + '</div>' +
+        '<div class="micro cy">CERTIFICATE BEGINS</div><div class="m-mono">' + esc(r.fingerprint) + '</div>' +
+        '<div class="btn-row" style="padding-left:0"><button class="btn" id="mbNew">NEW CODE</button><button class="btn danger" id="mbOff">SWITCH OFF</button></div>'
+      : '<div class="mb-off"><div class="mb-phone">▯</div><p>The phone link is off. Switch it on and NetWatch serves a small read-only page to phones on your Wi-Fi, behind a pairing code.</p><button class="btn" id="mbOn">SWITCH ON THE PHONE LINK</button>' + (r.demo ? '<p class="m-dim">In demo mode start it from the terminal instead: <code>netwatch gui --demo ' + esc(r.flag) + '</code></p>' : "") + '</div>';
+    if ($("#mbOn")) $("#mbOn").onclick = () => mobileSet({ on: true });
+    if ($("#mbOff")) $("#mbOff").onclick = () => mobileSet({ on: false });
+    if ($("#mbNew")) $("#mbNew").onclick = () => mobileSet({ newCode: true });
+  }
+}
+async function mobileLoad() { const r = await get("/api/mobile"); if (r) mobileRender(r); return r; }
+async function mobileSet(body) { const r = await post("/api/mobile", body); if (r && r.ok) { mobileRender(r); status(r.on ? "phone link on — scan the QR code" : "phone link off"); } return r; }
+MOD_DECKS.mobile = mobileLoad;
+Object.assign(DECK_WORDS, { mobile: "mobile", phone: "mobile", qr: "mobile", "qr code": "mobile", companion: "mobile" });
+EXTRA_COMMANDS.unshift(async (t) => {
+  let m;
+  if ((m = t.match(/^(?:phone|mobile) link (on|off)$/))) { selectDeck("mobile"); const r = await mobileSet({ on: m[1] === "on" }); return r && r.ok ? (r.on ? "Phone link on. Scan the code in the MOBILE deck." : "Phone link off.") : "Could not: " + ((r && r.error) || "backend unreachable"); }
+  if (/^(companion|phone|mobile|qr|qr code|pair( my)? phone)$/.test(t)) { selectDeck("mobile"); const r = await mobileLoad(); return r && r.on ? "Scan the QR code, or open https://" + r.addr + " and enter pairing code " + r.code.split("").join(" ") + "." : "The phone link is off. Press switch on in the MOBILE deck."; }
+  return null;
+});
+
+Object.assign(window.netwatch, { mobile, mobileLoad, mobileSet, reflex, reflexLoad, reflexSave, cueSt, hunt, huntStart, huntStop, huntInterval, xr, setXray, xrDraw, talk, talkReplay });

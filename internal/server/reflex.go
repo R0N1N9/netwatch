@@ -7,6 +7,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -60,8 +61,13 @@ func (s *Server) startReflex(ctx context.Context) {
 		s.demoReflex()
 	}
 	go s.reflexLoop(ctx)
-	if s.CompanionAddr != "" {
-		go s.runCompanion(ctx)
+	if addr := s.CompanionAddr; addr != "" || (s.wantCompanion != "" && !s.demo) {
+		if addr == "" {
+			addr = s.wantCompanion // switched on from the MOBILE deck in an earlier run
+		}
+		if err := s.startCompanion(addr); err != nil {
+			log.Printf("companion: %v", err)
+		}
 	}
 }
 

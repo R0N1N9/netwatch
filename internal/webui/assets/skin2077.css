@@ -731,3 +731,16 @@ body.solo-panel .panel.max, body.solo-panel .tpanel.max { inset: 0; box-shadow: 
 /* Decorative canvases must never sit on top of a panel's controls. */
 #brain { pointer-events: none; }
 .panel-head, .tp-tabs { position: relative; z-index: 2; }
+
+/* ---------- MOBILE deck ---------- */
+.mb-link { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.mb-qr { align-self: center; padding: 12px; background: #fff; box-shadow: 0 0 34px rgba(94, 246, 255, 0.35); margin: 4px 0 10px; }
+.mb-qr img { display: block; width: min(300px, 34vh); height: auto; image-rendering: pixelated; }
+.mb-url { font-size: 15px; color: var(--cyan-soft); word-break: break-all; }
+.mb-code { font-family: var(--mono); font-size: 34px; letter-spacing: 0.28em; color: var(--green); text-shadow: 0 0 14px rgba(29, 255, 161, 0.5); line-height: 1.1; }
+.mb-off { align-self: center; text-align: center; max-width: 380px; margin-top: 8vh; display: flex; flex-direction: column; gap: 12px; align-items: center; font-size: 14px; }
+.mb-phone { font-size: 90px; line-height: 1; color: var(--dim); }
+.mb-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mb-card { border: 1px solid rgba(29, 255, 161, 0.3); border-left: 2px solid var(--green); background: rgba(8, 24, 42, 0.7); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; line-height: 1.4; }
+.mb-card b { font-size: 16px; letter-spacing: 0.12em; color: var(--green); }
+.mb-steps { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; } .mb-steps b { color: var(--cyan); font-weight: 600; }

@@ -114,9 +114,10 @@ type modulesFile struct {
 	Mine      []string       `json:"mine"` // radios the operator said are theirs
 	Scenes    []scenes.Scene `json:"scenes"`
 	LightAddr string         `json:"lightAddr"`
-	Talking   []int          `json:"talking"` // ports of the talking decoys
-	Listen    bool           `json:"listen"`  // accept sensor-node frames at start-up without the flag
-	Esptool   string         `json:"esptool"` // where esptool is, if the operator had to say
+	Talking   []int          `json:"talking"`   // ports of the talking decoys
+	Listen    bool           `json:"listen"`    // accept sensor-node frames at start-up without the flag
+	Esptool   string         `json:"esptool"`   // where esptool is, if the operator had to say
+	Companion string         `json:"companion"` // the phone link's address while it is switched on
 }
 
 func (s *Server) saveModules() {
@@ -135,6 +136,9 @@ func (s *Server) saveModules() {
 	f.LightAddr = s.ref.lightAddr
 	f.Listen = s.fg.listening != "" || s.wantListen
 	f.Esptool = forge.ToolPath
+	if s.comp.on {
+		f.Companion = s.CompanionAddr
+	}
 	s.mu.Unlock()
 	b, err := json.MarshalIndent(f, "", " ")
 	if err != nil {
@@ -183,6 +187,7 @@ func (s *Server) loadModules() {
 	s.mu.Lock()
 	s.mod.pulseLock = f.PulseLock
 	s.wantListen = f.Listen
+	s.wantCompanion = f.Companion
 	if f.Esptool != "" && forge.CheckTool(f.Esptool) == nil {
 		forge.ToolPath = f.Esptool
 	}

@@ -53,6 +53,7 @@ sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
 | **GRID** | A globe of the public addresses your network talks to, with the local program behind each. |
 | **NETDIVE** | The network as a 3D city you fly through: a tower per host, flows as moving lights, a wall around anything quarantined. |
 | **AR** | Host tags over your camera feed. |
+| **MOBILE** | A QR code that links your phone to a read-only page: alerts by vibration, a compass that points to devices, and X-RAY through its camera. |
 | **SONAR** | Presence sensing from ESP32-S3 Wi-Fi nodes: a 3D room view, tripwires, located hosts, breathing, and braindance recordings you can replay. |
 
 The second row of tabs holds the modules:
