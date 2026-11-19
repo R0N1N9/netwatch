@@ -9,9 +9,8 @@
 //
 // Set the light's address (this board's IP and LIGHT_PORT) in the REFLEX deck.
 //
-// STATUS: written against ESP-IDF v5 and the espressif/led_strip component
-// (v2.x API) but NOT yet compiled or run on hardware. Field names in
-// led_strip_config_t changed between component versions; expect to adjust.
+// STATUS: compiles with ESP-IDF v5.3.2 and the espressif/led_strip component
+// (v2.x) in CI, but has NOT yet run on hardware.
 
 #include <math.h>
 #include <stdio.h>

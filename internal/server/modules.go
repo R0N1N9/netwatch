@@ -114,6 +114,7 @@ type modulesFile struct {
 	Scenes    []scenes.Scene `json:"scenes"`
 	LightAddr string         `json:"lightAddr"`
 	Talking   []int          `json:"talking"` // ports of the talking decoys
+	Listen    bool           `json:"listen"`  // accept sensor-node frames at start-up without the flag
 }
 
 func (s *Server) saveModules() {
@@ -130,6 +131,7 @@ func (s *Server) saveModules() {
 	s.mu.Lock()
 	f.PulseLock = s.mod.pulseLock
 	f.LightAddr = s.ref.lightAddr
+	f.Listen = s.fg.listening != "" || s.wantListen
 	s.mu.Unlock()
 	b, err := json.MarshalIndent(f, "", " ")
 	if err != nil {
@@ -177,6 +179,7 @@ func (s *Server) loadModules() {
 	}
 	s.mu.Lock()
 	s.mod.pulseLock = f.PulseLock
+	s.wantListen = f.Listen
 	if light.ValidAddr(f.LightAddr) == nil {
 		s.ref.lightAddr = f.LightAddr
 	}

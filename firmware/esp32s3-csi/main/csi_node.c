@@ -18,8 +18,8 @@
 // If the access point is an 802.11mc (FTM) responder, the node also measures
 // its distance to it every couple of seconds and includes it as dist_cm.
 //
-// STATUS: written against the ESP-IDF v5 API but NOT yet compiled or run on
-// hardware. Treat it as a starting point and expect to fix small things.
+// STATUS: compiles with ESP-IDF v5.3.2 in CI, but has NOT yet run on
+// hardware. Expect to find problems the first time a board boots it.
 
 #include <math.h>
 #include <stdio.h>

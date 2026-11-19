@@ -305,6 +305,7 @@ MK.4</div>
       <div class="panel-head"><span>SENSOR MESH</span><span class="meta" id="sonarSrc">wi-fi csi</span></div>
       <div class="btn-row">
         <button class="btn" id="sonarArm">◎ ARM</button>
+        <button class="btn" id="forgeOpen" title="flash a plugged-in ESP32-S3 and add it as a sensor node">＋ ADD A NODE</button>
         <span class="sonar-note" id="sonarArmNote">disarmed — movement is shown, no alerts raised</span>
       </div>
       <div class="panel-body" id="sonarList"></div>
@@ -657,6 +658,21 @@ MK.4</div>
   <div class="sc-hosts" id="scHosts"></div>
   <div class="sc-detail" id="scDetail"></div>
 </div>
+<div id="forgeBox" hidden>
+  <div class="rc-card fg-card">
+    <div class="m-row-top"><span class="micro grn">▚▚ NODE FORGE · flash a board from here</span><span class="spacer"></span><button class="hs-btn" id="forgeClose">CLOSE</button></div>
+    <div class="fg-status" id="fgStatus"></div>
+    <div class="fg-grid">
+      <label class="micro cy">WI-FI NAME (2.4 GHz)<input id="fgSsid" autocomplete="off" maxlength="32" /></label>
+      <label class="micro cy">WI-FI PASSWORD<input id="fgPass" type="password" autocomplete="new-password" maxlength="64" /></label>
+      <label class="micro cy">NODE NAME (optional)<input id="fgName" autocomplete="off" maxlength="23" placeholder="blank = names itself, e.g. node-a1b2" /></label>
+    </div>
+    <div class="micro">▚ BOARDS ON USB</div>
+    <div id="fgBoards"></div>
+    <pre class="fg-log" id="fgLog" hidden></pre>
+    <div class="m-note">Plug a board into its <b>UART</b> (or COM) USB-C port. NetWatch writes the firmware and these settings to it; after that it only needs power, from either port. The password goes to the board and is kept in NetWatch's memory until it stops — it is not written to this machine's disk.</div>
+  </div>
+</div>
 <div id="recapBox" hidden>
   <div class="rc-card">
     <div class="micro grn">▚▚ WHILE YOU WERE OUT</div>
@@ -696,5 +712,6 @@ MK.4</div>
 <script src="senses.js"></script>
 <script src="xray.js"></script>
 <script src="reflex.js"></script>
+<script src="forge.js"></script>
 </body>
 </html>

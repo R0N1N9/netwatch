@@ -2,8 +2,9 @@
 
 Streams Wi-Fi CSI amplitudes to NetWatch for presence sensing.
 
-**Status: not yet compiled or tested on hardware.** It was written against the
-ESP-IDF v5 API before the boards arrived. Expect small fixes on first build.
+**Status: compiles (ESP-IDF v5.3.2, built in CI) but not yet run on a board.**
+The easy way to flash it is from NetWatch itself: SONAR → ＋ ADD A NODE (see
+the guide). The steps below are for building and flashing by hand.
 
 1. Edit the defines at the top of `main/csi_node.c`: SSID, password, and the
    IP of the machine running NetWatch. Leave `NODE_NAME_FIXED` empty and each

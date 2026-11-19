@@ -113,7 +113,7 @@ func (s *Server) sonarView() map[string]any {
 
 	type known struct{ ip, name string }
 	s.mu.Lock()
-	armed := s.sonarArmed
+	armed, listening := s.sonarArmed, s.fg.listening
 	walls, wires := append([]sonar.Wire{}, s.walls...), append([]sonar.Wire{}, s.wires...)
 	byMAC := map[string]known{}
 	for _, d := range s.devices {
@@ -144,7 +144,7 @@ func (s *Server) sonarView() map[string]any {
 	}
 	est, estOK := sonar.Estimate(nodes, lay)
 	return map[string]any{
-		"armed": armed, "listening": s.SonarAddr, "demo": s.demo, "layout": lay, "nodes": nodes,
+		"armed": armed, "listening": listening, "demo": s.demo, "layout": lay, "nodes": nodes,
 		"hosts": hosts, "unknownRadios": unknown, "people": sonar.People(nodes, lay),
 		"walls": walls, "wires": wires, "est": map[string]any{"x": est.X, "y": est.Y, "ok": estOK},
 	}
@@ -345,6 +345,7 @@ func (s *Server) handleUSB(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) onUSB(d hostwatch.USBDev) {
+	defer s.boardPluggedIn(d.VID)
 	msg := "new USB device: " + d.Label()
 	sev := model.SevInfo
 	if d.Keyboard {

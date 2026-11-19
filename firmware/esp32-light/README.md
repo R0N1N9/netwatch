@@ -5,8 +5,9 @@ colour in the room: green when quiet, amber for warnings, red and breathing
 for unopened critical alerts, flashing when one has just arrived, blue while
 SONAR is armed.
 
-**Status: not yet compiled or run on hardware.** It targets ESP-IDF v5 and the
-`espressif/led_strip` component, v2.x API.
+**Status: compiles (ESP-IDF v5.3.2, `led_strip` v2, built in CI) but not yet
+run on hardware.** NetWatch can flash it for you: SONAR → ＋ ADD A NODE →
+THREAT LIGHT, which also writes your Wi-Fi details.
 
 1. Edit `main/light.c`: Wi-Fi name and password, the strip's data pin and LED count.
 2. `idf.py set-target esp32s3` (or your board), then `idf.py build flash monitor`.

@@ -20,8 +20,8 @@ step.
 | Package | Responsibility |
 |---|---|
 | `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
-| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener. |
-| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `xray.js`, `companion.html`, vendored three.js and fonts). |
+| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener; `forge.go` flashes boards and starts the node listener at run time. |
+| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `forge.js`, `xray.js`, `companion.html`, vendored three.js and fonts). |
 | `model` | Shared types: `Device`, `Alert`, `Severity`. |
 | `netif` | Finds the interface, subnet and gateway. |
 | `capture` | AF_PACKET raw socket in pure Go; a stub on other systems. |
@@ -53,12 +53,20 @@ step.
 | `fatigue` | Operator sharpness from session length, hour, typing drift and unopened alerts. |
 | `scenes` | Trigger → actions rules with matching, arming and cooldowns. It decides which scenes fire; `server` carries out the actions. |
 | `light` | Picks the threat light's colour for a state and sends it as a UDP datagram to a private address. |
+| `forge` | Finds ESP32 boards on USB (`/sys`), holds the embedded firmware images (`forge/firmware/*.bin`, built by CI), renders the settings block and runs esptool. |
 | `persona` | The talking decoy: a scripted login and shell that records a visit and summarises it. Input is matched against a table, never executed. |
 | `tui`, `theme` | The terminal view and shared colours. |
 
 `firmware/esp32s3-csi` is the ESP-IDF project for the sensor nodes;
 `firmware/esp32-light` is the one for the LED threat light. `sonar/gesture.go`
 holds the wave-gesture detector.
+
+`.github/workflows/firmware.yml` builds both firmware projects with ESP-IDF
+whenever `firmware/**` changes, merges each into one image, and commits the
+images to `internal/forge/firmware/`, where `go:embed` picks them up. After
+changing firmware, wait for that workflow and `git pull` before `make build`.
+The settings partition (`nwcfg`, offset `0x190000` in `partitions.csv`) must
+match `forge.ConfigOffset`; a test checks the embedded image.
 
 ## HTTP API
 
@@ -98,6 +106,7 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/ack` | Acknowledge one alert, the newest, or all. |
 | `/api/scanner` | Every host with its verdict, reach, trips and deviations, for scanner mode. |
 | `/api/reflex` | `GET` scenes, recent firings, light and companion state; `POST` `put`, `remove`, `fire`, `gesture`, `lightAddr`, `lightTest`. |
+| `/api/forge` | `GET` boards on USB, whether esptool and the images are there, the current job; `POST` flashes a board (`flash`, `kind`, `ssid`, `pass`, `name`, `settingsOnly`) or starts listening (`listen`). |
 | `/api/oracle?all=1` · `/api/spectrum?hunt=<id>` | Every conversation (for NETDIVE); per-node readings of one radio (for HUNT). |
 
 The phone companion is a **separate listener** (`--companion`, HTTPS,

@@ -93,6 +93,8 @@ type Server struct {
 	ref reflex  // scenes, gestures, light, talking decoy (reflex.go)
 
 	CompanionAddr string // HTTPS address for the phone companion ("" = off)
+	fg            forgeState
+	wantListen    bool // listen for nodes at start-up, remembered from an earlier run
 	comp          companion
 }
 
@@ -197,11 +199,15 @@ func (s *Server) Handler() http.Handler {
 	s.moduleRoutes(mux)
 	s.senseRoutes(mux)
 	s.reflexRoutes(mux)
+	mux.HandleFunc("/api/forge", s.handleForge)
 	return mux
 }
 
 // Run starts the background watch loop and the HTTP server.
 func (s *Server) Run(ctx context.Context, addr string) error {
+	s.mu.Lock()
+	s.fg.ctx = ctx
+	s.mu.Unlock()
 	go s.sys.Run(ctx)
 	if !s.demo && s.DataDir != "" {
 		s.bd = braindance.New(filepath.Join(s.DataDir, "braindance"))
@@ -226,11 +232,9 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		go s.sonarDemo(ctx)
 	} else {
 		if s.SonarAddr != "" {
-			go func() {
-				if err := s.son.ListenUDP(ctx, s.SonarAddr); err != nil {
-					log.Printf("sonar: cannot listen on %s: %v", s.SonarAddr, err)
-				}
-			}()
+			s.listenForNodes(s.SonarAddr)
+		} else if s.wantListen {
+			s.listenForNodes(sonarDefaultListen) // a board was flashed from the console earlier
 		}
 		go s.watchLoop(ctx)
 		go func() {

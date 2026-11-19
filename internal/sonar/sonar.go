@@ -7,6 +7,7 @@
 package sonar
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"math"
@@ -273,11 +274,16 @@ func (e *Engine) ListenUDP(ctx context.Context, addr string) error {
 	go func() { <-ctx.Done(); pc.Close() }()
 	buf := make([]byte, 8192)
 	for {
-		n, _, err := pc.ReadFrom(buf)
+		n, from, err := pc.ReadFrom(buf)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
+			continue
+		}
+		if bytes.HasPrefix(buf[:n], []byte(`{"hello"`)) {
+			// A node asking where NetWatch is: answer, and it will send its frames here.
+			pc.WriteTo([]byte(`{"netwatch":1}`), from)
 			continue
 		}
 		var f Frame

@@ -23,7 +23,8 @@ say which part is which.
 ## 1. Sensing physical space (SONAR)
 
 Everything in this section depends on ESP32-S3 nodes. Until boards are flashed
-and reporting, all of it has only seen the built-in simulator.
+and reporting, all of it has only seen the built-in simulator. The node
+firmware now compiles (in CI) but has not run on a board.
 
 | Feature | What it does | Status | Proven by | Needs / limits |
 |---|---|---|---|---|
@@ -111,7 +112,7 @@ devices.
 | **SPECTRUM · tracker tags** | Flags a Bluetooth tag advertising in the Find My style that stays in range. | 🧪 | Crafted advertisements | **Nothing sends Bluetooth data yet** — the node firmware does not scan Bluetooth; only the ingest format exists. Such tags change address every few minutes to a day, which can reset the timer. |
 | **SPECTRUM · look-alike access point** | After you approve the access points that are yours, any other one announcing your network name is flagged. | 🧪 | Unit tests; simulated air | You must approve your own access points first; a mesh node added later is flagged until approved. Same channel only. |
 | **SPECTRUM · disconnect flood** | Counts deauthentication and disassociation frames and alerts on a burst. | 🧪 | Unit tests; simulated air | The threshold (20 in 10 s) is a guess. Networks using protected management frames ignore such floods anyway. |
-| **Node firmware: access points and disconnect counts** | The ESP32-S3 node reports beacons it hears and the number of disconnect frames each second. | 🔧 | Never compiled or run | Added to firmware that has itself never been built. |
+| **Node firmware: access points and disconnect counts** | The ESP32-S3 node reports beacons it hears and the number of disconnect frames each second. | 🔧 | Compiles in CI; never run on a board | — |
 | **ORACLE · reach map** | For a chosen host, draws everything it has been seen talking to inside and outside your network, and states how many of those conversations a quarantine on this machine would actually stop. | 🧪 | Unit tests; sample conversations in a browser | Live use needs capture, and is limited to traffic this machine can see (above). |
 | **ORACLE · what-if rules** | Tests a rule (`port 23`, `unnamed`, `fanout > 3`, `bytes > 1000000`, `src …`, `dst …`) against the conversations observed so far and shows what it would have caught. | 🧪 | Unit tests; browser | Six rule forms. Works on conversation totals, not on a timeline. It creates no firewall rule. |
 | **PULSE · typing rhythm** | Learns how long you hold keys and the gaps between them, then scores each 50 keystrokes against that; two bad windows in a row raise a critical alert. | 🧪 | Unit tests; a real browser pressing and releasing keys on a script — the same rhythm scored 87–95% over two runs, a different one 0% and raised the alert | **Never tried on a human typist.** The thresholds are guesses. Only measures while the console has keyboard focus, so it does not protect the rest of the desktop. |
@@ -147,9 +148,12 @@ room to the console.
 | **Room scenes (REFLEX)** | "When this happens, do that": a trigger (tripwire, movement, alert, everyone leaves, someone returns, a gesture) and up to six actions (save a clip, speak, alert, note, flash the light, acknowledge, arm, disarm, switch deck, lock). | 🧪 | Handler tests and a browser: scenes built with the form, fired by a sample alert, a simulated tripwire and the TEST button | Every trigger so far came from the simulator, a test button or a sample alert. The lock action has never fired. A scene cannot fire more than once every five seconds. |
 | **Gesture control** | Two or three short waves through a link, followed by stillness, count as a gesture that can trigger a scene. Walking through is ignored. | 🧪 | Scripted on/off sequences (two waves, three, one, walking, fidgeting) | **Never tried with real signals**, and the timings are guesses built around the engine's 1.6-second window. Only listens while a scene uses a gesture. Reports about three seconds after the last wave. |
 | **Ambient threat light** | Sends the room's state as a colour, once a second, to an ESP32 with an LED strip: green quiet, amber warnings, red breathing for unopened criticals, flashing for a fresh one, blue while armed. | 🧪 | A live run: the datagram arrived at a local listener; a public address was refused | Private addresses only. One datagram a second, nothing comes back. |
-| **Threat light firmware** | The ESP32 side: listens for the datagram and drives a WS2812 strip. | 🔧 | Never compiled or run | Written against the `led_strip` component's v2 API, which has changed between versions. |
+| **Threat light firmware** | The ESP32 side: listens for the datagram and drives a WS2812 strip. | 🔧 | Compiles in CI (ESP-IDF v5.3.2, `led_strip` v2); never run on a board | — |
 | **Who brought that device** | When a new host joins, the last minute of the room is saved as a braindance clip and attached to the alert (▶ ROOM), and CORTEX is told whether anyone was moving. | 🧪 | Handler test; the sample alert in a browser opened its clip | Needs sensor nodes. It shows that someone moved, not who, and not that they carried the device. |
 | **Talking decoy** | A port that imitates a small device's login: refuses the first attempt, lets the second "in", answers a handful of commands from a fixed table and records the conversation with a plain-language summary. | ✅ | A live run: a real session over loopback, transcript and summary recorded, the port reopened after a restart, and the typed password found nowhere on disk | **Nothing typed is ever run** — input is only matched against a table. Passwords are not kept, only their length. Only ever visited by my own scripted client, never by a real intruder or bot. 90 seconds and 16 commands per visit. |
+| **Node forge: flash a board from the console** | Plug in an ESP32-S3, press ADD A NODE in SONAR, type your Wi-Fi details: NetWatch writes the firmware and the board's settings with esptool. Afterwards the board only needs power. | 🧪 | The embedded images pass the real esptool's checks (valid checksum and hash, ESP32-S3); esptool 5.6 accepted NetWatch's exact command line up to opening the port; a stand-in tool confirmed the files and clean-up; the panel ran in a browser in demo mode | **No real board has been flashed by it.** Needs `esptool` installed and `dialout` permission. Linux only (it finds boards through `/sys`). The Wi-Fi password is stored on the board in plain form. |
+| **Firmware built in CI** | Both firmware projects are compiled by a GitHub Actions workflow and the images committed where the binary embeds them. | ✅ | Two CI runs: the first found two errors, the second built both projects | Compiling is not running: neither image has booted on a board. |
+| **Board settings partition and console discovery** | The firmware reads Wi-Fi details, console address and node name from a small flash partition, and asks the network where NetWatch is every 15 s. | 🔧 | Compiles; never run. NetWatch's side (answering a node's hello, hearing its frames, listening without a flag) ran over loopback UDP with a scripted node | — |
 | **Talking decoy · model improvisation** | With a local model, commands outside the table get an improvised reply. | 🔧 | Never run — no local model here | The visitor's text is passed to the model as data. |
 
 ---
@@ -199,6 +203,7 @@ Candidates, roughly grouped. Move a line into a table above when it lands.
 | 2026-11-19 | Module decks: DECOY, CORTEX, SPECTRUM, ORACLE, PULSE, WARD, QUANTUM, LEDGER; two-row tab bar; cross-site request guard; demo mode no longer calls the firewall on quarantine |
 | 2026-11-19 | NETDIVE, incident rehearsal (DOJO), while-you-were-out, live commentary, sonification, scanner mode, operator fatigue meter, alert acknowledgement |
 | 2026-11-19 | REFLEX scenes, gesture detection, ambient threat light (+ firmware), HUNT mode, X-RAY, phone companion, who-brought-that-device, talking decoy |
+| 2026-11-19 | Node forge (flash boards from the console), firmware built in CI and embedded, settings partition, console discovery, automatic listening |
 
 ---
 

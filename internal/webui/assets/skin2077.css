@@ -627,3 +627,17 @@ body.crit-glitch #app { animation: critglitch 0.9s steps(2) 1; }
 .talk-term pre { margin: 8px 0; padding: 10px 12px; height: 260px; overflow-y: auto; background: #020608; border: 1px solid rgba(29, 255, 161, 0.3); font-family: var(--mono); font-size: 12.5px; line-height: 1.45; color: var(--green); white-space: pre-wrap; }
 .talk-term pre .in { color: var(--red); } .talk-sum { color: var(--cyan-soft); }
 .alert .hs-btn { margin-left: 8px; flex: none; }
+
+/* ---------- node forge ---------- */
+#forgeBox { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(5, 2, 3, 0.6); }
+#forgeBox[hidden] { display: none; }
+.fg-card { width: min(980px, 94vw); max-height: 88vh; overflow-y: auto; }
+.fg-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fg-status .m-dim { flex-basis: 100%; }
+.fg-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.fg-grid label { display: flex; flex-direction: column; gap: 4px; }
+.fg-grid input { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(94, 246, 255, 0.25); color: var(--fg); font-family: var(--mono); font-size: 13px; padding: 7px 9px; }
+.fg-grid input:focus { outline: none; border-color: var(--cyan); }
+.fg-log { margin: 0; padding: 10px 12px; max-height: 220px; overflow-y: auto; background: #020608; border: 1px solid rgba(94, 246, 255, 0.3); font-family: var(--mono); font-size: 12px; line-height: 1.45; color: var(--cyan-soft); white-space: pre-wrap; }
+.fg-log[hidden] { display: none; } .fg-log.ok { border-color: var(--green); } .fg-log.bad { border-color: var(--red); color: var(--red); }
+.fg-card .m-note { padding: 8px 0 0; } .fg-card .m-note b { color: var(--cyan); }

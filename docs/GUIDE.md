@@ -67,7 +67,7 @@ The console opens at `http://127.0.0.1:7979`.
 | `--addr` | `127.0.0.1:7979` | Where the console listens. |
 | `--auto` | `20s` | How often to sweep the network (`0` disables). |
 | `--no-open` | off | Do not open the browser. |
-| `--sonar-udp` | off | Accept sensor frames on this UDP address, e.g. `0.0.0.0:5566`. |
+| `--sonar-udp` | off | Accept sensor frames on this UDP address, e.g. `0.0.0.0:5566`. Not needed once you have flashed a board from the console: NetWatch then listens on its own. |
 | `--companion` | off | Serve the read-only [phone companion](#phone-companion) over HTTPS on this address, e.g. `0.0.0.0:7443`. |
 | `--data-dir` | `~/.local/share/netwatch` | Where clips, the room layout, the respiration log, surface snapshots, the ledger and module settings are kept. Empty keeps everything in memory. |
 
@@ -572,6 +572,7 @@ commands by speech and reads the reply aloud.
 | `scenes` · `fire scene <name>` · `light test` | REFLEX scenes and the threat light. |
 | `open talking decoy 2323` | Open a talking decoy. |
 | `companion` | Read out the phone companion's link and pairing code. |
+| `add a node` · `listen for nodes` | Open the board flasher; start accepting sensor nodes. |
 
 Voice uses the browser's speech recognition. In Chrome that sends audio to
 Google; type the commands if you want everything to stay on your machine.
@@ -625,16 +626,55 @@ These watch the machine NetWatch runs on.
 
 ## ESP32-S3 hardware
 
-The node firmware is in `firmware/esp32s3-csi`. **It has not yet been compiled
-or run on a board**; expect small fixes on first build.
+The node firmware is in `firmware/esp32s3-csi`. It is built automatically on
+GitHub and the image is embedded in the `netwatch` binary, so you do not need
+Espressif's toolchain. **It compiles, but it has not yet run on a board**:
+expect to find problems the first time, and tell me what the board logs.
+
+### Flash a board from the console
+
+![Node forge](screens/forge.jpg)
+
+You need `esptool` once (`pipx install esptool`, or `sudo apt install esptool`)
+and your user in the `dialout` group (`sudo usermod -aG dialout $USER`, then
+log out and in).
+
+1. Plug the board into your laptop by its **UART** (or **COM**) USB-C port. On
+   boards with two ports, the other one is the chip's native USB; it usually
+   works too, but the UART port is the reliable one for flashing.
+2. In **SONAR**, press **＋ ADD A NODE**. The board appears with its port. (An
+   alert also tells you when a board is plugged in.)
+3. Type your Wi-Fi name and password (2.4 GHz only) and press **MAKE IT A
+   SENSOR NODE**. It takes about twenty seconds; the log shows esptool's
+   progress. If it cannot connect, hold the board's **BOOT** button, tap
+   **RESET**, release BOOT and try again.
+4. Unplug it and power it anywhere in range — any USB charger or power bank, on
+   either port. It joins your Wi-Fi and shows up in SONAR within about ten
+   seconds, named after its hardware address (`node-a1b2`) unless you gave it a
+   name.
+5. Plug in the next board and press the button again. The Wi-Fi details are
+   remembered until NetWatch stops.
+
+Flashing a board this way also makes NetWatch start listening for nodes (UDP
+port 5566 on your network) and remember to do so on later starts, so you no
+longer need `--sonar-udp`. Nodes also ask the network where NetWatch is every
+fifteen seconds, so if your laptop's address changes they find it again without
+reflashing. **SETTINGS ONLY** rewrites just the Wi-Fi details on a board that
+already has the firmware. **THREAT LIGHT** flashes the LED-light firmware
+instead.
+
+The Wi-Fi password is written to the board (in plain form, in its flash) and
+kept in NetWatch's memory until it stops. It is never written to this
+machine's disk: the file handed to esptool lives in a private temporary folder
+that is deleted as soon as the flash ends.
+
+### Or flash by hand
 
 1. Install ESP-IDF v5 using Espressif's "Get Started" guide for Linux, and
    load it into your shell (`. ~/esp/esp-idf/export.sh`).
 2. In `main/csi_node.c`, set your Wi-Fi name and password and the IP address of
-   the machine running NetWatch. Leave `NODE_NAME_FIXED` empty: each board then
-   names itself after its hardware address (`node-a1b2`), so one build fits
-   every board.
-3. Build once:
+   the machine running NetWatch.
+3. Build once, then flash each board:
 
    ```bash
    cd firmware/esp32s3-csi && idf.py set-target esp32s3
@@ -644,16 +684,9 @@ or run on a board**; expect small fixes on first build.
    idf.py build
    ```
 
-   Then plug in one board at a time and flash it (the port is usually
-   `/dev/ttyACM0` or `/dev/ttyUSB0`; your user needs to be in the `dialout`
-   group):
-
    ```bash
    idf.py -p /dev/ttyACM0 flash monitor
    ```
-
-   The monitor prints the name the board reports as. `Ctrl+]` leaves it. If a
-   board is not detected, hold its BOOT button while plugging it in.
 
 4. Start the console listening on your LAN:
 
@@ -661,8 +694,8 @@ or run on a board**; expect small fixes on first build.
    ./bin/netwatch gui --sonar-udp 0.0.0.0:5566
    ```
 
-5. Open SONAR, keep the room still for about five seconds while nodes
-   calibrate, then arrange them in the 2D view.
+Either way, open SONAR, keep the room still for about five seconds while the
+nodes calibrate, then arrange them in the 2D view.
 
 Things to know:
 
@@ -673,8 +706,9 @@ Things to know:
   the position estimates something to work with.
 - Ranging only works if your router supports 802.11mc (FTM). The firmware logs
   whether it does.
-- If the laptop's IP address changes, the boards lose their target. A DHCP
-  reservation avoids reflashing.
+- If the laptop's IP address changes, nodes flashed from the console find it
+  again within about fifteen seconds. A DHCP reservation is still the surest
+  way.
 
 Each sensor frame is one JSON datagram:
 
@@ -704,8 +738,9 @@ firmware here does not scan Bluetooth, so nothing sends them yet.
 `firmware/esp32-light` is a second, small project: an ESP32 with a WS2812 LED
 strip that listens on UDP port 5577 and shows the colour NetWatch sends. Edit
 the Wi-Fi details, data pin and LED count in `main/light.c`, flash it, and put
-the address it logs into the REFLEX deck. Like the node firmware it has not
-been compiled or run yet. Each datagram is one line:
+the address it logs into the REFLEX deck — or flash it from **＋ ADD A NODE**
+with the **THREAT LIGHT** button, which also writes your Wi-Fi details. Like
+the node firmware it compiles but has not run on a board yet. Each datagram is one line:
 
 ```json
 {"r":255,"g":30,"b":20,"pulse":"breathe","why":"2 critical alert(s) unopened"}
@@ -725,7 +760,8 @@ Everything NetWatch stores is under the data directory
 | `sleep.json` | The respiration log. |
 | `surface/surface-YYYY-MM-DD.json` | Daily surface snapshots. |
 | `ledger.jsonl` | The LEDGER: one hash-chained entry per line for every alert, action and note. |
-| `modules.json` | Planted decoys and talking-decoy ports, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, radios you marked as yours, your scenes, and the threat light's address. |
+| `firmware/*.bin` | Optional: a firmware image placed here (`sonar-node.bin`, `threat-light.bin`) is flashed instead of the one built into NetWatch. |
+| `modules.json` | Whether to listen for sensor nodes at start-up, planted decoys and talking-decoy ports, WARD's learned profiles, the PULSE typing profile (four numbers) and whether it may lock the screen, approved access points, radios you marked as yours, your scenes, and the threat light's address. |
 
 Canary files are the one thing NetWatch writes outside that directory: they go
 where you plant them, inside your home folder, and are deleted when you remove
@@ -771,6 +807,9 @@ can read your alerts and the SONAR view over your network.
 | SPECTRUM is empty | No sensor nodes are reporting, or their firmware predates access-point reporting. |
 | WARD stays on LEARNING | It needs 300 observations *and* 24 hours per device, and live capture. |
 | PULSE flags you | Your rhythm changed (another keyboard, one hand). FORGET PROFILE and enrol again. |
+| ADD A NODE shows no board | The cable carries power only, the board is on a port NetWatch does not recognise, or you are not in the `dialout` group. |
+| Flashing fails to connect | Hold BOOT, tap RESET, release BOOT, and try again; or move the cable to the UART port. |
+| A flashed node never appears | Wrong Wi-Fi password or a 5 GHz-only network; a firewall blocking UDP 5566; plug it back in and read its log with `esptool`'s monitor or `screen /dev/ttyACM0 115200`. |
 | NETDIVE is blank | The browser is not providing WebGL. |
 | The phone cannot open the companion | It is not on the same network, a firewall blocks the port, or the certificate warning was not accepted. |
 | The companion says NO LINK | The pairing code is wrong or NetWatch restarted (the code changes each start). |

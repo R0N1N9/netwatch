@@ -64,3 +64,8 @@ func TestPresenceGate(t *testing.T) {
 		t.Error("gate could be removed while the key device was absent")
 	}
 }
+
+func toJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
