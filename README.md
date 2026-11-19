@@ -21,9 +21,11 @@ One binary, multiple **decks**:
 > offensive deck is scope-locked to private/lab address space and refuses public
 > targets. Don't point it at things you don't own or have permission to test.
 
-![Watchtower deck](docs/netwatch.png)
-![Kill Chain deck](docs/killchain.png)
-![GRID connection globe](docs/grid.png)
+![Watchtower deck](docs/tour/02-watchtower.png)
+![Kill Chain deck](docs/tour/09-killchain-6-c2.png)
+![GRID connection globe](docs/tour/11-grid-globe.png)
+
+A screenshot of every deck and kill-chain stage is in [`docs/tour/`](docs/tour).
 
 ---
 

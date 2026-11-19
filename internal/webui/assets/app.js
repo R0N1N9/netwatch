@@ -4,6 +4,7 @@
 let STATE = { meta: {}, devices: [], alerts: [], stats: {} };
 let selectedIP = null;
 let live = false;
+let tickerRefresh = null, tickerPrimed = false;
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -65,6 +66,7 @@ function render() {
   renderDevices();
   renderAlerts();
   if (currentDeck() === "ar") renderARTags();
+  if (!tickerPrimed && tickerRefresh && STATE.devices.length) { tickerPrimed = true; tickerRefresh(); }
 }
 
 function threats() { return (STATE.alerts || []).filter((a) => a.severity === "CRITICAL").length; }
@@ -291,6 +293,7 @@ function initTicker() {
     return parts.join('&nbsp;&nbsp;<span class="lo">░</span>&nbsp;&nbsp;');
   }
   function refresh() { const s = gen(); track.innerHTML = s + '&nbsp;&nbsp;<span class="lo">░</span>&nbsp;&nbsp;' + s; }
+  tickerRefresh = refresh;
   refresh();
   setInterval(refresh, 9000);
 }
