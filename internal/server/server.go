@@ -16,10 +16,12 @@ import (
 	"github.com/r0n1n9/netwatch/internal/audit"
 	"github.com/r0n1n9/netwatch/internal/blackwall"
 	"github.com/r0n1n9/netwatch/internal/copilot"
+	"github.com/r0n1n9/netwatch/internal/geo"
 	"github.com/r0n1n9/netwatch/internal/ice"
 	"github.com/r0n1n9/netwatch/internal/model"
 	"github.com/r0n1n9/netwatch/internal/netif"
 	"github.com/r0n1n9/netwatch/internal/offensive"
+	"github.com/r0n1n9/netwatch/internal/passive"
 	"github.com/r0n1n9/netwatch/internal/sweep"
 	"github.com/r0n1n9/netwatch/internal/webui"
 )
@@ -30,6 +32,7 @@ type Server struct {
 	engine    *ice.Engine
 	wall      *blackwall.Wall
 	cop       copilot.Copilot
+	mon       *passive.Monitor
 	autoEvery time.Duration
 	demo      bool
 
@@ -47,7 +50,7 @@ type Server struct {
 
 // New builds a server for an interface.
 func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
-	return &Server{
+	s := &Server{
 		info:        info,
 		engine:      ice.New(),
 		wall:        blackwall.New(),
@@ -58,6 +61,19 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 		quarantined: map[string]bool{},
 		clients:     map[chan []byte]struct{}{},
 	}
+	s.mon = passive.NewMonitor(info.Iface, info.IP, s.emitAlert)
+	return s
+}
+
+// emitAlert records an alert (from the passive monitor) and pushes to clients.
+func (s *Server) emitAlert(a model.Alert) {
+	s.mu.Lock()
+	s.alerts = append([]model.Alert{a}, s.alerts...)
+	if len(s.alerts) > 200 {
+		s.alerts = s.alerts[:200]
+	}
+	s.mu.Unlock()
+	s.broadcast()
 }
 
 // Handler returns the HTTP mux.
@@ -75,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/kc/persistence", auditHandler(audit.Persistence))
 	mux.HandleFunc("/api/kc/connections", auditHandler(audit.Connections))
 	mux.HandleFunc("/api/kc/eicar", auditHandler(audit.Eicar))
+	mux.HandleFunc("/api/globe", s.handleGlobe)
 	return mux
 }
 
@@ -84,6 +101,11 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 		s.loadDemo()
 	} else {
 		go s.watchLoop(ctx)
+		go func() {
+			if err := s.mon.Run(ctx); err != nil {
+				log.Printf("passive monitor: %v (OS/JA3/anomaly/globe disabled — needs cap_net_raw)", err)
+			}
+		}()
 	}
 	srv := &http.Server{Addr: addr, Handler: s.Handler()}
 	go func() {
@@ -312,14 +334,19 @@ func (s *Server) handleCopilot(w http.ResponseWriter, r *http.Request) {
 // ---- snapshot ----
 
 type wireDevice struct {
-	IP          string `json:"ip"`
-	MAC         string `json:"mac"`
-	Vendor      string `json:"vendor"`
-	Hostname    string `json:"hostname"`
-	Self        bool   `json:"self"`
-	Gateway     bool   `json:"gateway"`
-	Trusted     bool   `json:"trusted"`
-	Quarantined bool   `json:"quarantined"`
+	IP          string  `json:"ip"`
+	MAC         string  `json:"mac"`
+	Vendor      string  `json:"vendor"`
+	Hostname    string  `json:"hostname"`
+	Self        bool    `json:"self"`
+	Gateway     bool    `json:"gateway"`
+	Trusted     bool    `json:"trusted"`
+	Quarantined bool    `json:"quarantined"`
+	OS          string  `json:"os"`
+	JA3         string  `json:"ja3"`
+	SNI         string  `json:"sni"`
+	Anomaly     float64 `json:"anomaly"`
+	Beacon      string  `json:"beacon"`
 }
 
 type wireAlert struct {
@@ -338,10 +365,12 @@ func (s *Server) snapshotJSON() []byte {
 	newCount := 0
 	for _, d := range s.devices {
 		ipStr := d.IP.String()
+		e := s.enrich(ipStr)
 		devices = append(devices, wireDevice{
 			IP: ipStr, MAC: macStr(d.MAC), Vendor: d.Vendor, Hostname: d.Hostname,
 			Self: d.IsSelf, Gateway: d.IsGateway, Trusted: s.trusted[ipStr],
 			Quarantined: s.quarantined[ipStr],
+			OS: e.OS, JA3: e.JA3, SNI: e.SNI, Anomaly: e.Anomaly, Beacon: e.Beacon,
 		})
 	}
 	alerts := make([]wireAlert, 0, len(s.alerts))
@@ -362,6 +391,7 @@ func (s *Server) snapshotJSON() []byte {
 		"meta": map[string]any{
 			"iface": s.info.Iface.Name, "subnet": s.info.IPNet.String(),
 			"gateway": gwStr(s.info), "watching": true, "sweeping": s.sweeping,
+			"pps": s.pps(),
 		},
 		"devices": devices,
 		"alerts":  alerts,
@@ -394,6 +424,94 @@ func (s *Server) loadDemo() {
 	}
 	s.lastSweep = time.Now()
 	s.mu.Unlock()
+}
+
+// ---- passive enrichment + globe ----
+
+func (s *Server) enrich(ip string) passive.Enrichment {
+	if s.demo {
+		return demoEnrichment(ip)
+	}
+	if s.mon != nil {
+		return s.mon.Enrichment(ip)
+	}
+	return passive.Enrichment{}
+}
+
+func (s *Server) pps() uint64 {
+	if s.demo {
+		return 1200 + uint64(time.Now().Unix()%900)
+	}
+	if s.mon != nil {
+		return s.mon.PPS()
+	}
+	return 0
+}
+
+func (s *Server) handleGlobe(w http.ResponseWriter, r *http.Request) {
+	var exts []passive.External
+	if s.demo {
+		exts = demoExternals()
+	} else if s.mon != nil {
+		exts = s.mon.Externals()
+	}
+	type point struct {
+		Dst    string  `json:"dst"`
+		Port   uint16  `json:"port"`
+		Bytes  uint64  `json:"bytes"`
+		Lat    float64 `json:"lat"`
+		Lon    float64 `json:"lon"`
+		Region string  `json:"region"`
+		SNI    string  `json:"sni"`
+		Src    string  `json:"src"`
+	}
+	byDst := map[string]*point{}
+	var order []string
+	for _, e := range exts {
+		p := byDst[e.Dst]
+		if p == nil {
+			loc := geo.Locate(e.Dst)
+			p = &point{Dst: e.Dst, Port: e.DPort, Lat: loc.Lat, Lon: loc.Lon, Region: loc.Region, SNI: e.SNI, Src: e.Src}
+			byDst[e.Dst] = p
+			order = append(order, e.Dst)
+		}
+		p.Bytes += e.Bytes
+		if p.SNI == "" {
+			p.SNI = e.SNI
+		}
+	}
+	pts := make([]*point, 0, len(order))
+	for _, d := range order {
+		pts = append(pts, byDst[d])
+	}
+	writeJSON(w, map[string]any{"ok": true, "selfIP": s.info.IP.String(), "points": pts})
+}
+
+func demoEnrichment(ip string) passive.Enrichment {
+	switch ip {
+	case "192.168.1.1":
+		return passive.Enrichment{OS: "Network device / Solaris", OSConf: 60}
+	case "192.168.1.50":
+		return passive.Enrichment{OS: "Linux / Android", OSConf: 66, JA3: "579ccef312d18482fc42e2b822ca2430", SNI: "github.com", Anomaly: 8}
+	case "192.168.1.20":
+		return passive.Enrichment{OS: "Linux / Android", OSConf: 66, SNI: "cloudflare-dns.com"}
+	case "192.168.1.31":
+		return passive.Enrichment{OS: "Linux (IoT)", OSConf: 52, JA3: "a0e9f5d64349fb13191bc781f81f42e1", SNI: "device-metrics-us.amazon.com", Anomaly: 16}
+	case "192.168.1.99":
+		return passive.Enrichment{OS: "macOS / iOS / BSD", OSConf: 58, JA3: "e7d705a3286e19ea42f587b344ee6865", Anomaly: 86, AnomTop: "dsts", Beacon: "185.220.101.44:443 (~60s)"}
+	}
+	return passive.Enrichment{}
+}
+
+func demoExternals() []passive.External {
+	return []passive.External{
+		{Src: "192.168.1.50", Dst: "140.82.113.25", DPort: 443, Bytes: 184320, SNI: "github.com"},
+		{Src: "192.168.1.50", Dst: "142.250.72.14", DPort: 443, Bytes: 240000, SNI: "google.com"},
+		{Src: "192.168.1.31", Dst: "52.94.236.248", DPort: 443, Bytes: 33000, SNI: "device-metrics-us.amazon.com"},
+		{Src: "192.168.1.99", Dst: "185.220.101.44", DPort: 443, Bytes: 9800},
+		{Src: "192.168.1.99", Dst: "45.133.1.90", DPort: 8443, Bytes: 4200},
+		{Src: "192.168.1.20", Dst: "1.1.1.1", DPort: 853, Bytes: 12000, SNI: "cloudflare-dns.com"},
+	}
 }
 
 // ---- helpers ----
