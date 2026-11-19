@@ -296,6 +296,53 @@ html, body {
 .kc-sec.blue .go { color: var(--cyan); border-color: var(--cyan); } .kc-sec.blue .go:hover { background: var(--cyan); color: var(--bg); }
 .kc-tech .go.info { color: var(--dim); border-color: var(--dim); }
 
+/* ===================== GRID (connection globe) ===================== */
+.deck.grid { display: grid !important; grid-template-columns: 1.6fr 0.72fr; gap: 10px; }
+.deck.grid[hidden] { display: none !important; }
+.globe-wrap { position: relative; overflow: hidden; background: radial-gradient(ellipse at 50% 50%, #0a1420, #04060b 80%);
+  border: 1px solid rgba(0,229,255,0.16);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+#globeCanvas { position: absolute; inset: 0; }
+#globeCanvas canvas { display: block; }
+.globe-hud { position: absolute; top: 10px; left: 14px; pointer-events: none; }
+.ghud-title { font-size: 11px; font-weight: 800; letter-spacing: 0.22em; color: var(--cyan); text-shadow: 0 0 10px rgba(0,229,255,0.5); }
+.ghud-meta { font-size: 10px; color: var(--dim); letter-spacing: 0.12em; margin-top: 3px; }
+.gnode { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 7px 9px; margin-bottom: 6px; background: rgba(255,255,255,0.015); border-left: 2px solid var(--cyan); }
+.gnode.sus { border-left-color: var(--red); background: rgba(255,46,77,0.06); }
+.gnode .d { color: var(--fg); font-size: 12px; font-weight: 700; }
+.gnode .r { color: var(--dim); font-size: 10px; text-align: right; letter-spacing: 0.08em; }
+.gnode .s { grid-column: 1 / -1; color: var(--cyan); font-size: 10.5px; }
+.gnode.sus .s { color: var(--red); }
+
+/* ===================== AR (Kiroshi optic) ===================== */
+.deck.ar { display: block !important; position: relative; }
+.deck.ar[hidden] { display: none !important; }
+.ar-stage { position: relative; width: 100%; height: 100%; overflow: hidden; background: #05070d;
+  border: 1px solid rgba(0,229,255,0.16);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); }
+#arVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(1.1) contrast(1.05); opacity: 0.9; }
+.ar-overlay { position: absolute; inset: 0; pointer-events: none; }
+.ar-tag { position: absolute; min-width: 150px; background: rgba(6,10,16,0.78); border: 1px solid var(--cyan);
+  padding: 6px 9px; font-size: 10px; line-height: 1.5; color: var(--fg); backdrop-filter: blur(2px);
+  clip-path: polygon(6px 0,100% 0,100% 100%,0 100%,0 6px); box-shadow: 0 0 16px rgba(0,229,255,0.2); animation: artagin .4s ease; }
+.ar-tag.sus { border-color: var(--red); box-shadow: 0 0 18px rgba(255,46,77,0.3); }
+.ar-tag b { color: var(--cyan); } .ar-tag.sus b { color: var(--red); }
+.ar-tag .lo { color: var(--dim); }
+.ar-tag::before { content: ""; position: absolute; left: -22px; top: 50%; width: 20px; height: 1px; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.ar-tag.sus::before { background: var(--red); box-shadow: 0 0 6px var(--red); }
+@keyframes artagin { from { opacity: 0; transform: translateX(-6px); } }
+.ar-scanline { position: absolute; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  box-shadow: 0 0 14px var(--cyan); opacity: 0.5; animation: arscan 4s linear infinite; }
+@keyframes arscan { 0%,100% { top: 0; } 50% { top: 100%; } }
+.ar-controls { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; align-items: center; gap: 14px; justify-content: center; }
+.ar-note { font-size: 11px; color: var(--dim); letter-spacing: 0.06em; max-width: 50%; }
+
+/* intel chips on device rows */
+.chip.os { color: var(--dim); border-color: var(--dim); }
+.chip.anom { color: var(--amber); border-color: var(--amber); }
+.chip.anom.hi { color: var(--red); border-color: var(--red); background: rgba(255,46,77,0.12); }
+.chip.beacon { color: var(--red); border-color: var(--red); }
+
 #kcOpsLog { font-size: 11.5px; line-height: 1.6; }
 .op { margin-bottom: 8px; border-left: 2px solid var(--green); padding: 5px 9px; background: rgba(82,255,143,0.04); white-space: pre-wrap; word-break: break-word; }
 .op.red { border-color: var(--red); background: rgba(255,46,77,0.05); }

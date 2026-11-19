@@ -23,6 +23,7 @@ One binary, multiple **decks**:
 
 ![NetWatch deck](docs/netwatch.png)
 ![Kill Chain deck](docs/killchain.png)
+![GRID connection globe](docs/grid.png)
 
 ---
 
@@ -105,7 +106,41 @@ read-only host introspection:
 
 The optic layer: a boot/uplink sequence, **scramble-decode** text reveals, a live
 **telemetry ticker**, a **target-lock reticle** that snaps onto the selected host
-with a threat-score readout, plus scanlines, CRT flicker and glitch.
+with OS / JA3 / beacon / threat-score readout, plus scanlines, CRT flicker and glitch.
+
+## Passive intelligence engine
+
+Continuous AF_PACKET capture feeds a flow table and a bank of analyzers — all
+observation-only, all unit-tested:
+
+- **Passive OS fingerprinting** — classify a host's OS from its TCP SYN (TTL /
+  window / MSS), no probing.
+- **JA3 TLS fingerprinting** — hash the ClientHello + extract SNI to identify
+  clients/tools inside TLS.
+- **DGA & DNS-tunnel detection** — entropy + character-class scoring of query
+  names; long-label / TXT exfil heuristics.
+- **Beaconing detection** — coefficient-of-variation on contact intervals flags
+  regular C2-style callbacks.
+- **Behavioral anomaly model** — online per-device/per-feature z-score baselines
+  (bytes/s, distinct dsts/ports, flow count) score hosts acting unlike
+  themselves. Explainable, and upgradeable to an isolation forest behind the
+  same API.
+
+Results surface on every device (OS / JA3 / anomaly / beacon chips + reticle).
+
+## GRID — external-connection globe
+
+A live 3D globe (three.js, vendored for offline use) of everything your host is
+talking to: arcs from you to each public peer, **red for opaque no-SNI egress**,
+cyan for known. The side list geo-locates each node (offline/approximate; a real
+MaxMind DB can be slotted in).
+
+## AR — Kiroshi optic overlay
+
+A WebXR/camera deck: point your device at the room and see **floating tags on
+each host** — IP, passively-fingerprinted OS, threat score, beacon target —
+drawn over the live camera feed. Camera stays on-device. Falls back to a
+synthetic overlay where WebXR/camera isn't available.
 
 ## RUView (scaffold)
 
@@ -129,6 +164,9 @@ internal/
   copilot/    AI daemon — heuristic now, LLM-pluggable via the Copilot interface
   offensive/  Netrunner recon — scope-locked TCP-connect scan
   audit/      blue-team host introspection (listeners, persistence, peers, EICAR)
+  passive/    live capture + flow table + analyzers (OS fp, JA3, DNS/DGA, beacon)
+  anomaly/    online behavioral-anomaly model (per-device z-score baselines)
+  geo/        offline IP -> globe placement (real GeoIP pluggable)
   server/     HTTP server: serves the GUI + SSE live stream + action endpoints
   webui/      embedded Cyberpunk web console (assets/ baked in with go:embed)
   tui/        terminal deck (Bubble Tea) — fallback

@@ -20,6 +20,8 @@ function selectDeck(name) {
   document.querySelectorAll(".deck").forEach((d) => (d.hidden = d.dataset.deck !== name));
   if (name === "netwatch" && selectedIP) lockReticle(selectedIP);
   else $("#reticle").hidden = true;
+  if (name === "grid") setTimeout(() => { initGlobe(); if (globe && globe.resize) globe.resize(); loadGlobe(); }, 40);
+  if (name === "ar") renderARTags();
 }
 function currentDeck() { return document.querySelector(".tab.active").dataset.deck; }
 
@@ -62,6 +64,7 @@ function render() {
 
   renderDevices();
   renderAlerts();
+  if (currentDeck() === "ar") renderARTags();
 }
 
 function threats() { return (STATE.alerts || []).filter((a) => a.severity === "CRITICAL").length; }
@@ -80,6 +83,9 @@ function renderDevices() {
     if (d.gateway) tags.appendChild(el("span", "chip gw", "GW"));
     if (d.trusted) tags.appendChild(el("span", "chip trust", "✓"));
     if (d.quarantined) tags.appendChild(el("span", "chip quar", "LOCKED"));
+    if (d.beacon) tags.appendChild(el("span", "chip beacon", "BEACON"));
+    if (d.anomaly >= 50) tags.appendChild(el("span", "chip anom hi", "⚠" + Math.round(d.anomaly)));
+    else if (d.anomaly >= 25) tags.appendChild(el("span", "chip anom", String(Math.round(d.anomaly))));
     row.appendChild(tags);
     row.addEventListener("click", () => selectDevice(d.ip));
     list.appendChild(row);
@@ -178,7 +184,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 function cycleDeck() {
-  const order = ["netwatch", "netrunner", "killchain", "ruview"];
+  const order = ["netwatch", "netrunner", "killchain", "grid", "ar", "ruview"];
   const cur = document.querySelector(".tab.active").dataset.deck;
   selectDeck(order[(order.indexOf(cur) + 1) % order.length]);
 }
@@ -270,7 +276,7 @@ function initTicker() {
     const d = STATE.devices || [], a = STATE.alerts || [];
     const thr = a.filter((x) => x.severity === "CRITICAL").length;
     const parts = [
-      'PKT/s <span class="hl">' + ((Math.random() * 9000 + 800) | 0) + "</span>",
+      'PKT/s <span class="hl">' + ((STATE.meta && STATE.meta.pps) || ((Math.random() * 9000 + 800) | 0)) + "</span>",
       'HOSTS <span class="hl">' + d.length + "</span>",
       'ICE <span class="hlg">ARMED</span>',
       "ENTROPY <span class=\"hly\">" + (Math.random() * 3 + 5).toFixed(2) + "</span>",
@@ -312,15 +318,19 @@ function lockReticle(ip) {
   ret.style.top = (r.top - 4) + "px";
   ret.style.width = (r.width + 12) + "px";
   ret.style.height = (r.height + 8) + "px";
-  const risk = riskScore(d);
+  const risk = Math.max(riskScore(d), Math.round(d.anomaly || 0));
   const rc = risk >= 50 ? "risk-hi" : "risk-ok";
-  $("#rtag").innerHTML =
+  let html =
     '<b>◣ TARGET LOCK</b><br>' +
-    '<span class="lo">IP </span>' + d.ip + "<br>" +
-    '<span class="lo">MAC</span> ' + (d.mac || "--") + "<br>" +
-    '<span class="lo">VND</span> ' + (d.vendor || "unknown") + "<br>" +
-    '<span class="lo">ROLE</span> ' + (d.self ? "SELF" : d.gateway ? "GATEWAY" : d.trusted ? "TRUSTED" : "UNVERIFIED") + "<br>" +
-    '<span class="lo">THREAT</span> <span class="' + rc + '">' + risk + "/100</span>";
+    '<span class="lo">IP  </span>' + d.ip + "<br>" +
+    '<span class="lo">MAC </span>' + (d.mac || "--") + "<br>" +
+    '<span class="lo">VND </span>' + (d.vendor || "unknown") + "<br>" +
+    '<span class="lo">OS  </span>' + (d.os || "profiling…") + "<br>" +
+    '<span class="lo">ROLE</span> ' + (d.self ? "SELF" : d.gateway ? "GATEWAY" : d.trusted ? "TRUSTED" : "UNVERIFIED") + "<br>";
+  if (d.ja3) html += '<span class="lo">JA3 </span>' + d.ja3.slice(0, 16) + "…<br>";
+  if (d.beacon) html += '<span class="risk-hi">BEACON</span> ' + d.beacon + "<br>";
+  html += '<span class="lo">THREAT</span> <span class="' + rc + '">' + risk + "/100</span>";
+  $("#rtag").innerHTML = html;
   ret.hidden = false;
 }
 
@@ -428,6 +438,119 @@ document.addEventListener("DOMContentLoaded", () => {
   if (dl) dl.addEventListener("scroll", () => { if (selectedIP) lockReticle(selectedIP); });
 });
 window.addEventListener("resize", () => { if (selectedIP) lockReticle(selectedIP); });
+
+// ================= GRID: external-connection globe (three.js) =================
+let globe = null;
+function latLon(lat, lon, r) {
+  const phi = (90 - lat) * Math.PI / 180, theta = (lon + 180) * Math.PI / 180;
+  return new THREE.Vector3(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+}
+function initGlobe() {
+  if (globe || typeof THREE === "undefined") return;
+  try { buildGlobe(); } catch (e) {
+    const host = $("#globeCanvas");
+    if (host) host.innerHTML = '<div class="empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">WebGL unavailable — egress list still live →</div>';
+  }
+}
+function buildGlobe() {
+  const host = $("#globeCanvas");
+  const w = host.clientWidth || 800, h = host.clientHeight || 600;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+  camera.position.set(0, 0.4, 3.2);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.setSize(w, h);
+  host.appendChild(renderer.domElement);
+
+  const group = new THREE.Group(); scene.add(group);
+  const geo = new THREE.SphereGeometry(1, 48, 48);
+  group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x08141f })));
+  group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x0a7384, wireframe: true, transparent: true, opacity: 0.32 })));
+  const selfPos = latLon(37, -98, 1.02);
+  group.add(mkDot(selfPos, 0xff2bd6, 0.035));
+  const dyn = new THREE.Group(); group.add(dyn);
+
+  globe = { scene, camera, renderer, group, dyn, selfPos, host };
+  globe.resize = () => { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); };
+  window.addEventListener("resize", globe.resize);
+  (function animate() {
+    requestAnimationFrame(animate);
+    if (currentDeck() === "grid") { group.rotation.y += 0.0016; renderer.render(scene, camera); }
+  })();
+  setInterval(() => { if (currentDeck() === "grid") loadGlobe(); }, 15000);
+}
+function mkDot(pos, color, r) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r || 0.02, 10, 10), new THREE.MeshBasicMaterial({ color }));
+  m.position.copy(pos); return m;
+}
+async function loadGlobe() {
+  if (!globe) return;
+  const res = await post("/api/globe");
+  const pts = (res && res.points) || [];
+  while (globe.dyn.children.length) globe.dyn.remove(globe.dyn.children[0]);
+  pts.forEach((p) => {
+    const sus = !p.sni || p.port === 8443 || p.port === 9001;
+    const col = sus ? 0xff2e4d : 0x00e5ff;
+    const pos = latLon(p.lat, p.lon, 1.02);
+    globe.dyn.add(mkDot(pos, col, sus ? 0.028 : 0.02));
+    const mid = globe.selfPos.clone().add(pos).multiplyScalar(0.5).normalize().multiplyScalar(1.5);
+    const curve = new THREE.QuadraticBezierCurve3(globe.selfPos, mid, pos);
+    const g = new THREE.BufferGeometry().setFromPoints(curve.getPoints(32));
+    globe.dyn.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 })));
+  });
+  $("#globeMeta").textContent = pts.length + " egress nodes";
+  renderGlobeList(pts);
+}
+function renderGlobeList(pts) {
+  const list = $("#globeList"); list.innerHTML = "";
+  if (!pts.length) { list.appendChild(el("div", "empty", "no external connections")); return; }
+  pts.slice().sort((a, b) => b.bytes - a.bytes).forEach((p) => {
+    const sus = !p.sni || p.port === 8443;
+    const n = el("div", "gnode" + (sus ? " sus" : ""));
+    n.innerHTML = '<span class="d">' + p.dst + ":" + p.port + '</span><span class="r">' + p.region + " · " + fmtBytes(p.bytes) + "</span>" +
+      '<span class="s">' + (p.sni || "⚠ no SNI — opaque egress") + "</span>";
+    list.appendChild(n);
+  });
+}
+function fmtBytes(b) { if (b >= 1e6) return (b / 1e6).toFixed(1) + "MB"; if (b >= 1e3) return (b / 1e3).toFixed(0) + "KB"; return b + "B"; }
+
+// ================= AR: Kiroshi optic overlay =================
+let arStream = null;
+document.addEventListener("DOMContentLoaded", () => {
+  const b = $("#arStart"); if (b) b.addEventListener("click", startAR);
+});
+async function startAR() {
+  const v = $("#arVideo");
+  try {
+    arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    v.srcObject = arStream;
+    $("#arNote").textContent = "optic online — tagging segment in real space";
+  } catch (e) {
+    $("#arNote").textContent = "camera unavailable (" + e.name + ") — synthetic overlay active";
+  }
+  renderARTags();
+}
+function riskLite(d) { let s = 0; if (!d.trusted && !d.gateway && !d.self) s += 20; if ((d.vendor || "").includes("randomized")) s += 25; if (!d.hostname) s += 10; return s; }
+function renderARTags() {
+  const ov = $("#arOverlay"); if (!ov) return;
+  ov.innerHTML = "";
+  const devs = (STATE.devices || []).filter((d) => !d.self).slice(0, 8);
+  devs.forEach((d, i) => {
+    const sus = d.anomaly >= 50 || d.beacon || d.quarantined;
+    const t = el("div", "ar-tag" + (sus ? " sus" : ""));
+    const risk = Math.round(Math.max(d.anomaly || 0, riskLite(d)));
+    let html = "<b>◢ " + (d.hostname || d.ip) + "</b><br>" +
+      '<span class="lo">IP</span> ' + d.ip + "<br>" +
+      '<span class="lo">OS</span> ' + (d.os || "unknown") + "<br>" +
+      '<span class="lo">THREAT</span> ' + risk + "/100";
+    if (d.beacon) html += '<br><span class="lo">BEACON</span> ' + d.beacon;
+    t.innerHTML = html;
+    t.style.left = (10 + (i % 4) * 22 + (i * 7 % 9)) + "%";
+    t.style.top = (16 + Math.floor(i / 4) * 32 + (i * 13 % 10)) + "%";
+    ov.appendChild(t);
+  });
+}
 
 // ---------- boot ----------
 runBoot();

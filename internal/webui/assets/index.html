@@ -16,6 +16,8 @@
       <div class="tab active" data-deck="netwatch">NETWATCH</div>
       <div class="tab" data-deck="netrunner">NETRUNNER</div>
       <div class="tab" data-deck="killchain">KILL&nbsp;CHAIN</div>
+      <div class="tab" data-deck="grid">GRID</div>
+      <div class="tab" data-deck="ar">AR</div>
       <div class="tab" data-deck="ruview">RUVIEW</div>
     </nav>
     <div class="spacer"></div>
@@ -115,6 +117,36 @@
     </div>
   </main>
 
+  <!-- GRID DECK (external connection globe) -->
+  <main class="deck grid" data-deck="grid" hidden>
+    <div class="globe-wrap">
+      <div id="globeCanvas"></div>
+      <div class="globe-hud">
+        <div class="ghud-title">UPLINK // EXTERNAL GRID</div>
+        <div class="ghud-meta" id="globeMeta">— nodes</div>
+      </div>
+    </div>
+    <div class="panel grow" style="--accent: var(--cyan)">
+      <div class="panel-head"><span>EGRESS NODES</span><span class="meta">geo-approx</span></div>
+      <div class="panel-body" id="globeList"></div>
+    </div>
+  </main>
+
+  <!-- AR DECK (Kiroshi optic overlay) -->
+  <main class="deck ar" data-deck="ar" hidden>
+    <div class="ar-stage">
+      <video id="arVideo" autoplay playsinline muted></video>
+      <canvas class="ar-grid"></canvas>
+      <div class="ar-overlay" id="arOverlay"></div>
+      <div class="ar-scanline"></div>
+      <div class="ar-controls">
+        <button class="btn" id="arStart">◉ ENGAGE OPTIC</button>
+        <button class="btn" id="arXR" hidden>▣ IMMERSIVE AR</button>
+        <span class="ar-note" id="arNote">Kiroshi AR overlay — point the optic at the room. Camera stays on-device; nothing leaves the host.</span>
+      </div>
+    </div>
+  </main>
+
   <!-- RUVIEW DECK (3D spatial) -->
   <main class="deck" data-deck="ruview" hidden>
     <div class="coming">
@@ -138,6 +170,7 @@
 <div class="fx-scan"></div>
 <div class="fx-vignette"></div>
 <div class="fx-flicker"></div>
+<script src="vendor/three.min.js"></script>
 
 <!-- Kiroshi target-lock reticle -->
 <div id="reticle" hidden>
