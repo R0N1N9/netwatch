@@ -13,12 +13,14 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/r0n1n9/netwatch/internal/audit"
 	"github.com/r0n1n9/netwatch/internal/blackwall"
+	"github.com/r0n1n9/netwatch/internal/braindance"
 	"github.com/r0n1n9/netwatch/internal/copilot"
 	"github.com/r0n1n9/netwatch/internal/geo"
 	"github.com/r0n1n9/netwatch/internal/ice"
@@ -63,6 +65,15 @@ type Server struct {
 	SonarAddr    string // UDP address to ingest CSI frames on ("" = off)
 	sonarArmed   bool
 	lastPresence map[string]time.Time
+	layout       map[string]braindance.Point // room map positions, shared by every browser
+
+	// braindance: recordings of the presence field
+	bd      *braindance.Recorder
+	DataDir string // where clips are kept ("" = memory only)
+
+	// presence gate: sensitive controls need the key device on the network
+	gateMAC  string
+	gateName string
 }
 
 type histEntry struct {
@@ -82,6 +93,8 @@ func New(info *netif.Info, autoEvery time.Duration, demo bool) *Server {
 		cop:          copilot.Detect(context.Background()),
 		son:          sonar.New(),
 		lastPresence: map[string]time.Time{},
+		layout:       map[string]braindance.Point{},
+		bd:           braindance.New(""),
 		autoEvery:    autoEvery,
 		demo:         demo,
 		trusted:      map[string]bool{},
@@ -129,12 +142,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/sonar", s.handleSonar)
 	mux.HandleFunc("/api/sonar/ingest", s.handleSonarIngest)
 	mux.HandleFunc("/api/sonar/arm", s.handleSonarArm)
+	mux.HandleFunc("/api/sonar/layout", s.handleSonarLayout)
+	mux.HandleFunc("/api/braindance", s.handleBD)
+	mux.HandleFunc("/api/braindance/save", s.handleBDSave)
+	mux.HandleFunc("/api/braindance/rec", s.handleBDRec)
+	mux.HandleFunc("/api/braindance/clip", s.handleBDClip)
+	mux.HandleFunc("/api/braindance/delete", s.handleBDDelete)
+	mux.HandleFunc("/api/lineage", s.handleLineage)
+	mux.HandleFunc("/api/kc/lineage", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"ok": true, "lines": s.lineageLines()})
+	})
+	mux.HandleFunc("/api/gate", s.handleGate)
 	return mux
 }
 
 // Run starts the background watch loop and the HTTP server.
 func (s *Server) Run(ctx context.Context, addr string) error {
 	go s.sys.Run(ctx)
+	if !s.demo && s.DataDir != "" {
+		s.bd = braindance.New(filepath.Join(s.DataDir, "braindance"))
+	}
+	go s.recordLoop(ctx)
 	if s.demo {
 		s.loadDemo()
 		go s.sonarDemo(ctx)
@@ -309,6 +337,10 @@ func (s *Server) handleTrust(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	if msg := s.gateRefusal(); msg != "" {
+		writeJSON(w, map[string]any{"ok": false, "error": msg})
+		return
+	}
 	s.mu.Lock()
 	s.trusted[req.IP] = req.Trusted
 	for i := range s.devices {
@@ -331,6 +363,10 @@ func (s *Server) handleBlackwall(w http.ResponseWriter, r *http.Request) {
 	}
 	if net.ParseIP(req.IP) == nil {
 		writeJSON(w, map[string]any{"ok": false, "error": "invalid ip"})
+		return
+	}
+	if msg := s.gateRefusal(); msg != "" {
+		writeJSON(w, map[string]any{"ok": false, "error": msg})
 		return
 	}
 	var err error
@@ -463,6 +499,7 @@ func (s *Server) snapshotJSON() []byte {
 			"iface": s.info.Iface.Name, "subnet": s.info.IPNet.String(),
 			"gateway": gwStr(s.info), "watching": true, "sweeping": s.sweeping,
 			"pps": s.pps(), "copilot": s.cop.Name(), "sonarArmed": s.sonarArmed,
+			"gate": s.gateLocked(),
 		},
 		"devices": devices,
 		"alerts":  alerts,
@@ -596,7 +633,13 @@ func (s *Server) handleSonar(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	armed := s.sonarArmed
 	s.mu.Unlock()
-	writeJSON(w, map[string]any{"armed": armed, "listening": s.SonarAddr, "demo": s.demo, "nodes": s.son.Snapshot(time.Now())})
+	layout := make(map[string]braindance.Point, len(s.layout))
+	s.mu.Lock()
+	for k, v := range s.layout {
+		layout[k] = v
+	}
+	s.mu.Unlock()
+	writeJSON(w, map[string]any{"armed": armed, "listening": s.SonarAddr, "demo": s.demo, "layout": layout, "nodes": s.son.Snapshot(time.Now())})
 }
 
 func (s *Server) handleSonarIngest(w http.ResponseWriter, r *http.Request) {
@@ -638,6 +681,8 @@ func (s *Server) handleSonarArm(w http.ResponseWriter, r *http.Request) {
 // sonarDemo feeds three simulated nodes so the SONAR deck works without hardware.
 func (s *Server) sonarDemo(ctx context.Context) {
 	sims := []*sonar.Sim{sonar.NewSim("node-A", 1), sonar.NewSim("node-B", 2), sonar.NewSim("node-C", 3)}
+	sims[0].DistM, sims[1].DistM, sims[2].DistM = 3.4, 4.1, 2.6
+	sims[2].BreathBPM = 15 // someone sitting still on the node-C link
 	t := time.NewTicker(40 * time.Millisecond)
 	defer t.Stop()
 	start := time.Now()
@@ -654,9 +699,6 @@ func (s *Server) sonarDemo(ctx context.Context) {
 		}
 		if phase > 11 && phase < 13 {
 			motion[0] = 0.6
-		}
-		if phase > 19 && phase < 24 {
-			motion[2] = 0.8
 		}
 		now := time.Now()
 		for i, sim := range sims {
@@ -801,3 +843,239 @@ func gwStr(info *netif.Info) string {
 }
 
 var _ = log.Println
+
+// ---- SONAR layout + braindance ----
+
+func (s *Server) handleSonarLayout(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Layout map[string]braindance.Point `json:"layout"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	clean := map[string]braindance.Point{}
+	for k, v := range req.Layout {
+		if len(clean) >= 40 || len(k) == 0 || len(k) > 32 {
+			continue
+		}
+		clean[k] = braindance.Point{X: math.Max(-2, math.Min(2, v.X)), Y: math.Max(-2, math.Min(2, v.Y))}
+	}
+	s.mu.Lock()
+	s.layout = clean
+	s.mu.Unlock()
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) layoutCopy() map[string]braindance.Point {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]braindance.Point, len(s.layout))
+	for k, v := range s.layout {
+		out[k] = v
+	}
+	return out
+}
+
+// recordLoop samples the presence field five times a second into the rolling
+// buffer, and cuts an automatic clip around movement while SONAR is armed.
+func (s *Server) recordLoop(ctx context.Context) {
+	t := time.NewTicker(200 * time.Millisecond)
+	defer t.Stop()
+	var autoStart, lastMotion time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			nodes := s.son.Snapshot(now)
+			if len(nodes) == 0 {
+				continue
+			}
+			sample := braindance.Sample{T: now.UnixMilli()}
+			moving := false
+			for _, n := range nodes {
+				sample.Nodes = append(sample.Nodes, braindance.NodeSample{Node: n.Node, State: n.State, Score: n.Score, Breath: n.Breath, DistM: n.DistM})
+				moving = moving || n.State == "motion"
+			}
+			s.bd.Add(sample)
+
+			s.mu.Lock()
+			armed := s.sonarArmed
+			s.mu.Unlock()
+			if armed && moving {
+				if autoStart.IsZero() {
+					autoStart = now.Add(-5 * time.Second)
+				}
+				lastMotion = now
+			}
+			if !autoStart.IsZero() && (now.Sub(lastMotion) > 5*time.Second || now.Sub(autoStart) > 9*time.Minute) {
+				s.bd.Save("auto · "+autoStart.Add(5*time.Second).Format("15:04:05"), autoStart.UnixMilli(), now.UnixMilli(), s.layoutCopy(), true)
+				autoStart = time.Time{}
+			}
+		}
+	}
+}
+
+func (s *Server) handleBD(w http.ResponseWriter, r *http.Request) {
+	clips := s.bd.List()
+	if clips == nil {
+		clips = []braindance.Clip{}
+	}
+	writeJSON(w, map[string]any{"recordingSince": s.bd.RecordingSince(), "bufferSec": math.Round(s.bd.BufferSeconds()), "stored": s.bd.Dir(), "clips": clips})
+}
+
+func (s *Server) handleBDSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name    string  `json:"name"`
+		LastSec float64 `json:"lastSec"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.LastSec <= 0 || req.LastSec > 600 {
+		req.LastSec = 60
+	}
+	now := time.Now()
+	c, err := s.bd.Save(req.Name, now.Add(-time.Duration(req.LastSec*float64(time.Second))).UnixMilli(), now.UnixMilli(), s.layoutCopy(), false)
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "clip": c})
+}
+
+func (s *Server) handleBDRec(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		On   bool   `json:"on"`
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.On {
+		s.bd.StartRec(time.Now())
+		writeJSON(w, map[string]any{"ok": true, "recording": true})
+		return
+	}
+	c, err := s.bd.StopRec(req.Name, time.Now(), s.layoutCopy())
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "clip": c})
+}
+
+func (s *Server) handleBDClip(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.bd.Load(r.URL.Query().Get("id"))
+	if !ok {
+		http.Error(w, "no such clip", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, c)
+}
+
+func (s *Server) handleBDDelete(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	writeJSON(w, map[string]any{"ok": s.bd.Delete(req.ID)})
+}
+
+// ---- process lineage ----
+
+func (s *Server) lineage() []audit.ProcConn {
+	if s.demo {
+		return []audit.ProcConn{
+			{PID: 4121, Comm: "firefox", Exe: "/usr/lib/firefox/firefox", Remote: "140.82.113.25:443", Public: true},
+			{PID: 4121, Comm: "firefox", Exe: "/usr/lib/firefox/firefox", Remote: "142.250.72.14:443", Public: true},
+			{PID: 912, Comm: "syncthing", Exe: "/usr/bin/syncthing", Remote: "192.168.1.20:22000"},
+		}
+	}
+	return audit.Lineage()
+}
+
+func (s *Server) lineageLines() []string {
+	if !s.demo {
+		return audit.LineageLines()
+	}
+	lines := []string{"◆ PROCESS LINEAGE · sample data · [T1071 — which program is talking]"}
+	for _, c := range s.lineage() {
+		flag := ""
+		if c.Public {
+			flag = "  ⚠ PUBLIC"
+		}
+		lines = append(lines, fmt.Sprintf("%-16s pid %-7d → %s%s", c.Comm, c.PID, c.Remote, flag))
+	}
+	return lines
+}
+
+func (s *Server) handleLineage(w http.ResponseWriter, r *http.Request) {
+	conns := s.lineage()
+	if conns == nil {
+		conns = []audit.ProcConn{}
+	}
+	writeJSON(w, map[string]any{"conns": conns})
+}
+
+// ---- presence gate ----
+
+// gateLocked reports the gate state for the console. Caller holds s.mu.
+func (s *Server) gateLocked() map[string]any {
+	present := false
+	for _, d := range s.devices {
+		if s.gateMAC != "" && macStr(d.MAC) == s.gateMAC {
+			present = true
+		}
+	}
+	return map[string]any{"enabled": s.gateMAC != "", "key": s.gateName, "present": present, "open": s.gateMAC == "" || present}
+}
+
+// gateRefusal returns a message when the key device is required but absent.
+func (s *Server) gateRefusal() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if g := s.gateLocked(); !g["open"].(bool) {
+		return "locked: presence key " + s.gateName + " is not on the network"
+	}
+	return ""
+}
+
+func (s *Server) handleGate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IP string `json:"ip"` // empty clears the gate
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	s.mu.Lock()
+	if req.IP == "" {
+		if g := s.gateLocked(); !g["open"].(bool) {
+			s.mu.Unlock()
+			writeJSON(w, map[string]any{"ok": false, "error": "the key device must be present to remove the gate"})
+			return
+		}
+		s.gateMAC, s.gateName = "", ""
+	} else {
+		found := false
+		for _, d := range s.devices {
+			if d.IP.String() == req.IP && len(d.MAC) > 0 {
+				s.gateMAC, found = macStr(d.MAC), true
+				s.gateName = d.Hostname
+				if s.gateName == "" {
+					s.gateName = req.IP
+				}
+			}
+		}
+		if !found {
+			s.mu.Unlock()
+			writeJSON(w, map[string]any{"ok": false, "error": "that host is not on the segment"})
+			return
+		}
+	}
+	s.mu.Unlock()
+	s.broadcast()
+	writeJSON(w, map[string]any{"ok": true})
+}

@@ -23,6 +23,7 @@ var (
 	guiDemo   bool
 	guiNoOpen bool
 	guiSonar  string
+	guiData   string
 )
 
 var guiCmd = &cobra.Command{
@@ -46,6 +47,7 @@ var guiCmd = &cobra.Command{
 
 		srv := server.New(info, guiAuto, guiDemo)
 		srv.SonarAddr = guiSonar
+		srv.DataDir = guiData
 		url := "http://" + guiAddr
 
 		fmt.Println(theme.Banner())
@@ -80,6 +82,7 @@ func init() {
 	guiCmd.Flags().BoolVar(&guiDemo, "demo", false, "serve sample data instead of live capture (no privileges needed)")
 	guiCmd.Flags().BoolVar(&guiNoOpen, "no-open", false, "do not auto-open the browser")
 	guiCmd.Flags().StringVar(&guiSonar, "sonar-udp", "", "ingest ESP32 CSI frames on this UDP address, e.g. 0.0.0.0:5566 (off by default)")
+	guiCmd.Flags().StringVar(&guiData, "data-dir", defaultDataDir(), "where braindance clips are stored (empty = memory only)")
 	rootCmd.AddCommand(guiCmd)
 }
 
@@ -96,4 +99,15 @@ func syntheticInfo() *netif.Info {
 		IPNet:   ipnet,
 		Gateway: net.ParseIP("192.168.1.1").To4(),
 	}
+}
+
+// defaultDataDir follows the XDG convention: $XDG_DATA_HOME/netwatch or ~/.local/share/netwatch.
+func defaultDataDir() string {
+	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
+		return d + "/netwatch"
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		return h + "/.local/share/netwatch"
+	}
+	return ""
 }

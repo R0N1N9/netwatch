@@ -54,3 +54,31 @@ func TestIngestRejectsBadFrames(t *testing.T) {
 		t.Errorf("bad frames created %d nodes, want 0", n)
 	}
 }
+
+func TestBreathingAndRange(t *testing.T) {
+	e := New()
+	still, breather := NewSim("empty", 1), NewSim("occupied", 2)
+	breather.BreathBPM, breather.DistM = 15, 3.2
+	now := time.Unix(1_700_000_000, 0)
+	for i := 0; i < 25*40; i++ { // 40 s at 25 fps, nobody moving
+		now = now.Add(40 * time.Millisecond)
+		e.Ingest(still.Frame(0), now)
+		e.Ingest(breather.Frame(0), now)
+	}
+	got := map[string]NodeState{}
+	for _, s := range e.Snapshot(now) {
+		got[s.Node] = s
+	}
+	if b := got["occupied"].Breath; b < 13 || b > 17 {
+		t.Errorf("occupied link breath = %.0f/min (conf %.1f), want ~15", b, got["occupied"].BreathConf)
+	}
+	if b := got["empty"].Breath; b != 0 {
+		t.Errorf("empty link breath = %.0f/min (conf %.1f), want none", b, got["empty"].BreathConf)
+	}
+	if d := got["occupied"].DistM; d < 3.0 || d > 3.4 {
+		t.Errorf("range = %.2f m, want ~3.2", d)
+	}
+	if d := got["empty"].DistM; d != 0 {
+		t.Errorf("unranged node distance = %.2f, want 0", d)
+	}
+}
