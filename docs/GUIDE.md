@@ -629,8 +629,9 @@ These watch the machine NetWatch runs on.
 
 The node firmware is in `firmware/esp32s3-csi`. It is built automatically on
 GitHub and the image is embedded in the `netwatch` binary, so you do not need
-Espressif's toolchain. **It compiles, but it has not yet run on a board**:
-expect to find problems the first time, and tell me what the board logs.
+Espressif's toolchain. It has run on one real board so far — flashed from the
+console, it joined Wi-Fi and appeared in SONAR — so expect rough edges, and
+say what you see when something looks wrong.
 
 ### Flash a board from the console
 
@@ -770,7 +771,8 @@ strip that listens on UDP port 5577 and shows the colour NetWatch sends. Edit
 the Wi-Fi details, data pin and LED count in `main/light.c`, flash it, and put
 the address it logs into the REFLEX deck — or flash it from **＋ ADD A NODE**
 with the **THREAT LIGHT** button, which also writes your Wi-Fi details. Like
-the node firmware it compiles but has not run on a board yet. Each datagram is one line:
+the node firmware it compiles; unlike the node firmware, it has not run on a
+board yet. Each datagram is one line:
 
 ```json
 {"r":255,"g":30,"b":20,"pulse":"breathe","why":"2 critical alert(s) unopened"}

@@ -87,7 +87,9 @@ tested only on simulated data, or written but never run. In short:
   and the LEDGER's hash chain, on this machine only.
 - Everything on SONAR has only seen the built-in simulator, and the ESP32-S3
   firmware compiles (it is built on GitHub and embedded in the binary, so the
-  console can flash a board for you) but has not yet run on a board.
+  console can flash a board for you) and has run on one real board: it joined
+  Wi-Fi and showed up in SONAR. What SONAR makes of that real signal has not
+  been confirmed yet.
 - The passive traffic analyzers, the local-model Copilot, voice, spatial audio,
   USB watch and the proximity lock are tested with synthetic input only.
 - The incident rehearsal and the talking decoy have run live on this machine.

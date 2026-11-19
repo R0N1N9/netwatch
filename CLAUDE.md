@@ -61,4 +61,6 @@ phone page served on its own listener). Firmware for the ESP32-S3
 nodes is in `firmware/esp32s3-csi`, and for the LED threat light in
 `firmware/esp32-light`. Both compile in CI (`.github/workflows/firmware.yml`,
 which commits the images to `internal/forge/firmware/` for embedding — pull
-after it runs); neither has run on a board.
+after it runs). The node firmware has run on one real board (flashed from the
+console, joined Wi-Fi, appeared in SONAR); the sensing on real data is not yet
+confirmed, and the light firmware has not run at all.

@@ -2,7 +2,9 @@
 
 Streams Wi-Fi CSI amplitudes to NetWatch for presence sensing.
 
-**Status: compiles (ESP-IDF v5.3.2, built in CI) but not yet run on a board.**
+**Status: compiles (ESP-IDF v5.3.2, built in CI) and has run on one real
+board: it joined Wi-Fi and appeared in SONAR. The sensing on real data is not
+yet confirmed.**
 The easy way to flash it is from NetWatch itself: SONAR → ＋ ADD A NODE (see
 the guide). The steps below are for building and flashing by hand.
 
