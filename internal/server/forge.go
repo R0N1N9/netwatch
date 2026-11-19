@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -123,7 +124,7 @@ func (s *Server) forgeView() map[string]any {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return map[string]any{"demo": s.demo, "boards": boards, "tool": toolName, "images": imgs, "job": s.fg.job,
+	return map[string]any{"demo": s.demo, "boards": boards, "tool": toolName, "searched": forge.Searched(), "toolPath": forge.ToolPath, "build": buildStamp(), "images": imgs, "job": s.fg.job,
 		"ssid": s.fg.ssid, "havePass": s.fg.pass != "", "listening": s.fg.listening, "host": s.info.IP.String(), "defaultListen": sonarDefaultListen}
 }
 
@@ -133,18 +134,34 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Flash        string `json:"flash"` // the port to flash
-		Kind         string `json:"kind"`  // node | light
-		SSID         string `json:"ssid"`
-		Pass         string `json:"pass"`
-		Name         string `json:"name"`
-		SettingsOnly bool   `json:"settingsOnly"`
-		Listen       *bool  `json:"listen"`
+		Flash        string  `json:"flash"` // the port to flash
+		Kind         string  `json:"kind"`  // node | light
+		SSID         string  `json:"ssid"`
+		Pass         string  `json:"pass"`
+		Name         string  `json:"name"`
+		SettingsOnly bool    `json:"settingsOnly"`
+		Listen       *bool   `json:"listen"`
+		ToolPath     *string `json:"toolPath"` // where esptool is, when NetWatch cannot find it
 	}
 	if !decode(w, r, &req) {
 		return
 	}
 	fail := func(msg string) { writeJSON(w, map[string]any{"ok": false, "error": msg}) }
+	if req.ToolPath != nil {
+		path := strings.TrimSpace(*req.ToolPath)
+		if path != "" {
+			if err := forge.CheckTool(path); err != nil {
+				fail(err.Error())
+				return
+			}
+		}
+		forge.ToolPath = path
+		if !s.demo {
+			s.saveModules()
+		}
+		writeJSON(w, map[string]any{"ok": true})
+		return
+	}
 	if req.Listen != nil {
 		if s.demo {
 			fail("demo mode does not open a port; the simulated nodes are already reporting")
@@ -276,4 +293,27 @@ func (s *Server) boardPluggedIn(vid string) {
 	}
 	s.emitAlert(model.Alert{Time: time.Now(), Severity: model.SevInfo, Kind: "forge", Source: "usb",
 		Message: "a development board was plugged in — open SONAR → ADD A NODE to flash it as a sensor node"})
+}
+
+// buildStamp says which build this is, so an old binary still running is easy to spot.
+func buildStamp() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	rev, when := "", ""
+	for _, kv := range info.Settings {
+		switch kv.Key {
+		case "vcs.revision":
+			if len(kv.Value) >= 7 {
+				rev = kv.Value[:7]
+			}
+		case "vcs.time":
+			when = kv.Value
+		}
+	}
+	if rev == "" {
+		return ""
+	}
+	return rev + " · " + when
 }

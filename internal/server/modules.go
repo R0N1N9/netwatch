@@ -22,6 +22,7 @@ import (
 	"github.com/r0n1n9/netwatch/internal/copilot"
 	"github.com/r0n1n9/netwatch/internal/cortex"
 	"github.com/r0n1n9/netwatch/internal/decoy"
+	"github.com/r0n1n9/netwatch/internal/forge"
 	"github.com/r0n1n9/netwatch/internal/hostwatch"
 	"github.com/r0n1n9/netwatch/internal/ledger"
 	"github.com/r0n1n9/netwatch/internal/light"
@@ -115,6 +116,7 @@ type modulesFile struct {
 	LightAddr string         `json:"lightAddr"`
 	Talking   []int          `json:"talking"` // ports of the talking decoys
 	Listen    bool           `json:"listen"`  // accept sensor-node frames at start-up without the flag
+	Esptool   string         `json:"esptool"` // where esptool is, if the operator had to say
 }
 
 func (s *Server) saveModules() {
@@ -132,6 +134,7 @@ func (s *Server) saveModules() {
 	f.PulseLock = s.mod.pulseLock
 	f.LightAddr = s.ref.lightAddr
 	f.Listen = s.fg.listening != "" || s.wantListen
+	f.Esptool = forge.ToolPath
 	s.mu.Unlock()
 	b, err := json.MarshalIndent(f, "", " ")
 	if err != nil {
@@ -180,6 +183,9 @@ func (s *Server) loadModules() {
 	s.mu.Lock()
 	s.mod.pulseLock = f.PulseLock
 	s.wantListen = f.Listen
+	if f.Esptool != "" && forge.CheckTool(f.Esptool) == nil {
+		forge.ToolPath = f.Esptool
+	}
 	if light.ValidAddr(f.LightAddr) == nil {
 		s.ref.lightAddr = f.LightAddr
 	}

@@ -73,6 +73,9 @@ The console opens at `http://127.0.0.1:7979`.
 
 ### Environment
 
+`NETWATCH_ESPTOOL` — the full path to `esptool`, if NetWatch cannot find it by
+itself when flashing a board.
+
 | Variable | Meaning |
 |---|---|
 | `NETWATCH_LLM` | `off` forces the Copilot's built-in rules. |
@@ -834,7 +837,7 @@ can read your alerts and the SONAR view over your network.
 | SPECTRUM is empty | No sensor nodes are reporting, or their firmware predates access-point reporting. |
 | WARD stays on LEARNING | It needs 300 observations *and* 24 hours per device, and live capture. |
 | PULSE flags you | Your rhythm changed (another keyboard, one hand). FORGET PROFILE and enrol again. |
-| The panel says esptool is not installed, but it is | NetWatch could not find it on your PATH, in `~/.local/bin` or in pipx's folder. Run `pipx ensurepath`, open a new terminal and start NetWatch from it. |
+| The panel says esptool is not installed, but it is | First make sure the NetWatch you are running is the one you just built: stop it, start it again, and compare the *this NetWatch build* line in the panel with `git log -1 --format=%h`. If it still cannot find esptool, the panel lists every folder it looked in and has a box for the full path (`which esptool`, or `~/.local/share/pipx/venvs/esptool/bin/esptool`); or start NetWatch with `NETWATCH_ESPTOOL=/full/path/to/esptool`. |
 | ADD A NODE shows no board | The cable carries power only, the board is on a port NetWatch does not recognise, or you are not in the `dialout` group. |
 | Flashing fails to connect | Hold BOOT, tap RESET, release BOOT, and try again; or move the cable to the UART port. |
 | The panel says FLASHED, BUT IT HAS NOT REPORTED IN | The board's light blinking red means it cannot join the Wi-Fi: fix the details and press SETTINGS ONLY. Green but not reported means something between it and NetWatch is blocking UDP 5566. |

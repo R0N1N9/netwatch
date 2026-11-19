@@ -80,6 +80,10 @@ func Boards() []Board {
 	return out
 }
 
+// ToolPath, if set, is the esptool to use (from the console's setting or the
+// NETWATCH_ESPTOOL environment variable) instead of searching.
+var ToolPath = os.Getenv("NETWATCH_ESPTOOL")
+
 // toolDirs lists the places esptool is commonly installed that may not be on
 // PATH: pipx and pip put it in ~/.local/bin, which many shells do not include.
 func toolDirs() []string {
@@ -90,16 +94,56 @@ func toolDirs() []string {
 	if u := os.Getenv("SUDO_USER"); u != "" { // started with sudo: the tool belongs to the person, not to root
 		homes = append(homes, filepath.Join("/home", u))
 	}
-	var dirs []string
-	for _, h := range homes {
-		dirs = append(dirs, filepath.Join(h, ".local", "bin"), filepath.Join(h, ".local", "share", "pipx", "venvs", "esptool", "bin"),
-			filepath.Join(h, ".local", "pipx", "venvs", "esptool", "bin"))
+	if os.Geteuid() == 0 { // running as root some other way (su, a root shell): look in everyone's home
+		if all, err := filepath.Glob("/home/*"); err == nil {
+			homes = append(homes, all...)
+		}
 	}
-	return append(dirs, "/usr/local/bin", "/usr/bin", "/opt/homebrew/bin")
+	var dirs []string
+	if d := os.Getenv("PIPX_BIN_DIR"); d != "" {
+		dirs = append(dirs, d)
+	}
+	if d := os.Getenv("PIPX_HOME"); d != "" {
+		dirs = append(dirs, filepath.Join(d, "venvs", "esptool", "bin"))
+	}
+	seen := map[string]bool{}
+	for _, h := range homes {
+		if seen[h] {
+			continue
+		}
+		seen[h] = true
+		dirs = append(dirs, filepath.Join(h, ".local", "bin"), filepath.Join(h, ".local", "share", "pipx", "venvs", "esptool", "bin"),
+			filepath.Join(h, ".local", "pipx", "venvs", "esptool", "bin"), filepath.Join(h, ".espressif", "python_env"))
+	}
+	return append(dirs, "/usr/local/bin", "/usr/bin", "/opt/pipx/bin", "/opt/homebrew/bin")
+}
+
+// Searched lists where Tool looks, for telling the operator when it finds nothing.
+func Searched() []string {
+	return append([]string{"your PATH"}, toolDirs()...)
+}
+
+func runnable(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir() && st.Mode()&0o111 != 0
+}
+
+// CheckTool says whether a path the operator gave can be used as esptool.
+func CheckTool(p string) error {
+	if base := filepath.Base(p); base != "esptool" && base != "esptool.py" {
+		return fmt.Errorf("that is not esptool: the file must be named esptool or esptool.py")
+	}
+	if !filepath.IsAbs(p) || !runnable(p) {
+		return fmt.Errorf("%s is not a program NetWatch can run — give the full path, for example the output of: which esptool", p)
+	}
+	return nil
 }
 
 // Tool finds esptool. It returns the command to run and a name to show.
 func Tool() ([]string, string) {
+	if ToolPath != "" && CheckTool(ToolPath) == nil {
+		return []string{ToolPath}, "esptool (" + filepath.Dir(ToolPath) + ")"
+	}
 	names := []string{"esptool", "esptool.py"}
 	for _, name := range names {
 		if p, err := exec.LookPath(name); err == nil {
@@ -108,8 +152,7 @@ func Tool() ([]string, string) {
 	}
 	for _, dir := range toolDirs() {
 		for _, name := range names {
-			p := filepath.Join(dir, name)
-			if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			if p := filepath.Join(dir, name); runnable(p) {
 				return []string{p}, name + " (" + dir + ")"
 			}
 		}

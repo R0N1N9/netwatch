@@ -8,7 +8,14 @@ function forgeRender(r) {
   st.push('<span class="m-verdict ' + (img.node && img.node.have ? "ok" : "bad") + '">' + (img.node && img.node.have ? "NODE FIRMWARE READY" : "NO NODE FIRMWARE IN THIS BUILD") + '</span>');
   st.push('<span class="m-verdict ' + (r.listening ? "ok" : "dim") + '">' + (r.listening ? "LISTENING ON " + esc(r.listening) : r.demo ? "DEMO: SIMULATED NODES" : "NOT LISTENING YET") + '</span>');
   if (!r.listening && !r.demo) st.push('<button class="hs-btn" id="fgListen">LISTEN FOR NODES NOW</button>');
-  $("#fgStatus").innerHTML = st.join("") + (r.tool ? "" : '<div class="m-dim">NetWatch looked on your PATH and in <code>~/.local/bin</code> and found no <code>esptool</code>. Install it with <code>pipx install esptool</code> (or <code>sudo apt install esptool</code>); this panel notices within a second, no restart needed.</div>');
+  // Only redraw the status row when it changes, so the path box keeps what is being typed into it.
+  const stSig = st.join("") + "|" + (r.tool || "") + "|" + (r.searched || []).join(",");
+  if (stSig !== forgeSt.stSig) {
+    forgeSt.stSig = stSig;
+    $("#fgStatus").innerHTML = st.join("") + (r.tool ? "" : '<div class="m-dim fg-missing">NetWatch looked for <code>esptool</code> in: ' + (r.searched || []).map((d) => "<code>" + esc(d) + "</code>").join(" · ") + ' and found none. If it is installed, run <code>which esptool</code> or <code>ls ~/.local/share/pipx/venvs/esptool/bin/</code> in a terminal and paste its full path here:</div><div class="field fg-tool"><input id="fgTool" placeholder="/home/you/.local/share/pipx/venvs/esptool/bin/esptool" autocomplete="off" /><button class="btn" id="fgToolSet">USE THIS</button></div>') +
+      (r.build ? '<div class="m-dim fg-build">this NetWatch build: ' + esc(r.build) + '</div>' : "");
+    if ($("#fgToolSet")) { const go = async () => { const x = await post("/api/forge", { toolPath: $("#fgTool").value }); if (x && x.ok) { status("esptool path saved"); forgeLoad(); } }; $("#fgToolSet").onclick = go; $("#fgTool").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); }); }
+  }
   if ($("#fgListen")) $("#fgListen").onclick = async () => { await post("/api/forge", { listen: true }); forgeLoad(); };
   if (document.activeElement !== $("#fgSsid") && !$("#fgSsid").value && r.ssid) $("#fgSsid").value = r.ssid;
   $("#fgPass").placeholder = r.havePass ? "remembered until NetWatch stops" : "";

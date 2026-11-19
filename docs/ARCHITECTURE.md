@@ -106,7 +106,7 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/ack` | Acknowledge one alert, the newest, or all. |
 | `/api/scanner` | Every host with its verdict, reach, trips and deviations, for scanner mode. |
 | `/api/reflex` | `GET` scenes, recent firings, light and companion state; `POST` `put`, `remove`, `fire`, `gesture`, `lightAddr`, `lightTest`. |
-| `/api/forge` | `GET` boards on USB, whether esptool and the images are there, the current job; `POST` flashes a board (`flash`, `kind`, `ssid`, `pass`, `name`, `settingsOnly`) or starts listening (`listen`). |
+| `/api/forge` | `GET` boards on USB, whether esptool and the images are there, the current job; `POST` flashes a board (`flash`, `kind`, `ssid`, `pass`, `name`, `settingsOnly`), starts listening (`listen`), or sets where esptool is (`toolPath`). |
 | `/api/oracle?all=1` · `/api/spectrum?hunt=<id>` | Every conversation (for NETDIVE); per-node readings of one radio (for HUNT). |
 
 The phone companion is a **separate listener** (`--companion`, HTTPS,

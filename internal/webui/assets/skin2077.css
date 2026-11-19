@@ -675,3 +675,5 @@ body.crit-glitch #app { animation: critglitch 0.9s steps(2) 1; }
 .fg-go.bad i { opacity: 0.4; }
 .fg-go.warn { --fc: var(--amber); color: #1a1204; border-color: var(--amber); }
 .fg-go.warn i { opacity: 0.9; }
+.fg-missing code, .fg-build { font-family: var(--mono); font-size: 11px; } .fg-missing code { color: var(--cyan-soft); }
+.fg-tool { flex-basis: 100%; padding: 0; } .fg-build { flex-basis: 100%; opacity: 0.7; }

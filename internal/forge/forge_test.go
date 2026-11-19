@@ -169,3 +169,28 @@ func TestToolIsFoundOffThePath(t *testing.T) {
 		t.Errorf("Tool() = %v, %q", tool, name)
 	}
 }
+
+func TestToolPathGivenByTheOperator(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SUDO_USER", "")
+	good := filepath.Join(dir, "esptool")
+	os.WriteFile(good, []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(filepath.Join(dir, "rm"), []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(filepath.Join(dir, "esptool.py"), []byte("not executable"), 0o644)
+	for _, bad := range []string{filepath.Join(dir, "rm"), filepath.Join(dir, "esptool.py"), "esptool", filepath.Join(dir, "missing", "esptool")} {
+		if CheckTool(bad) == nil {
+			t.Errorf("accepted %q as esptool", bad)
+		}
+	}
+	old := ToolPath
+	defer func() { ToolPath = old }()
+	ToolPath = good
+	if tool, name := Tool(); len(tool) != 1 || tool[0] != good || !strings.Contains(name, dir) {
+		t.Errorf("Tool() with a given path = %v, %q", tool, name)
+	}
+	if len(Searched()) < 4 || Searched()[0] != "your PATH" {
+		t.Errorf("Searched() = %v", Searched())
+	}
+}
