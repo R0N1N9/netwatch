@@ -1,342 +1,78 @@
 # NetWatch
 
-> A cyberpunk network console. Futuristic, experimental, AI-native security tooling —
-> inspired by NetWatch and the netrunners of Cyberpunk 2077.
+> An experimental network and spatial-sensing console with a Cyberpunk 2077
+> scanner HUD. A testing ground for security ideas that are still unusual.
 
-`netwatch` is the **R&D sandbox** counterpart to a grounded, enterprise suite
-(*Ronin Suite*). Where that suite is modern-day production security, NetWatch
-is where the bleeding-edge gets prototyped: AI-driven detection, agentic
-response, and hardware/RF/3D fusion — behind a sleek Cyberpunk-2077-style HUD.
+NetWatch is the R&D counterpart to a grounded, enterprise suite (*Ronin
+Suite*). It watches your local network, senses movement in your space from
+Wi-Fi signals, and lets you replay both.
 
-One binary, multiple **decks**:
+![Watchtower](docs/screens/watchtower.jpg)
 
-| Deck | Stance | Status |
-|------|--------|--------|
-| **Watchtower** | Defensive — watch the segment, guard the wall | ✅ working (GUI + TUI) |
-| **Breach** | Offensive — authorized recon & lab testing | 🟡 recon seed (scope-locked) |
-| **Kill Chain** | Purple team — Lockheed-Martin kill chain | ✅ working |
-| **ATT&CK** | Purple team — MITRE ATT&CK tactics (TA0043→TA0040) | ✅ working |
-| **SONAR** | Spatial awareness — Wi-Fi CSI presence sensing from ESP32-S3 nodes | 🟡 engine + simulator working; firmware untested on hardware |
+> **Scope.** NetWatch is for your own networks and spaces, lab environments,
+> and work you are authorised to do. Anything that touches other machines is
+> limited to private address space.
 
-> **Scope & ethics.** NetWatch is for **defense, your own networks, lab
-> environments, CTFs, and engagements you are authorized to perform**. The
-> offensive deck is scope-locked to private/lab address space and refuses public
-> targets. Don't point it at things you don't own or have permission to test.
+## Documentation
 
-![Watchtower deck](docs/tour/02-watchtower.png)
-![Kill Chain deck](docs/tour/09-killchain-6-c2.png)
-![GRID connection globe](docs/tour/11-grid-globe.png)
-
-A screenshot of every deck and kill-chain stage is in [`docs/tour/`](docs/tour).
-
----
+| | |
+|---|---|
+| **[Guide](docs/GUIDE.md)** | Install, run, every deck, commands, hardware, files and privacy. |
+| **[Experimental feature registry](docs/EXPERIMENTAL.md)** | The growing list of every experimental feature, how far each has been proven, and ideas not built yet. |
+| **[Architecture](docs/ARCHITECTURE.md)** | Packages, HTTP API, background loops, how to add a feature. |
 
 ## Quick start (Linux)
 
-Requires Go ≥ 1.24. The capture layer is **pure-Go AF_PACKET — no libpcap, no
-cgo** — so it builds to a single static binary; the GUI is embedded inside it.
+Requires Go 1.24+. Builds to one static binary with the console embedded.
 
 ```bash
 make build
 ```
 
 ```bash
-# Preview the console with sample data — no privileges needed:
 ./bin/netwatch gui --demo
 ```
 
+That runs with sample data and touches nothing. To watch your real network:
+
 ```bash
-# Live watch (needs raw sockets + nftables). Grant caps instead of running as root:
 sudo setcap cap_net_raw,cap_net_admin+eip ./bin/netwatch
+```
+
+```bash
 ./bin/netwatch gui
 ```
 
-The GUI serves on `http://127.0.0.1:7979` and auto-opens your browser.
-`cap_net_raw` covers capture/injection; `cap_net_admin` powers BLACKWALL (nftables).
+## Decks
 
-### Commands
+| Deck | What it is |
+|---|---|
+| **Watchtower** | Hosts on your network, intrusion alerts, a Copilot you can question or command, and BLACKWALL to quarantine a host. |
+| **Breach** | A connect scan that refuses any public address. |
+| **Kill Chain** / **ATT&CK** | Purple-team consoles over the Lockheed-Martin stages and the MITRE tactics, with audits you can run on this machine. |
+| **GRID** | A globe of the public addresses your network talks to, with the local program behind each. |
+| **AR** | Host tags over your camera feed. |
+| **SONAR** | Presence sensing from ESP32-S3 Wi-Fi nodes: a 3D room view, tripwires, located hosts, breathing, and braindance recordings you can replay. |
 
-```
-netwatch gui     # Cyberpunk web console — primary UI
-netwatch watch    # lightweight terminal deck (TUI fallback)
-netwatch sweep    # one-shot device discovery, printed to the terminal
-```
+![SONAR](docs/screens/sonar-3d.jpg)
 
-`gui` flags: `--demo`, `--addr 127.0.0.1:7979`, `--auto 20s` (sweep interval,
-`0` disables), `--no-open`.
+## How proven is it?
 
----
+Much of NetWatch runs ahead of what has been tested on real hardware. The
+[registry](docs/EXPERIMENTAL.md) marks every feature as proven on real data,
+tested only on simulated data, or written but never run. In short:
 
-## The Watchtower deck (defensive)
+- The network console, firewall quarantine, host audits, process lineage and
+  the interface have run on real data.
+- Everything on SONAR has only seen the built-in simulator, and the ESP32-S3
+  firmware has not been compiled or flashed yet.
+- The passive traffic analyzers, the local-model Copilot, voice, spatial audio,
+  USB watch and the proximity lock are tested with synthetic input only.
 
-Defensive situational awareness for your LAN, rendered as a neon command deck.
+## Privacy
 
-- **SEGMENT MAP / SWEEP** — active ARP discovery of every host, with MAC-vendor
-  (OUI) fingerprinting, reverse-DNS, and `you` / `gateway` / trusted tagging.
-- **ICE** (Intrusion Countermeasures) — detection engine. Flags **new hosts
-  joining** and **gateway-MAC changes** (classic ARP-spoof / MITM signal).
-  Passive packet-level detectors (live ARP-spoof, port-scan, rogue DHCP) next.
-- **COPILOT** — an AI daemon you can ask *"what's weird right now?"*. Today it
-  reasons over live state locally; the `copilot.Copilot` interface lets an LLM
-  backend (local model or API) drop in behind the same call.
-- **BLACKWALL** — one-click **quarantine** of a selected host via nftables
-  (behind an explicit confirm). Release just as easily. Gateway and self are
-  protected from accidental lockout.
-- **VITALS** — live counts: hosts, new, threats, trusted.
-
-## The Breach deck (recon seed)
-
-Authorized, lab-scoped recon. **PROBE** runs a concurrent TCP-connect scan of a
-target across common + IoT ports — and **refuses any non-private address**.
-
-## The ATT&CK deck (purple team)
-
-The same structure as Kill Chain, over the **MITRE ATT&CK** taxonomy: the 14
-Enterprise tactics (Reconnaissance → Impact) as a two-row matrix, each with
-red (authorized/lab) + blue (detection/audit) actions mapped to ATT&CK technique
-IDs and the shared OPS console. Red stays assessment + safe test artifacts +
-planning briefs — no weaponization.
-
-## The Kill Chain deck (purple team)
-
-The whole Lockheed-Martin kill chain as an interactive, MITRE ATT&CK-mapped
-console — RECON → WEAPONIZATION → DELIVERY → EXPLOITATION → INSTALLATION → C2 →
-ACTIONS ON OBJECTIVES. Each stage pairs **RED** (authorized/lab offense) with
-**BLUE** (live defense), and an OPS CONSOLE streams results.
-
-The red side is deliberately **assessment + safe test artifacts** (scope-locked
-scanning, the benign EICAR string for AV/EDR validation, planning briefs) — *not*
-weaponized exploit/C2/malware generators. The blue side does the real work, with
-read-only host introspection:
-
-- **Listening-socket audit** — your C2/backdoor surface (`/proc/net/tcp`, or `ss`).
-- **Persistence audit** — systemd units, cron, shell rc, autostart, rc.local (T1543/T1547/T1053).
-- **Established-peer hunt** — live outbound/inbound TCP peers, **public egress flagged** (C2/exfil, T1041/T1048).
-- **EICAR validation** — confirm your scanner actually fires.
-
-## Kiroshi HUD
-
-The optic layer: a boot/uplink sequence, **scramble-decode** text reveals, a live
-**telemetry ticker**, a **target-lock reticle** that snaps onto the selected host
-with OS / JA3 / beacon / threat-score readout, plus scanlines, CRT flicker and glitch.
-
-The skin (`skin2077.css`) follows the game's scanner view: red rule-lines and a
-scan ring framing a green core, navy/cyan panels, segmented **RAM** and
-**CPU** bars showing the live usage of the machine running NetWatch (red above
-85%), scanner-style
-host rows with a threat cost, and a tabbed **DATA | BLACKWALL** target panel with
-trust/exposure glyphs. A **neural-link** layer adds a point-cloud brain that
-fires and glitches while the Copilot is parsing, an EEG-style link trace, film
-grain, and a glitch cut when you switch decks. UI type is Rajdhani (SIL OFL,
-vendored under `assets/vendor/fonts`).
-
-## Passive intelligence engine
-
-Continuous AF_PACKET capture feeds a flow table and a bank of analyzers — all
-observation-only, all unit-tested:
-
-- **Passive OS fingerprinting** — classify a host's OS from its TCP SYN (TTL /
-  window / MSS), no probing.
-- **JA3 TLS fingerprinting** — hash the ClientHello + extract SNI to identify
-  clients/tools inside TLS.
-- **DGA & DNS-tunnel detection** — entropy + character-class scoring of query
-  names; long-label / TXT exfil heuristics.
-- **Beaconing detection** — coefficient-of-variation on contact intervals flags
-  regular C2-style callbacks.
-- **Behavioral anomaly model** — online per-device/per-feature z-score baselines
-  (bytes/s, distinct dsts/ports, flow count) score hosts acting unlike
-  themselves. Explainable, and upgradeable to an isolation forest behind the
-  same API.
-
-Results surface on every device (OS / JA3 / anomaly / beacon chips + reticle).
-
-## GRID — external-connection globe
-
-A live 3D globe (three.js, vendored for offline use) of everything your host is
-talking to: arcs from you to each public peer, **red for opaque no-SNI egress**,
-cyan for known. The side list geo-locates each node (offline/approximate; a real
-MaxMind DB can be slotted in).
-
-## AR — Kiroshi optic overlay
-
-A WebXR/camera deck: point your device at the room and see **floating tags on
-each host** — IP, passively-fingerprinted OS, threat score, beacon target —
-drawn over the live camera feed. Camera stays on-device. Falls back to a
-synthetic overlay where WebXR/camera isn't available.
-
-## SONAR — presence sensing
-
-ESP32-S3 nodes report Wi-Fi **Channel State Information**; a body moving through
-the path between the access point and a node disturbs the subcarrier
-amplitudes. The engine measures that turbulence against a calm baseline and
-shows which link is disturbed on a top-down map you arrange to match your room.
-It is zone-level sensing, not coordinates.
-
-The deck opens in **3D** (room volume, sensed zones as wireframe ellipsoids, a
-marker and trail at the estimated position of the movement) and has a **2D**
-top-down view for arranging the access point and nodes. It falls back to 2D on
-its own when the browser has no WebGL. The position estimate is a score-weighted
-blend of the disturbed links — a rough guide, not a measurement.
-
-Also on this deck:
-
-- **Braindance** — SONAR keeps a rolling ~50-minute buffer of the presence
-  field. **REC** records a clip, **SAVE LAST 60s** keeps what just happened,
-  and while SONAR is armed a clip is cut automatically around each movement.
-  Replay a clip in the 2D or 3D room view with seek and 0.5–4× speed; the room
-  layout is saved with it, and if the console still has network history for
-  that moment it shows the host and alert counts alongside. Clips are JSON
-  files under `~/.local/share/netwatch/braindance` (change with `--data-dir`).
-  They are a record of when people moved through your space — keep them
-  private, and tell the people you live or work with that it's running.
-- **Breathing** — on a link with no movement the engine looks for a steady
-  9–30 cycles-per-minute ripple and reports it as `RESP n/min`: someone is
-  there but still. Experimental, and so far only exercised on simulated data.
-- **Hosts on the map** — nodes report the signal strength of the devices they
-  overhear; NetWatch turns each into a range and fits a position, then matches
-  it to a network host by MAC address. Filled markers are heard by three or
-  more nodes; hollow ones by fewer and are only a hint. Expect a few metres of
-  error indoors.
-- **Floor plan and tripwires** — in the 2D view, DRAW WALL and DRAW TRIPWIRE
-  let you sketch the room and lay named lines across it. While SONAR is armed,
-  movement passing from one side of a tripwire to the other raises a critical
-  alert. Both appear in 3D as translucent walls and red curtains.
-- **Activity and people** — each link is labelled empty / still / minor /
-  moving / walking / fall?, and the deck shows a rough head count. These are
-  heuristics on signal turbulence, not a trained classifier; "fall?" means a
-  sudden movement followed by stillness, which sitting down also produces, so
-  it only alerts while armed.
-- **Respiration log** — one reading a minute per link (breathing rate and
-  movement), kept for 24 hours and charted on the deck. Click a node to pick it.
-- **Wi-Fi ranging** — if your access point supports 802.11mc FTM, each node
-  measures its distance to it and the map places the node at that range (you
-  set the bearing by dragging). Without FTM the nodes stay where you put them.
-
-
-```bash
-netwatch gui --sonar-udp 0.0.0.0:5566     # listen for nodes on your LAN (off by default)
-```
-
-```bash
-netwatch sonar-sim                        # simulated nodes, to try it before hardware
-```
-
-**ARM** it when you want movement to raise an ICE alert; disarmed, it only
-draws. Firmware lives in `firmware/esp32s3-csi` and has **not yet been compiled
-or run on a board**.
-
-## Copilot — free, local model
-
-The Copilot uses a model served by [Ollama](https://ollama.com) on your own
-machine when one is running, and the built-in rules otherwise. No API key, no
-token cost, and nothing about your network leaves the host.
-
-```bash
-ollama pull llama3.2
-```
-
-Start `netwatch gui` afterwards and the Copilot panel shows
-`local model · llama3.2`. `NETWATCH_LLM_MODEL` picks a model, `NETWATCH_LLM_URL`
-points at another Ollama host, `NETWATCH_LLM=off` forces the built-in rules.
-
-## Commands, voice, spatial audio, time scrubber
-
-- **Commands** — the Copilot box is also a command line: `sweep`,
-  `select gateway`, `select 99`, `trust`, `quarantine pi-hole` (asks you to
-  `confirm`), `release`, `switch to sonar`, `rewind 10 minutes`, `go live`,
-  `arm sonar`, `audio on`. Anything else goes to the Copilot as a question.
-- **Voice** — the VOICE button (or `V`) speaks the same commands and reads the
-  reply back. It uses the browser's speech recognition; in Chrome that sends
-  audio to Google, so type instead if you want everything to stay local.
-- **Spatial audio** — AUDIO ON plays each new alert from a direction: SONAR
-  nodes from where you placed them on the map, hosts from a fixed bearing per
-  address. Use headphones.
-- **Proximity lock** — PROX LOCK plays a quiet 19 kHz tone and listens for the
-  Doppler smear a moving body puts on it. After a minute with nobody moving
-  near the laptop it warns, then locks the screen. Experimental: it needs
-  microphone access, many laptop speakers barely reach 19 kHz, pets may hear
-  it, and someone sitting perfectly still looks the same as an empty chair.
-- **USB watch** — a new USB device raises an alert; one that presents a
-  keyboard is called out, and if NetWatch can read `/dev/input` it flags a
-  keyboard that types faster than a person can.
-- **Daily surface diff** — once a day (and on `surface diff`) NetWatch compares
-  listening ports, start-up entries, hosts and USB devices with the previous
-  day's snapshot.
-- **Detector fire drill** — at start-up and daily (and on `fire drill`) it
-  stages synthetic events against fresh copies of eleven detectors and reports
-  any that stay silent. It checks the detection logic, not the sensors.
-- **Presence key** — on the BLACKWALL tab, pick a device (your phone, say) as
-  the key. While it is off the network the server refuses trust and BLACKWALL
-  actions. It recognises the key by MAC address, so treat it as a convenience
-  lock rather than strong authentication.
-- **Process lineage** — the GRID list names the program on this machine behind
-  each connection, and KILL CHAIN / ATT&CK have a "Process lineage" trace.
-  Connections owned by other users need root to attribute.
-- **Time scrubber** — drag the bar above the ticker to replay the console's
-  recent past (ticks mark alerts; red is critical). Controls lock while
-  replaying; LIVE returns to the present. History is kept in memory only.
-
-## Architecture
-
-```
-main.go                      entrypoint
-internal/
-  model/      core types (Device, Alert, Severity)
-  netif/      interface / subnet / gateway discovery (parses /proc/net/route)
-  capture/    AF_PACKET raw socket — pure Go (capture_linux.go), stub elsewhere
-  oui/        MAC-prefix -> vendor (built-in table + optional IEEE CSV load)
-  sweep/      SWEEP: ARP request injection + reply collection
-  ice/        ICE engine: sweep-diff detectors (ARP-spoof, new-device)
-  blackwall/  nftables quarantine (atomic rebuild of one dedicated table)
-  copilot/    AI daemon — heuristic now, LLM-pluggable via the Copilot interface
-  offensive/  Breach recon — scope-locked TCP-connect scan
-  audit/      blue-team host introspection (listeners, persistence, peers, EICAR)
-  passive/    live capture + flow table + analyzers (OS fp, JA3, DNS/DGA, beacon)
-  anomaly/    online behavioral-anomaly model (per-device z-score baselines)
-  geo/        offline IP -> globe placement (real GeoIP pluggable)
-  sonar/      Wi-Fi CSI presence engine (turbulence vs baseline) + simulator
-  server/     HTTP server: serves the GUI + SSE live stream + action endpoints
-  webui/      embedded Cyberpunk web console (assets/ baked in with go:embed)
-  tui/        terminal deck (Bubble Tea) — fallback
-  theme/      cyberpunk palette + banner
-  cli/        cobra command tree (netwatch gui | watch | sweep)
-```
-
-The capture + model + ICE engine is deck-agnostic: the GUI, the TUI, and the
-offensive deck all consume the same core. The front-end (plain HTML/CSS/JS, no
-build step) can also be dropped into a native Wails window later for a packaged
-desktop app.
-
----
-
-## Roadmap
-
-**NetWatch — deepen the defense**
-- [x] Cyberpunk GUI shell + live SSE stream.
-- [x] BLACKWALL nftables quarantine.
-- [x] Copilot (local heuristic) + pluggable LLM interface.
-- [ ] Passive live capture: continuous flow table (top talkers, per-host bandwidth).
-- [ ] Live ICE detectors: real-time ARP-spoof, port-scan-against-us, rogue DHCP, SSDP/mDNS snooping.
-- [ ] Persistent asset DB (pure-Go SQLite): trusted/unknown, first/last seen, nicknames.
-- [ ] GeoIP + reputation enrichment; auto-pcap on alert; desktop notifications.
-
-**AI-native layer**
-- [x] Copilot Q&A over live state.
-- [ ] LLM backend (local model / API) behind the Copilot interface.
-- [ ] Agentic response: reason about a confirmed threat → propose/execute BLACKWALL (human-in-the-loop).
-
-**Breach deck — offensive (authorized)**
-- [x] Scope-locked TCP-connect port/service scan.
-- [ ] CIDR ranges, service banners, OS hints.
-- [ ] Traffic masking / VPN (WireGuard) integration.
-
-**SONAR — spatial**
-- [ ] ESP32-S3 sensor mesh ingestion (Wi-Fi/BLE/UWB) → live 3D map.
-
----
-
-## Status
-
-The NetWatch deck is working end-to-end: SWEEP, sweep-diff ICE, the live
-Cyberpunk GUI (SSE), BLACKWALL quarantine, the Copilot daemon, and a
-scope-locked recon probe. Everything builds to one static, cgo-free binary.
+Nothing leaves your machine unless you turn on voice in Chrome (speech goes to
+Google) or point the Copilot at an Ollama host that is not yours. SONAR
+recordings and the respiration log describe when people moved and breathed in
+your space; they are stored locally, and the [guide](docs/GUIDE.md#files-and-privacy)
+says where.

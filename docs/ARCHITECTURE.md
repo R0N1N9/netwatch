@@ -1,0 +1,108 @@
+# Architecture
+
+NetWatch is one Go binary. It captures and analyses on the machine it runs on,
+serves an embedded web console on localhost, and pushes state to that console
+over Server-Sent Events. There is no cgo, no libpcap and no front-end build
+step.
+
+```
+                 ┌────────────────────────── netwatch gui ──────────────────────────┐
+ LAN  ──ARP──▶   │ sweep ─▶ ice (alerts)            passive monitor ─▶ flow table   │
+ frames ───────▶ │                                   └▶ OS / JA3 / DNS / beacon     │
+ ESP32 nodes ──▶ │ sonar engine ─▶ presence, breathing, radios ─▶ braindance buffer │
+ /proc, /sys ──▶ │ audit · sysmon · hostwatch (USB, surface)        drill           │
+                 │                       server ── SSE + JSON API ──▶ web console   │
+                 └──────────────────────────────────────────────────────────────────┘
+```
+
+## Packages (`internal/`)
+
+| Package | Responsibility |
+|---|---|
+| `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
+| `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring. |
+| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, vendored three.js and fonts). |
+| `model` | Shared types: `Device`, `Alert`, `Severity`. |
+| `netif` | Finds the interface, subnet and gateway. |
+| `capture` | AF_PACKET raw socket in pure Go; a stub on other systems. |
+| `sweep` | ARP discovery of hosts. |
+| `oui` | MAC prefix to vendor. |
+| `ice` | Alerts from differences between sweeps (new host, gateway MAC change). |
+| `passive` | Live capture, flow table, and the analyzers: OS fingerprint, JA3, DNS scoring, beaconing. |
+| `anomaly` | Per-device running baselines and anomaly score. |
+| `geo` | Places an address on the globe (deterministic, not real geography). |
+| `blackwall` | Quarantine via one nftables table, rebuilt atomically. |
+| `copilot` | The Copilot interface, built-in rules, and the Ollama backend. |
+| `offensive` | The scope-locked connect scan. |
+| `audit` | Read-only host inspection: listeners, start-up entries, connections, process lineage, EICAR string. |
+| `sonar` | CSI presence engine, breathing, activity, ranging, radio location, room geometry, sleep log, simulator. |
+| `braindance` | Rolling buffer of the presence field and the clip library. |
+| `hostwatch` | USB watch, typing-rate rule, daily surface snapshots and diff, screen lock. |
+| `sysmon` | CPU and memory of this machine. |
+| `drill` | The detector fire drill. |
+| `tui`, `theme` | The terminal view and shared colours. |
+
+`firmware/esp32s3-csi` is the ESP-IDF project for the sensor nodes.
+
+## HTTP API
+
+All endpoints are served on the console's address (localhost by default).
+Reads are `GET`; actions are `POST` with a JSON body.
+
+| Endpoint | Purpose |
+|---|---|
+| `/api/stream` | SSE stream of the full state snapshot (hosts, alerts, meta). |
+| `/api/sweep` | Sweep now. |
+| `/api/trust` | Mark a host trusted or not. |
+| `/api/blackwall` | Quarantine or release a host. |
+| `/api/gate` | Set or clear the presence key. |
+| `/api/scan` | Scope-locked connect scan. |
+| `/api/copilot` | Ask the Copilot. |
+| `/api/globe` | Public peers for the globe. |
+| `/api/lineage` | Connections with their owning process. |
+| `/api/sys` | CPU and memory. |
+| `/api/history`, `/api/history/at` | Time-scrubber index and snapshots. |
+| `/api/sonar` | Nodes, layout, walls, tripwires, located hosts, head count. |
+| `/api/sonar/ingest` | Accept sensor frames over HTTP (UDP is the normal path). |
+| `/api/sonar/arm`, `/layout`, `/map`, `/sleep` | Arm, save node positions, save walls and tripwires, read the respiration log. |
+| `/api/braindance`, `/save`, `/rec`, `/clip`, `/delete` | List, save, record, load and delete clips. |
+| `/api/usb`, `/api/surface`, `/api/drill`, `/api/lock` | USB list, surface diff, fire drill, lock the screen. |
+| `/api/kc/*` | The same audits as text lines for the Kill Chain and ATT&CK ops consoles. |
+
+## Background loops
+
+| Loop | Interval | Does |
+|---|---|---|
+| Sweep | `--auto` | ARP sweep, ICE diff, broadcast. |
+| Passive monitor | per packet, plus 12 s | Analyzers; anomaly and beacon scans. |
+| Record | 200 ms | Samples the presence field into the braindance buffer; tripwire checks and automatic clips while armed. |
+| Minute | 60 s | Appends to the respiration log. |
+| Daily | start-up + 24 h | Surface diff and fire drill, each reported as an alert. |
+| USB watch | 2 s | New-device alerts. |
+| System monitor | 1 s | CPU sample. |
+
+## Adding a feature
+
+1. Put the logic in its own package or file with a pure, testable core, and
+   write the test first where you can. Hardware- or traffic-dependent features
+   need a simulator or fixture so they can be exercised without the real thing.
+2. Wire it into `server` (an endpoint, and a loop if it runs on its own). Give
+   demo mode believable sample data, and make sure demo mode has no side
+   effects on the machine.
+3. Add it to the console in `assets/`, and to the command grammar in `app.js`
+   if it makes sense to say or type.
+4. Add a row to [EXPERIMENTAL.md](EXPERIMENTAL.md) with an honest status, and a
+   section or line in [GUIDE.md](GUIDE.md).
+5. Verify in a browser before calling it done, and say what was and was not
+   tested.
+
+## Conventions
+
+- Anything observed on the network (host names, vendors, server names) is
+  untrusted. Escape it before inserting it into the page, and pass it to a
+  model only as data.
+- Features that act on other machines are limited to private address space.
+  The red side of the purple-team decks stays at assessment, safe test
+  artifacts and planning briefs.
+- Sensing features that record people default to off or disarmed, and store
+  only on the local machine.
