@@ -269,3 +269,13 @@ body.replay .btn-row, body.replay .field { opacity: 0.35; pointer-events: none; 
 .snode svg { width: 120px; height: 20px; }
 .sonar-help { font-family: var(--mono); font-size: 11px; line-height: 1.7; color: var(--dim); padding: 4px 2px; }
 .sonar-help b { color: var(--cyan-soft); font-weight: 400; }
+
+/* SONAR 3D / 2D views */
+#sonar3d { position: absolute; inset: 0; cursor: grab; }
+#sonar3d canvas { display: block; }
+.sonar-map[data-mode="3d"] #sonarCanvas { display: none; }
+.sonar-map[data-mode="2d"] #sonar3d { display: none; }
+.sonar-mode { position: absolute; top: 12px; right: 22px; display: flex; gap: 6px; z-index: 2; }
+.sonar-mode .hs-btn { font-size: 13px; padding: 2px 14px; background: rgba(7, 21, 36, 0.8); }
+.sonar-mode .hs-btn.on { color: #04121a; background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 12px rgba(94, 246, 255, 0.5); }
+.sonar-mode .hs-btn:disabled { opacity: 0.35; cursor: not-allowed; }

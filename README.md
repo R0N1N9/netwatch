@@ -171,6 +171,12 @@ amplitudes. The engine measures that turbulence against a calm baseline and
 shows which link is disturbed on a top-down map you arrange to match your room.
 It is zone-level sensing, not coordinates.
 
+The deck opens in **3D** (room volume, sensed zones as wireframe ellipsoids, a
+marker and trail at the estimated position of the movement) and has a **2D**
+top-down view for arranging the access point and nodes. It falls back to 2D on
+its own when the browser has no WebGL. The position estimate is a score-weighted
+blend of the disturbed links — a rough guide, not a measurement.
+
 ```bash
 netwatch gui --sonar-udp 0.0.0.0:5566     # listen for nodes on your LAN (off by default)
 ```

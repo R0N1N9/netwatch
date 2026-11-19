@@ -231,11 +231,16 @@ MK.4</div>
   <main class="deck sonar" data-deck="sonar" hidden>
     <div class="sonar-map">
       <canvas id="sonarCanvas"></canvas>
+      <div id="sonar3d"></div>
+      <div class="sonar-mode">
+        <button class="hs-btn" id="sonarMode3d" data-mode="3d">3D</button>
+        <button class="hs-btn" id="sonarMode2d" data-mode="2d">2D</button>
+      </div>
       <div class="globe-hud">
         <div class="ghud-title">SO<span class="glitch">NAR</span> // PRESENCE FIELD</div>
         <div class="ghud-meta" id="sonarMeta">— nodes</div>
       </div>
-      <div class="sonar-hint">drag the access point and nodes to match your room</div>
+      <div class="sonar-hint" id="sonarHint">drag the access point and nodes to match your room</div>
     </div>
     <div class="panel grow" style="--accent: var(--green)">
       <div class="panel-head"><span>SENSOR MESH</span><span class="meta" id="sonarSrc">wi-fi csi</span></div>

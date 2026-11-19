@@ -26,7 +26,7 @@ function selectDeck(name) {
   else $("#reticle").hidden = true;
   if (name === "grid") setTimeout(() => { initGlobe(); if (globe && globe.resize) globe.resize(); loadGlobe(); }, 40);
   if (name === "ar") renderARTags();
-  if (name === "sonar") setTimeout(sonarResize, 40);
+  if (name === "sonar") setTimeout(() => { if (!sonarMode) setSonarMode(sonarPref()); sonarResize(); }, 40);
 }
 function currentDeck() { return document.querySelector(".tab.active").dataset.deck; }
 
@@ -917,6 +917,15 @@ function sonarDraw(t) {
     x.font = "600 26px Rajdhani, sans-serif"; x.fillStyle = "#bdf9ff"; x.fillText(n.node.toUpperCase(), np[0] + 24, np[1] - 4);
     x.font = "20px ui-monospace, monospace"; x.fillStyle = col; x.fillText(n.state.toUpperCase() + (n.state === "offline" ? "" : " · " + Math.round(n.score)), np[0] + 24, np[1] + 22);
   });
+  // estimated position of the movement, and where it has been
+  if (sonarTrail.length) {
+    x.lineWidth = 4; x.strokeStyle = "rgba(255,184,74,0.7)"; x.beginPath();
+    sonarTrail.forEach((q, i) => { const pt = P(q); i ? x.lineTo(pt[0], pt[1]) : x.moveTo(pt[0], pt[1]); }); x.stroke();
+    const last = P(sonarTrail[sonarTrail.length - 1]), r = 30 + 10 * Math.sin(t * 7);
+    x.fillStyle = "rgba(255,84,73,0.35)"; x.strokeStyle = "#ff5449"; x.lineWidth = 3;
+    x.beginPath(); x.arc(last[0], last[1], r, 0, 6.283); x.fill(); x.stroke();
+    x.font = "600 22px Rajdhani, sans-serif"; x.fillStyle = "#ff5449"; x.fillText("PRESENCE ≈", last[0] + r + 8, last[1] + 7);
+  }
   // access point
   x.strokeStyle = "#5ef6ff"; x.lineWidth = 3; x.shadowColor = "#5ef6ff"; x.shadowBlur = 16;
   x.beginPath(); x.arc(ap[0], ap[1], 14, 0, 6.283); x.stroke(); x.beginPath(); x.arc(ap[0], ap[1], 4, 0, 6.283); x.fillStyle = "#5ef6ff"; x.fill(); x.shadowBlur = 0;
@@ -952,6 +961,8 @@ async function sonarPoll() {
   if (!visible && !audioOn) return;
   const r = await get("/api/sonar"); if (!r) return;
   sonarState = r;
+  const est = sonarEstimate();
+  if (est) { sonarTrail.push(est); if (sonarTrail.length > 36) sonarTrail.shift(); } else if (sonarTrail.length) sonarTrail.splice(0, 2);
   if (visible) sonarRenderList();
 }
 $("#sonarArm").addEventListener("click", async () => { await post("/api/sonar/arm", { armed: !sonarState.armed }); sonarPoll(); });
@@ -966,6 +977,125 @@ $("#sonarArm").addEventListener("click", async () => { await post("/api/sonar/ar
   c.addEventListener("pointermove", (e) => { if (sonarDrag) sonarPos[sonarDrag] = norm(e); });
   c.addEventListener("pointerup", () => { if (sonarDrag) { sonarDrag = null; try { localStorage.setItem("nw.sonarPos", JSON.stringify(sonarPos)); } catch (_) {} } });
 })();
+
+// ---- SONAR: where is the movement? a score-weighted blend of the disturbed links ----
+let sonarTrail = [], sonarMode = "";
+function sonarEstimate() {
+  const nodes = sonarState.nodes || [], ap = sonarXY("@ap", 0, 1);
+  let wx = 0, wy = 0, w = 0;
+  nodes.forEach((n, i) => {
+    if (n.state !== "motion") return;
+    const q = sonarXY(n.node, i, nodes.length);
+    wx += (ap.x + q.x) / 2 * n.score; wy += (ap.y + q.y) / 2 * n.score; w += n.score;
+  });
+  return w > 0 ? { x: wx / w, y: wy / w } : null;
+}
+
+// ---- SONAR 3D view (three.js); falls back to 2D when WebGL is unavailable ----
+const s3 = { r: null, failed: false, az: 0.9, el: 0.5, dist: 11.5, drag: null, lastUser: 0, sig: "", objs: {} };
+const S3 = 4.4; // map units -> metres-ish
+function textSprite(text, color) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 96;
+  const x = c.getContext("2d"); x.font = "600 46px Rajdhani, sans-serif"; x.fillStyle = color; x.shadowColor = color; x.shadowBlur = 12; x.fillText(text, 8, 62);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  sp.scale.set(3.4, 0.64, 1); sp.center.set(0, 0.5); return sp;
+}
+function sonar3dInit() {
+  if (s3.r) return true;
+  if (s3.failed || typeof THREE === "undefined") { s3.failed = true; return false; }
+  try {
+    const host = $("#sonar3d");
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    host.appendChild(renderer.domElement);
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
+    const grid = new THREE.GridHelper(10, 20, 0x1dffa1, 0x0f5a48); grid.material.transparent = true; grid.material.opacity = 0.5; scene.add(grid);
+    const room = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(10, 3, 10)), new THREE.LineBasicMaterial({ color: 0xff5449, transparent: true, opacity: 0.4 }));
+    room.position.y = 1.5; scene.add(room);
+    const ap = new THREE.Group();
+    ap.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 20, 14), new THREE.MeshBasicMaterial({ color: 0x5ef6ff })));
+    ap.add(new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 14), new THREE.MeshBasicMaterial({ color: 0x5ef6ff, wireframe: true, transparent: true, opacity: 0.35 })));
+    const apLabel = textSprite("ACCESS POINT", "#bdf9ff"); apLabel.position.set(0.4, 0.5, 0); ap.add(apLabel);
+    scene.add(ap);
+    const rings = [0, 1, 2].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 72), new THREE.MeshBasicMaterial({ color: 0x1dffa1, transparent: true, side: THREE.DoubleSide, depthWrite: false })); m.rotation.x = -Math.PI / 2; scene.add(m); return m; });
+    const blob = new THREE.Group();
+    blob.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.5, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xff5449, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })));
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 12), new THREE.MeshBasicMaterial({ color: 0xff5449, wireframe: true, transparent: true, opacity: 0.8 })); head.position.y = 1.05; blob.add(head);
+    const foot = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.56, 48), new THREE.MeshBasicMaterial({ color: 0xff5449, side: THREE.DoubleSide, transparent: true })); foot.rotation.x = -Math.PI / 2; foot.position.y = -0.72; blob.add(foot);
+    const blobLabel = textSprite("PRESENCE ≈", "#ff5449"); blobLabel.position.set(0.45, 1.6, 0); blob.add(blobLabel);
+    blob.visible = false; scene.add(blob);
+    const trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffb84a, transparent: true, opacity: 0.85 })); scene.add(trail);
+    const dyn = new THREE.Group(); scene.add(dyn);
+    host.addEventListener("pointerdown", (e) => { s3.drag = { x: e.clientX, y: e.clientY }; host.setPointerCapture(e.pointerId); });
+    host.addEventListener("pointermove", (e) => { if (!s3.drag) return; s3.az += (e.clientX - s3.drag.x) * 0.006; s3.el = Math.max(0.12, Math.min(1.45, s3.el + (e.clientY - s3.drag.y) * 0.005)); s3.drag = { x: e.clientX, y: e.clientY }; s3.lastUser = performance.now(); });
+    host.addEventListener("pointerup", () => { s3.drag = null; });
+    host.addEventListener("wheel", (e) => { e.preventDefault(); s3.dist = Math.max(6, Math.min(26, s3.dist + e.deltaY * 0.01)); s3.lastUser = performance.now(); }, { passive: false });
+    s3.r = { renderer, scene, camera, ap, rings, blob, trail, dyn, host, w: 0, h: 0 };
+    return true;
+  } catch (e) { s3.failed = true; return false; }
+}
+function sonar3dNode(name) {
+  const g = new THREE.Group();
+  const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.24), new THREE.MeshBasicMaterial({ color: 0x1dffa1 }));
+  const link = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x5ef6ff, transparent: true, opacity: 0.6 }));
+  const geo = new THREE.SphereGeometry(1, 28, 18);
+  const zone = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x1dffa1, transparent: true, opacity: 0.08, depthWrite: false }));
+  const wire = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x1dffa1, wireframe: true, transparent: true, opacity: 0.16, depthWrite: false }));
+  g.add(marker, link, zone, wire);
+  return { g, marker, link, zone, wire, label: null, text: "" };
+}
+function sonar3dRender(t) {
+  const R = s3.r; if (!R || !R.host.offsetParent) return;
+  const w = R.host.clientWidth, h = R.host.clientHeight;
+  if (w !== R.w || h !== R.h) { R.w = w; R.h = h; R.renderer.setSize(w, h); R.camera.aspect = w / h; R.camera.updateProjectionMatrix(); }
+  if (!s3.drag && performance.now() - s3.lastUser > 4000) s3.az += 0.0016;
+  R.camera.position.set(Math.cos(s3.az) * Math.cos(s3.el) * s3.dist, Math.sin(s3.el) * s3.dist, Math.sin(s3.az) * Math.cos(s3.el) * s3.dist);
+  R.camera.lookAt(0, 0.8, 0);
+
+  const nodes = sonarState.nodes || [], apP = sonarXY("@ap", 0, 1), H = 1.1;
+  const A = new THREE.Vector3(apP.x * S3, H + 0.5, apP.y * S3);
+  R.ap.position.copy(A);
+  R.rings.forEach((m, k) => { const f = (t * 0.12 + k / 3) % 1; m.scale.setScalar(0.2 + f * 5.5); m.position.set(A.x, 0.02, A.z); m.material.opacity = 0.5 * (1 - f); });
+
+  const sig = nodes.map((n) => n.node).join("|");
+  if (sig !== s3.sig) { s3.sig = sig; while (R.dyn.children.length) R.dyn.remove(R.dyn.children[0]); s3.objs = {}; nodes.forEach((n) => { s3.objs[n.node] = sonar3dNode(n.node); R.dyn.add(s3.objs[n.node].g); }); }
+  nodes.forEach((n, i) => {
+    const o = s3.objs[n.node], q = sonarXY(n.node, i, nodes.length);
+    const N = new THREE.Vector3(q.x * S3, H, q.y * S3);
+    const hot = n.state === "motion", k = Math.min(1, n.score / 100), pulse = hot ? 0.55 + 0.45 * Math.sin(t * 9) : 1;
+    const col = n.state === "offline" ? 0x43727e : hot ? 0xff5449 : n.state === "calibrating" ? 0xffb84a : 0x1dffa1;
+    o.marker.position.copy(N); o.marker.rotation.y = t * 1.2; o.marker.material.color.setHex(col);
+    o.link.geometry.setFromPoints([A, N]); o.link.material.color.setHex(hot ? 0xff5449 : 0x5ef6ff);
+    const mid = A.clone().add(N).multiplyScalar(0.5), dx = N.x - A.x, dz = N.z - A.z, len = Math.hypot(dx, dz);
+    [o.zone, o.wire].forEach((m) => { m.position.copy(mid); m.rotation.y = -Math.atan2(dz, dx); m.scale.set(len / 2 + 0.3, 0.6 + (hot ? k * 0.4 : 0), 0.55 + len * 0.07 + (hot ? k * 0.45 : 0)); m.material.color.setHex(hot ? 0xff5449 : 0x1dffa1); });
+    o.zone.material.opacity = hot ? 0.14 + 0.26 * k * pulse : (n.state === "clear" ? 0.07 : 0.03);
+    o.wire.material.opacity = hot ? 0.45 : 0.14;
+    const text = n.node.toUpperCase() + " · " + n.state.toUpperCase() + (n.state === "offline" ? "" : " " + Math.round(n.score));
+    if (text !== o.text) { if (o.label) o.g.remove(o.label); o.text = text; o.label = textSprite(text, "#" + col.toString(16).padStart(6, "0")); o.g.add(o.label); }
+    o.label.position.set(N.x + 0.35, N.y + 0.45, N.z);
+  });
+
+  const last = sonarTrail[sonarTrail.length - 1];
+  R.blob.visible = !!last;
+  if (last) { R.blob.position.set(last.x * S3, 0.75, last.y * S3); const sc = 1 + 0.12 * Math.sin(t * 7); R.blob.scale.set(sc, 1, sc); }
+  R.trail.geometry.setFromPoints(sonarTrail.map((q) => new THREE.Vector3(q.x * S3, 0.05, q.y * S3)));
+  R.renderer.render(R.scene, R.camera);
+}
+function sonarPref() { try { return localStorage.getItem("nw.sonarMode") || "3d"; } catch (_) { return "3d"; } }
+function setSonarMode(m) {
+  if (m === "3d" && !sonar3dInit()) m = "2d";
+  sonarMode = m;
+  document.querySelector(".sonar-map").dataset.mode = m;
+  const b3 = $("#sonarMode3d"), b2 = $("#sonarMode2d");
+  b3.classList.toggle("on", m === "3d"); b2.classList.toggle("on", m === "2d");
+  if (s3.failed) { b3.disabled = true; b3.title = "3D needs WebGL, which this browser is not providing"; }
+  $("#sonarHint").textContent = m === "3d" ? "drag to orbit · scroll to zoom · switch to 2D to arrange nodes" : "drag the access point and nodes to match your room";
+  if (m === "2d") sonarResize();
+}
+document.querySelectorAll(".sonar-mode .hs-btn").forEach((b) => b.addEventListener("click", () => {
+  setSonarMode(b.dataset.mode);
+  if (!(b.dataset.mode === "3d" && s3.failed)) { try { localStorage.setItem("nw.sonarMode", sonarMode); } catch (_) {} }
+}));
 
 // ================= COMMANDS: typed or spoken =================
 const DECK_WORDS = { watchtower: "netwatch", watch: "netwatch", breach: "breach", "kill chain": "killchain", killchain: "killchain", "attack": "attack", "att&ck": "attack", mitre: "attack", grid: "grid", globe: "grid", ar: "ar", optic: "ar", sonar: "sonar" };
@@ -1057,7 +1187,7 @@ function onNewAlerts(snap) {
 }
 
 // test hooks (also handy from the browser console)
-window.netwatch = { runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
+window.netwatch = { sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
 
 // ---------- boot ----------
 initNeural();
@@ -1070,4 +1200,7 @@ setTimeout(() => { if (!live) loadMock(); }, 600);
 setTimeout(loadHistory, 900);
 setInterval(loadHistory, 10000);
 setInterval(sonarPoll, 400);
-(function sonarLoop() { sonarDraw(performance.now() / 1000); requestAnimationFrame(sonarLoop); })();
+(function sonarLoop() {
+  if (currentDeck() === "sonar") { const t = performance.now() / 1000; if (sonarMode === "3d") sonar3dRender(t); else sonarDraw(t); }
+  requestAnimationFrame(sonarLoop);
+})();
