@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +17,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 //go:embed firmware
 var images embed.FS
+
+// ErrCancelled is returned by Flash when the operator stopped it.
+var ErrCancelled = errors.New("cancelled")
 
 // ConfigOffset is where the firmware's "nwcfg" partition sits in flash.
 const ConfigOffset = "0x190000"
@@ -237,6 +242,7 @@ func Flash(ctx context.Context, tool []string, port string, image, config []byte
 	}
 	args = append(args, ConfigOffset, filepath.Join(dir, "settings.bin"))
 	cmd := exec.CommandContext(ctx, tool[0], args...)
+	cmd.WaitDelay = 2 * time.Second // after a cancel, do not wait on a pipe the killed tool left open
 	pr, pw := io.Pipe()
 	cmd.Stdout, cmd.Stderr = pw, pw
 	done := make(chan struct{})
@@ -253,6 +259,9 @@ func Flash(ctx context.Context, tool []string, port string, image, config []byte
 	err = cmd.Run()
 	pw.Close()
 	<-done
+	if ctx.Err() == context.Canceled {
+		return ErrCancelled
+	}
 	if err != nil {
 		return fmt.Errorf("esptool failed: %w", err)
 	}

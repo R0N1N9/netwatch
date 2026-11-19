@@ -677,3 +677,7 @@ body.crit-glitch #app { animation: critglitch 0.9s steps(2) 1; }
 .fg-go.warn i { opacity: 0.9; }
 .fg-missing code, .fg-build { font-family: var(--mono); font-size: 11px; } .fg-missing code { color: var(--cyan-soft); }
 .fg-tool { flex-basis: 100%; padding: 0; } .fg-build { flex-basis: 100%; opacity: 0.7; }
+.fg-steps-row { display: flex; align-items: center; gap: 12px; } .fg-steps-row .fg-steps { flex: 1; }
+#fgCancel { color: var(--amber); border-color: var(--amber); } #fgCancel:hover { background: var(--amber); color: #1a1204; } #fgCancel[hidden] { display: none; }
+.fg-run.off { --c: var(--dim); }
+.fg-go.off { color: var(--amber); border-color: rgba(255, 184, 74, 0.6); } .fg-go.off i { --fc: var(--amber); opacity: 0.25; }

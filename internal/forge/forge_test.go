@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConfigBlob(t *testing.T) {
@@ -192,5 +193,30 @@ func TestToolPathGivenByTheOperator(t *testing.T) {
 	}
 	if len(Searched()) < 4 || Searched()[0] != "your PATH" {
 		t.Errorf("Searched() = %v", Searched())
+	}
+}
+
+func TestFlashCanBeCancelledMidway(t *testing.T) {
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "esptool")
+	os.WriteFile(tool, []byte("#!/bin/sh\necho 'Connecting....'\necho 'Writing at 0x00010000... (12 %)'\nexec sleep 30\n"), 0o755)
+	cfg, _ := ConfigBlob(Settings{SSID: "home", Port: 5566})
+	ctx, cancel := context.WithCancel(context.Background())
+	var lines []string
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	err := Flash(ctx, []string{tool}, "/dev/ttyACM0", []byte("image"), cfg, func(l string) { lines = append(lines, l) })
+	if err != ErrCancelled || time.Since(start) > 5*time.Second {
+		t.Fatalf("cancelled flash returned %v after %v", err, time.Since(start))
+	}
+	if len(lines) != 2 {
+		t.Errorf("lines before the cancel = %q", lines)
+	}
+	left, _ := filepath.Glob(filepath.Join(os.TempDir(), "netwatch-forge-*"))
+	if len(left) != 0 {
+		t.Errorf("a cancelled flash left the settings file behind: %v", left)
 	}
 }

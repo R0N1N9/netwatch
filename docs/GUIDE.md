@@ -573,7 +573,7 @@ commands by speech and reads the reply aloud.
 | `scenes` · `fire scene <name>` · `light test` | REFLEX scenes and the threat light. |
 | `open talking decoy 2323` | Open a talking decoy. |
 | `companion` | Read out the phone companion's link and pairing code. |
-| `add a node` · `listen for nodes` | Open the board flasher; start accepting sensor nodes. |
+| `add a node` · `cancel flash` · `listen for nodes` | Open the board flasher; stop a flash in progress; start accepting sensor nodes. |
 
 Voice uses the browser's speech recognition. In Chrome that sends audio to
 Google; type the commands if you want everything to stay on your machine.
@@ -653,8 +653,10 @@ log out and in).
 4. Watch the button you pressed: it is the progress bar. It fills with green
    as the board is written, pulses while the board joins your Wi-Fi, and turns
    solid green reading **✓ SENSOR NODE · NODE-A1B2** when the node is online.
-   If the flash fails it stops where it was and turns red (**✕ FAILED — PRESS
-   TO RETRY**); if the board was written but never reports, it turns amber.
+   **✕ CANCEL** (beside the steps) stops a flash midway so you can start
+   again; the board is not harmed, but it holds a partial image until you
+   flash it again. If the flash fails it stops where it was and turns red
+   (**✕ FAILED — PRESS TO RETRY**); if the board was written but never reports, it turns amber.
    Below it, the steps light up in turn — **CONNECT → WRITE → VERIFY →
    RESTART → ONLINE** — with a bar that fills while it writes (about twenty
    seconds). Leave the cable in: the board restarts, joins your Wi-Fi, and

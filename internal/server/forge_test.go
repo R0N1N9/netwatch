@@ -115,3 +115,29 @@ func TestNodesAreAnsweredAndHeardWithoutAFlag(t *testing.T) {
 	}
 	t.Error("the node's frame was not heard")
 }
+
+func TestAFlashCanBeCancelledAndStartedAgain(t *testing.T) {
+	s := demoServer(t)
+	if r := call(t, s.handleForge, `{"cancel":true}`); r["ok"] != false {
+		t.Error("cancelled a flash that was not running")
+	}
+	flash := `{"flash":"/dev/ttyACM0","kind":"node","ssid":"home","pass":"pw"}`
+	call(t, s.handleForge, flash)
+	time.Sleep(900 * time.Millisecond)
+	if r := call(t, s.handleForge, `{"cancel":true}`); r["ok"] != true {
+		t.Fatalf("cancel: %v", r)
+	}
+	var job map[string]any
+	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		if job = getJSON(t, s.handleForge, "/api/forge")["job"].(map[string]any); job["done"] == true {
+			break
+		}
+	}
+	if job["done"] != true || job["ok"] != false || job["cancelled"] != true || job["error"] != "cancelled" || job["online"] != "" {
+		t.Errorf("cancelled job = %v", job)
+	}
+	if r := call(t, s.handleForge, flash); r["ok"] != true {
+		t.Errorf("could not start again straight after a cancel: %v", r)
+	}
+	call(t, s.handleForge, `{"cancel":true}`)
+}

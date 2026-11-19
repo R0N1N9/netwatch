@@ -35,6 +35,7 @@ type forgeJob struct {
 	Error string   `json:"error"`
 
 	Started      int64 `json:"started"`      // unix ms; tells one flash from the next on the same port
+	Cancelled    bool  `json:"cancelled"`    // the operator stopped it
 	SettingsOnly bool  `json:"settingsOnly"` // only the settings were written, not the firmware
 
 	Stage    string `json:"stage"`    // connect | write | verify | restart
@@ -45,6 +46,7 @@ type forgeJob struct {
 	Stalled bool   `json:"stalled"` // a minute has passed and it has not reported
 
 	doneAt     time.Time
+	cancel     context.CancelFunc
 	liveBefore map[string]bool // nodes that were already reporting when the flash finished
 }
 
@@ -142,11 +144,30 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		SettingsOnly bool    `json:"settingsOnly"`
 		Listen       *bool   `json:"listen"`
 		ToolPath     *string `json:"toolPath"` // where esptool is, when NetWatch cannot find it
+		Cancel       bool    `json:"cancel"`   // stop the flash in progress
 	}
 	if !decode(w, r, &req) {
 		return
 	}
 	fail := func(msg string) { writeJSON(w, map[string]any{"ok": false, "error": msg}) }
+	if req.Cancel {
+		s.mu.Lock()
+		j := s.fg.job
+		running := j != nil && !j.Done
+		if running {
+			j.Cancelled = true
+			if j.cancel != nil {
+				j.cancel()
+			}
+		}
+		s.mu.Unlock()
+		if !running {
+			fail("nothing is being flashed")
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+		return
+	}
 	if req.ToolPath != nil {
 		path := strings.TrimSpace(*req.ToolPath)
 		if path != "" {
@@ -230,6 +251,14 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 				"Writing at 0x00010000... (8 %)", "Writing at 0x00028000... (21 %)", "Writing at 0x00040000... (34 %)", "Writing at 0x00058000... (47 %)", "Writing at 0x00070000... (60 %)",
 				"Writing at 0x00088000... (73 %)", "Writing at 0x000a0000... (86 %)", "Writing at 0x000cc000... (100 %)", "Hash of data verified.", "Hard resetting via RTS pin...", "Done (simulated). On a real board this takes about twenty seconds."} {
 				time.Sleep(420 * time.Millisecond)
+				s.mu.Lock()
+				stopped := job.Cancelled
+				s.mu.Unlock()
+				if stopped {
+					add("Cancelled (simulated).")
+					finish(forge.ErrCancelled)
+					return
+				}
 				add(l)
 			}
 			finish(nil)
@@ -259,15 +288,21 @@ func (s *Server) handleForge(w http.ResponseWriter, r *http.Request) {
 		}
 		image = img
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	s.mu.Lock()
+	job.cancel = cancel
 	s.fg.ssid, s.fg.pass, s.fg.job = req.SSID, req.Pass, job
 	s.mu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
 		what := map[string]string{"node": "sensor node", "light": "threat light"}[req.Kind]
 		add(fmt.Sprintf("Making a %s of the board on %s (network \"%s\", reporting to %s:5566)", what, req.Flash, req.SSID, s.info.IP))
 		err := forge.Flash(ctx, tool, req.Flash, image, cfg, add)
+		if err == forge.ErrCancelled {
+			add("Cancelled. The board is unharmed — its built-in loader cannot be overwritten — but it now holds a partial image, so flash it again before using it.")
+			finish(err)
+			return
+		}
 		if err != nil {
 			add("Failed. If it could not connect: hold the board's BOOT button, tap RESET, release BOOT, and try again. If it says permission denied, add yourself to the dialout group and log in again.")
 			finish(err)

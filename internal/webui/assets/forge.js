@@ -40,6 +40,8 @@ function forgeRender(r) {
 // How full a board's button is, what colour, and what it says, for a flash job.
 function forgeFill(j) {
   const reached = j.stage === "write" ? 8 + j.progress * 0.76 : j.stage === "verify" ? 87 : j.stage === "restart" ? 91 : 5;
+  if (j.cancelled && j.done) return { pct: 0, cls: "off", label: "CANCELLED — PRESS TO START AGAIN" };
+  if (j.cancelled) return { pct: reached, cls: "off", label: "CANCELLING…" };
   if (!j.done) return { pct: reached, cls: "run", label: j.stage === "write" ? "WRITING " + j.progress + "%" : j.stage === "verify" ? "VERIFYING…" : j.stage === "restart" ? "RESTARTING…" : "CONNECTING…" };
   if (!j.ok) return { pct: Math.max(10, reached), cls: "bad", label: "✕ FAILED — PRESS TO RETRY" };
   if (j.kind !== "node") return { pct: 100, cls: "ok", label: "✓ THREAT LIGHT" };
@@ -64,6 +66,7 @@ function forgeButtons(r) {
 const FG_STEPS = [["connect", "CONNECT"], ["write", "WRITE"], ["verify", "VERIFY"], ["restart", "RESTART"], ["online", "ONLINE"]];
 function forgeState(j) {
   if (!j) return null;
+  if (j.cancelled) return { at: -1, cls: "off", text: j.done ? "FLASH CANCELLED" : "CANCELLING…", sub: "The board is unharmed — its built-in loader cannot be overwritten — but it holds a partial image now. Press the button to flash it again." };
   if (j.done && !j.ok) return { at: Math.max(0, FG_STEPS.findIndex((x) => x[0] === j.stage)), cls: "bad", text: "✕ FLASHING FAILED", sub: j.error + " — see the log below." };
   if (!j.done) { const at = Math.max(0, FG_STEPS.findIndex((x) => x[0] === j.stage)); return { at, cls: "run", text: j.stage === "write" ? "WRITING " + j.progress + "%" : j.stage === "verify" ? "VERIFYING…" : j.stage === "restart" ? "RESTARTING…" : "CONNECTING TO THE BOARD…", sub: "Leave the cable in. This takes about twenty seconds." }; }
   if (j.kind !== "node") return { at: 4, cls: "ok", text: "✓ FLASHED — THE LIGHT IS READY", sub: "Power it up; it shows faint white until NetWatch starts sending it colours." };
@@ -76,7 +79,8 @@ function forgeProgress(j) {
   box.hidden = !st; if (!st) return;
   const steps = j.kind === "node" ? FG_STEPS : FG_STEPS.slice(0, 4);
   $("#fgSteps").innerHTML = steps.map(([, label], i) => '<span class="fg-step ' + (i < st.at ? "done" : i === st.at && st.cls !== "ok" ? "now " + st.cls : "") + '">' + (i < st.at ? "✓ " : "") + label + '</span>').join('<i></i>');
-  $("#fgBar").style.width = (j.done && j.ok ? 100 : j.progress) + "%";
+  $("#fgBar").style.width = (j.done && j.ok ? 100 : j.cancelled ? 0 : j.progress) + "%";
+  $("#fgCancel").hidden = j.done || j.cancelled;
   box.className = "fg-run " + st.cls;
   $("#fgBanner").innerHTML = "<b>" + esc(st.text) + "</b><span>" + esc(st.sub) + "</span>";
   // one chime when the outcome is known: up for online, down for a failure
@@ -110,10 +114,13 @@ function forgeOpen() { forgeSt.open = true; $("#forgeBox").hidden = false; clear
 function forgeClose() { forgeSt.open = false; $("#forgeBox").hidden = true; clearInterval(forgeSt.timer); }
 $("#forgeOpen").onclick = forgeOpen;
 $("#forgeClose").onclick = forgeClose;
+async function forgeCancel() { const r = await post("/api/forge", { cancel: true }); await forgeLoad(); return r; }
+$("#fgCancel").onclick = forgeCancel;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && forgeSt.open && !/INPUT/.test(document.activeElement.tagName)) forgeClose(); });
 EXTRA_COMMANDS.push(async (t) => {
   if (/^(add (a )?node|flash( a)?( board| node)?|node forge|forge)$/.test(t)) { selectDeck("sonar"); forgeOpen(); return "Plug the board into its UART port, enter your Wi-Fi details and press make it a sensor node."; }
+  if (/^(cancel|stop|abort) (the )?flash(ing)?$/.test(t)) { const r = await forgeCancel(); return r && r.ok ? "Flash cancelled. Press the button to start again." : "Nothing is being flashed."; }
   if (/^(listen|listen for nodes)$/.test(t)) { const r = await post("/api/forge", { listen: true }); return r && r.ok ? "Listening for sensor nodes." : (r && r.error) || "I could not start listening."; }
   return null;
 });
-Object.assign(window.netwatch, { forgeSt, forgeOpen, forgeClose, forgeFlash, forgeLoad, forgeState, forgeFill, forgeRender });
+Object.assign(window.netwatch, { forgeSt, forgeOpen, forgeClose, forgeFlash, forgeLoad, forgeState, forgeFill, forgeRender, forgeCancel });
