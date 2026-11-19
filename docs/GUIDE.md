@@ -96,6 +96,18 @@ The console opens at `http://127.0.0.1:7979`.
   in the past. **LIVE** returns to now. History is kept in memory only.
 - **Footer** — key hints: `S` sweep, `↑↓` change target, `T` trust, `V` voice,
   `Tab` next deck, hold `Q` for the scanner.
+- **Fitting your screen** — on a short screen (under about 880 pixels tall)
+  the console switches to a **compact** layout by itself: the gauges shrink to
+  one line and the ticker is hidden so the decks get the room. **▢ COMPACT** /
+  **▣ FULL HUD** in the footer overrides that either way. Columns and the
+  SONAR side panel scroll when their contents do not fit.
+- **Expand a panel** — every panel has **⤢** in its header: it fills the
+  window; press it again or `Esc` to go back.
+- **Pop out** — **⧉** on a panel opens just that panel in its own browser
+  window; **⧉ POP OUT** in the top bar opens the whole current deck. Each
+  window is a live console showing only that part, so you can put SONAR on
+  one monitor and the intrusion log on another. Your browser may ask to allow
+  pop-ups the first time.
 - **Scanner mode** — hold `Q` anywhere. The console dims and every host fans
   out with its CORTEX verdict; hover one to see what it talks to, how much a
   quarantine would stop, decoys it touched and steps outside its profile, with
@@ -565,6 +577,7 @@ commands by speech and reads the reply aloud.
 | `rehearsal` · `rehearsal mirror` · `stop rehearsal` | Start or stop an incident rehearsal. |
 | `what did i miss` · `recap 60 minutes` | Replay what happened while you were out. |
 | `scanner` | Open scanner mode (the same as holding `Q`). |
+| `compact on` · `compact off` · `pop out` · `pop out sonar` | Layout: compact mode; open the current deck (or a named one) in its own window. |
 | `ack` · `ack all` | Acknowledge the newest alert, or all of them. |
 | `operator watch on` · `how am i` | The fatigue meter. |
 | `narrate on` · `sonify on` (and `off`) | Spoken commentary; the soundscape. |
@@ -845,6 +858,7 @@ can read your alerts and the SONAR view over your network.
 | Flashing fails to connect | Hold BOOT, tap RESET, release BOOT, and try again; or move the cable to the UART port. |
 | The panel says FLASHED, BUT IT HAS NOT REPORTED IN | The board's light blinking red means it cannot join the Wi-Fi: fix the details and press SETTINGS ONLY. Green but not reported means something between it and NetWatch is blocking UDP 5566. |
 | A flashed node never appears | Wrong Wi-Fi password or a 5 GHz-only network; a firewall blocking UDP 5566; plug it back in and read its log with `esptool`'s monitor or `screen /dev/ttyACM0 115200`. |
+| Panels are cut off or cramped | Press **▢ COMPACT** in the footer, expand the panel with **⤢**, or pop it out with **⧉**. Zooming the browser out (`Ctrl` `-`) also helps on small screens. |
 | NETDIVE is blank | The browser is not providing WebGL. |
 | The phone cannot open the companion | It is not on the same network, a firewall blocks the port, or the certificate warning was not accepted. |
 | The companion says NO LINK | The pairing code is wrong or NetWatch restarted (the code changes each start). |

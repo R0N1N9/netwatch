@@ -681,3 +681,53 @@ body.crit-glitch #app { animation: critglitch 0.9s steps(2) 1; }
 #fgCancel { color: var(--amber); border-color: var(--amber); } #fgCancel:hover { background: var(--amber); color: #1a1204; } #fgCancel[hidden] { display: none; }
 .fg-run.off { --c: var(--dim); }
 .fg-go.off { color: var(--amber); border-color: rgba(255, 184, 74, 0.6); } .fg-go.off i { --fc: var(--amber); opacity: 0.25; }
+
+/* ---------- fitting small screens ---------- */
+* { scrollbar-width: thin; scrollbar-color: rgba(94, 246, 255, 0.4) transparent; }
+/* A column scrolls rather than squeezing its panels flat. */
+.col { overflow-y: auto; overflow-x: hidden; }
+.col > .panel { min-height: 150px; flex-shrink: 0; }
+.col > .panel.grow { flex: 1 0 220px; }
+.col > .tpanel { flex: 1 0 320px; }
+.panel.copilot { min-height: 230px; }
+/* SONAR's side panel scrolls as one piece, and the node list is never squeezed out of sight. */
+.deck.sonar > .panel { overflow-y: auto; }
+.deck.sonar > .panel > #sonarList { flex: 0 0 auto; overflow: visible; min-height: 60px; }
+.deck.sonar > .panel > .bd { max-height: none; flex: 0 0 auto; }
+.deck.sonar > .panel > .bd .bd-list { max-height: 220px; }
+.deck.mod > .col > .panel.grow { flex: 1 0 200px; }
+
+/* ---------- panel tools: expand and pop out ---------- */
+.pn-tools { display: inline-flex; gap: 4px; margin-left: 10px; flex: none; align-self: center; }
+.pn-btn { cursor: pointer; width: 20px; height: 18px; padding: 0; font-size: 12px; line-height: 16px; color: var(--dim); background: transparent; border: 1px solid rgba(94, 246, 255, 0.22); }
+.pn-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+.panel-head .meta { margin-left: auto; }
+.tp-tabs .pn-tools { margin-left: auto; margin-bottom: 6px; }
+.panel.max, .tpanel.max { position: fixed !important; inset: 8px; z-index: 190; min-height: 0; background: rgba(5, 12, 20, 0.98); box-shadow: 0 0 0 2000px rgba(5, 2, 3, 0.8), 0 0 40px rgba(94, 246, 255, 0.25); clip-path: none; }
+.panel.max .panel-body { font-size: 110%; }
+.deck.sonar > .panel.max > #sonarList { flex: 1 1 auto; }
+
+/* ---------- compact mode: the decks get the room ---------- */
+body.compact #app { padding: 6px 10px; gap: 6px; }
+body.compact .hud-strip { min-height: 0; align-items: center; }
+body.compact .hud-strip .res .micro, body.compact #eeg, body.compact .hs-left .micro { display: none; }
+body.compact .ram { min-height: 12px; margin-top: 2px; } body.compact .ram i { height: 12px; width: 9px; }
+body.compact .ram-title { font-size: 14px; border-bottom: 0; }
+body.compact .res { display: flex; align-items: center; gap: 8px; }
+body.compact .ticker { display: none; }
+body.compact .hud-bottom { padding-top: 3px; font-size: 12px; gap: 16px; }
+body.compact .hud-top { padding: 2px 6px 4px; } body.compact .brand { font-size: 19px; }
+@media (max-width: 1500px) {
+  .tab { padding: 1px 7px; font-size: 11.5px; letter-spacing: 0.1em; } .tab-label { display: none; }
+  .brand { font-size: 19px; } .hud-top { gap: 10px; } .hud-strip { gap: 10px; } .hs-center { gap: 14px; } .hs-right { gap: 10px; }
+  .hud-bottom .kh:nth-child(n+3):not(:last-of-type) { display: none; }
+}
+
+/* ---------- a popped-out window: one deck, or one panel ---------- */
+body.solo #boot, body.solo .tabs, body.solo .hud-strip, body.solo .ticker, body.solo .hud-bottom .kh, body.solo #popDeck, body.solo #compactBtn, body.solo .pn-pop { display: none !important; }
+body.solo #app { padding: 6px 10px; gap: 6px; }
+body.solo-panel .hud-top, body.solo-panel .scrub, body.solo-panel .hud-bottom, body.solo-panel .pn-max { display: none !important; }
+body.solo-panel .panel.max, body.solo-panel .tpanel.max { inset: 0; box-shadow: none; border: 0; }
+/* Decorative canvases must never sit on top of a panel's controls. */
+#brain { pointer-events: none; }
+.panel-head, .tp-tabs { position: relative; z-index: 2; }

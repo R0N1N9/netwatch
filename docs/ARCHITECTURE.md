@@ -21,7 +21,7 @@ step.
 |---|---|
 | `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
 | `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener; `forge.go` flashes boards and starts the node listener at run time. |
-| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `forge.js`, `xray.js`, `companion.html`, vendored three.js and fonts). |
+| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `forge.js`, `layout.js`, `xray.js`, `companion.html`, vendored three.js and fonts). |
 | `model` | Shared types: `Device`, `Alert`, `Severity`. |
 | `netif` | Finds the interface, subnet and gateway. |
 | `capture` | AF_PACKET raw socket in pure Go; a stub on other systems. |
@@ -168,6 +168,10 @@ cross-site or its `Origin` is not the console's own address.
   browser side has matching hooks: `ALERT_HOOKS`, `RENDER_HOOKS`,
   `EXTRA_COMMANDS` and `MOD_DECKS`; `senses.js` and `reflex.js` add features
   through those rather than by editing `app.js`.
+- A popped-out window is the same page with `?solo=1&deck=<deck>` and
+  optionally `&panel=<n>` (the nth `.panel`/`.tpanel` of that deck, in page
+  order); `layout.js` hides everything else. New panels get the expand and
+  pop-out buttons automatically.
 - The server can ask open consoles to speak or switch deck through the `cue`
   field of the snapshot; a scene is the only thing that sets it.
 - Anything a phone or other device on the network may reach goes on the

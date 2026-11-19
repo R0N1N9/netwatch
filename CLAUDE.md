@@ -11,7 +11,7 @@ that gap is part of the job.
 - Test: `go test ./...` · Vet: `go vet ./...` · Format: `gofmt -l internal/` must print nothing
 - Run with sample data: `./bin/netwatch gui --demo --no-open`
 - The web assets are embedded, so rebuild after editing anything in `internal/webui/assets/`.
-- Check every script in `internal/webui/assets/` (`app.js`, `senses.js`, `reflex.js`, `forge.js`, `xray.js`) with `node --check` before building.
+- Check every script in `internal/webui/assets/` (`app.js`, `senses.js`, `reflex.js`, `forge.js`, `layout.js`, `xray.js`) with `node --check` before building.
 
 ## Documentation is part of every feature
 
@@ -57,7 +57,9 @@ See `docs/ARCHITECTURE.md`. Front-end: `index.html`, `app.css` (base),
 `skin2077.css` (the look), `app.js` (the decks and modules), `senses.js` and
 `reflex.js` (later features, hooked in through `EXTRA_COMMANDS`, `ALERT_HOOKS`,
 `RENDER_HOOKS` and `MOD_DECKS`), `xray.js` (shared with `companion.html`, the
-phone page served on its own listener). Firmware for the ESP32-S3
+phone page served on its own listener), `layout.js` (compact mode, panel
+expand, pop-out windows). Check layout changes at 1366×768 as well as a large
+window: the owner's laptop screen is small. Firmware for the ESP32-S3
 nodes is in `firmware/esp32s3-csi`, and for the LED threat light in
 `firmware/esp32-light`. Both compile in CI (`.github/workflows/firmware.yml`,
 which commits the images to `internal/forge/firmware/` for embedding — pull
