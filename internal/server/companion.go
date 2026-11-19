@@ -181,6 +181,11 @@ func (s *Server) companionHandler() http.Handler {
 		page(w, r)
 	})
 	mux.HandleFunc("/xray.js", file("xray.js", "application/javascript"))
+	mux.HandleFunc("/companion.css", file("companion.css", "text/css; charset=utf-8"))
+	for _, weight := range []string{"500", "600", "700"} { // the console's typeface
+		name := "rajdhani-latin-" + weight + "-normal.woff2"
+		mux.HandleFunc("/fonts/"+name, file("vendor/fonts/"+name, "font/woff2"))
+	}
 	mux.HandleFunc("/favicon.svg", file("favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("/apple-touch-icon.png", file("apple-touch-icon.png", "image/png"))
 	mux.HandleFunc("/finder", func(w http.ResponseWriter, r *http.Request) {

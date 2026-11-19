@@ -214,6 +214,11 @@ func TestCompanionNeedsThePairingCode(t *testing.T) {
 	if w := get("/"); w.Code != 200 || !strings.Contains(w.Body.String(), "NetWatch") {
 		t.Errorf("companion page: %d", w.Code)
 	}
+	for _, f := range []string{"/companion.css", "/xray.js", "/fonts/rajdhani-latin-600-normal.woff2"} {
+		if w := get(f); w.Code != 200 || w.Body.Len() < 500 {
+			t.Errorf("the phone page cannot load %s: %d, %d bytes", f, w.Code, w.Body.Len())
+		}
+	}
 	if w := get("/favicon.svg"); w.Code != 200 || !strings.Contains(w.Header().Get("Content-Type"), "svg") {
 		t.Errorf("companion favicon: %d %s", w.Code, w.Header().Get("Content-Type"))
 	}

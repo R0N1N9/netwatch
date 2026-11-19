@@ -21,7 +21,7 @@ step.
 |---|---|
 | `cli` | Command tree: `gui`, `watch`, `sweep`, `sonar-sim`. |
 | `server` | HTTP server, SSE stream, every API endpoint, background loops, demo data. `server.go` holds the core; `room.go` holds the room, tripwires, sleep log, USB, surface and drill wiring; `modules.go` feeds and exposes the eight module decks; `senses.go` holds rehearsal, recap, operator watch, acknowledgement and scanner data; `reflex.go` holds scenes, gestures, the light, talking decoys and room clips; `companion.go` is the phone listener; `forge.go` flashes boards and starts the node listener at run time. |
-| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `forge.js`, `layout.js`, `xray.js`, `companion.html`, vendored three.js and fonts). |
+| `webui` | The embedded console (`assets/`: `index.html`, `app.css`, `skin2077.css`, `app.js`, `senses.js`, `reflex.js`, `forge.js`, `layout.js`, `xray.js`, `companion.html`, `companion.css`, vendored three.js and fonts). |
 | `model` | Shared types: `Device`, `Alert`, `Severity`. |
 | `netif` | Finds the interface, subnet and gateway. |
 | `capture` | AF_PACKET raw socket in pure Go; a stub on other systems. |
@@ -111,7 +111,8 @@ Reads are `GET`; actions are `POST` with a JSON body.
 | `/api/oracle?all=1` · `/api/spectrum?hunt=<id>` | Every conversation (for NETDIVE); per-node readings of one radio (for HUNT). |
 
 The phone companion is a **separate listener** (`--companion`, or switched on
-from the MOBILE deck at run time and remembered; HTTPS, self-signed): `/` (the page), `/xray.js`, `/stream?code=` (alerts only), `/sonar?code=` and
+from the MOBILE deck at run time and remembered; HTTPS, self-signed): `/` (the page), `/companion.css`, `/fonts/*` (the console's typeface),
+`/xray.js`, `/stream?code=` (alerts only), `/sonar?code=` and
 `/finder?code=` (located hosts, the node that hears each loudest, and the
 asking phone's own position if the nodes hear it; also at `/api/finder` on the
 console). Nothing under `/api/` is served there.

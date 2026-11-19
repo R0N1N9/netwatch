@@ -56,8 +56,8 @@ The demo looking good does not make something ✅.
 See `docs/ARCHITECTURE.md`. Front-end: `index.html`, `app.css` (base),
 `skin2077.css` (the look), `app.js` (the decks and modules), `senses.js` and
 `reflex.js` (later features, hooked in through `EXTRA_COMMANDS`, `ALERT_HOOKS`,
-`RENDER_HOOKS` and `MOD_DECKS`), `xray.js` (shared with `companion.html`, the
-phone page served on its own listener), `layout.js` (compact mode, panel
+`RENDER_HOOKS` and `MOD_DECKS`), `xray.js` (shared with `companion.html` and its `companion.css`, the
+phone page served on its own listener; keep its look in step with the console), `layout.js` (compact mode, panel
 expand, pop-out windows). Check layout changes at 1366×768 as well as a large
 window: the owner's laptop screen is small. Firmware for the ESP32-S3
 nodes is in `firmware/esp32s3-csi`, and for the LED threat light in

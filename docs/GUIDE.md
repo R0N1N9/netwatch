@@ -533,6 +533,11 @@ You can also start it from the terminal, which is the only way in demo mode:
 ./bin/netwatch gui --companion 0.0.0.0:7443
 ```
 
+The phone page wears the same scanner look as the console: a short handshake
+when it opens, a **threat level** bar across the top (green when quiet, amber
+for unopened warnings, red and pulsing for critical ones), and the display
+glitches when a critical alert arrives.
+
 Opening the link: The certificate is self-signed, so the
 browser warns once; the deck shows the certificate's first bytes if you want to
 compare. Press **START**.
