@@ -192,6 +192,22 @@ Also on this deck:
 - **Breathing** — on a link with no movement the engine looks for a steady
   9–30 cycles-per-minute ripple and reports it as `RESP n/min`: someone is
   there but still. Experimental, and so far only exercised on simulated data.
+- **Hosts on the map** — nodes report the signal strength of the devices they
+  overhear; NetWatch turns each into a range and fits a position, then matches
+  it to a network host by MAC address. Filled markers are heard by three or
+  more nodes; hollow ones by fewer and are only a hint. Expect a few metres of
+  error indoors.
+- **Floor plan and tripwires** — in the 2D view, DRAW WALL and DRAW TRIPWIRE
+  let you sketch the room and lay named lines across it. While SONAR is armed,
+  movement passing from one side of a tripwire to the other raises a critical
+  alert. Both appear in 3D as translucent walls and red curtains.
+- **Activity and people** — each link is labelled empty / still / minor /
+  moving / walking / fall?, and the deck shows a rough head count. These are
+  heuristics on signal turbulence, not a trained classifier; "fall?" means a
+  sudden movement followed by stillness, which sitting down also produces, so
+  it only alerts while armed.
+- **Respiration log** — one reading a minute per link (breathing rate and
+  movement), kept for 24 hours and charted on the deck. Click a node to pick it.
 - **Wi-Fi ranging** — if your access point supports 802.11mc FTM, each node
   measures its distance to it and the map places the node at that range (you
   set the bearing by dragging). Without FTM the nodes stay where you put them.
@@ -235,6 +251,20 @@ points at another Ollama host, `NETWATCH_LLM=off` forces the built-in rules.
 - **Spatial audio** — AUDIO ON plays each new alert from a direction: SONAR
   nodes from where you placed them on the map, hosts from a fixed bearing per
   address. Use headphones.
+- **Proximity lock** — PROX LOCK plays a quiet 19 kHz tone and listens for the
+  Doppler smear a moving body puts on it. After a minute with nobody moving
+  near the laptop it warns, then locks the screen. Experimental: it needs
+  microphone access, many laptop speakers barely reach 19 kHz, pets may hear
+  it, and someone sitting perfectly still looks the same as an empty chair.
+- **USB watch** — a new USB device raises an alert; one that presents a
+  keyboard is called out, and if NetWatch can read `/dev/input` it flags a
+  keyboard that types faster than a person can.
+- **Daily surface diff** — once a day (and on `surface diff`) NetWatch compares
+  listening ports, start-up entries, hosts and USB devices with the previous
+  day's snapshot.
+- **Detector fire drill** — at start-up and daily (and on `fire drill`) it
+  stages synthetic events against fresh copies of eleven detectors and reports
+  any that stay silent. It checks the detection logic, not the sensors.
 - **Presence key** — on the BLACKWALL tab, pick a device (your phone, say) as
   the key. While it is off the network the server refuses trust and BLACKWALL
   actions. It recognises the key by MAC address, so treat it as a convenience

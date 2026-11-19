@@ -408,8 +408,8 @@ func (s *Server) demoRoom() {
 	s.mu.Lock()
 	s.layout = map[string]braindance.Point{"@ap": {X: 0, Y: -0.1}, "node-A": {X: -0.75, Y: -0.55}, "node-B": {X: 0.1, Y: 0.85}, "node-C": {X: 0.8, Y: -0.3}}
 	s.walls = []sonar.Wire{
-		seg("wall-n", "", -1.15, -0.95, 1.15, -0.95), seg("wall-e", "", 1.15, -0.95, 1.15, 1.05),
-		seg("wall-s", "", 1.15, 1.05, -1.15, 1.05), seg("wall-w", "", -1.15, 1.05, -1.15, -0.95),
+		seg("wall-n", "", -1.15, -0.84, 1.15, -0.84), seg("wall-e", "", 1.15, -0.84, 1.15, 1.05),
+		seg("wall-s", "", 1.15, 1.05, -1.15, 1.05), seg("wall-w", "", -1.15, 1.05, -1.15, -0.84),
 		seg("wall-i", "", -1.15, 0.3, -0.45, 0.3),
 	}
 	s.wires = []sonar.Wire{seg("wire-hall", "hallway", -0.6, 0.12, 0.4, 0.12)}

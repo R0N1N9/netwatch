@@ -65,6 +65,7 @@ MK.4</div>
       <span class="hs-stat" id="intStat"><span class="micro cy">INTEGRITY</span><b id="intVal">0/0</b></span>
       <span class="hs-stat"><span class="micro cy">PKT/S</span><b id="ppsVal">0</b></span>
       <span class="hs-stat" id="thrStat"><span class="micro">THREATS</span><b id="thrVal">0</b></span>
+      <button class="hs-btn" id="proxBtn" title="ultrasonic proximity lock: locks the screen when nobody is moving near this laptop">PROX LOCK OFF</button>
       <button class="hs-btn" id="audioBtn" title="spatial audio alerts">AUDIO OFF</button>
     </div>
   </div>
@@ -257,6 +258,12 @@ MK.4</div>
         <div class="ghud-meta" id="sonarMeta">— nodes</div>
       </div>
       <div class="sonar-hint" id="sonarHint">drag the access point and nodes to match your room</div>
+      <div class="sonar-tools" id="sonarTools">
+        <button class="hs-btn on" data-tool="move">MOVE</button>
+        <button class="hs-btn" data-tool="wall">DRAW WALL</button>
+        <button class="hs-btn" data-tool="wire">DRAW TRIPWIRE</button>
+        <button class="hs-btn" id="wallUndo">UNDO WALL</button>
+      </div>
       <div class="bd-tag" id="bdTag" hidden>BRAINDANCE · REPLAY</div>
       <div class="bd-player" id="bdPlayer" hidden>
         <button class="hs-btn on" id="bdPlay">❚❚</button>
@@ -273,6 +280,11 @@ MK.4</div>
         <span class="sonar-note" id="sonarArmNote">disarmed — movement is shown, no alerts raised</span>
       </div>
       <div class="panel-body" id="sonarList"></div>
+      <div class="wire-list" id="wireList"></div>
+      <div class="sleep">
+        <div class="bd-head"><span class="micro cy">▚▚ RESPIRATION LOG · <span id="sleepNode">—</span></span><span class="micro" id="sleepMeta"></span></div>
+        <canvas id="sleepChart" height="64"></canvas>
+      </div>
       <div class="bd">
         <div class="bd-head"><span class="micro cy">▚▚ BRAINDANCE // RECORDINGS</span><span class="micro" id="bdMeta">buffer —</span></div>
         <div class="btn-row">
@@ -308,6 +320,7 @@ MK.4</div>
 <div class="fx-scan"></div>
 <div class="fx-vignette"></div>
 <div class="fx-flicker"></div>
+<div class="prox-banner" id="proxBanner" hidden></div>
 <div class="fx-grain" id="grain"></div>
 <script src="vendor/three.min.js"></script>
 

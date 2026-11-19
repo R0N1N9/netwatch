@@ -26,7 +26,7 @@ function selectDeck(name) {
   else $("#reticle").hidden = true;
   if (name === "grid") setTimeout(() => { initGlobe(); if (globe && globe.resize) globe.resize(); loadGlobe(); }, 40);
   if (name === "ar") renderARTags();
-  if (name === "sonar") bdRefresh();
+  if (name === "sonar") { bdRefresh(); setTimeout(sleepPoll, 300); }
   if (name === "sonar") setTimeout(() => { if (!sonarMode) setSonarMode(sonarPref()); sonarResize(); }, 40);
 }
 function currentDeck() { return document.querySelector(".tab.active").dataset.deck; }
@@ -377,6 +377,7 @@ const KILLCHAIN = [
     { side: "red", ttl: "Host sweep (ARP)", att: "T1046", type: "api", endpoint: "/api/sweep", btn: "RUN" },
     { side: "red", ttl: "Port / service scan", att: "T1595.001", type: "api", endpoint: "/api/scan", needsTarget: true, btn: "PROBE" },
     { side: "blue", ttl: "Listening-socket audit", att: "DS0029", type: "api", endpoint: "/api/kc/listeners", btn: "AUDIT" },
+    { side: "blue", ttl: "Detector fire drill", att: "self-test", type: "api", endpoint: "/api/kc/drill", btn: "DRILL" },
     { side: "blue", ttl: "Scan-detection (ICE)", att: "T1046", type: "info", info: ["ICE watches for ARP floods + fan-out connection patterns.", "New-device + port-scan detectors flag recon against you in the NETWATCH deck."] },
   ]},
   { name: "WEAPON", attck: "T1587 · T1588", actions: [
@@ -394,6 +395,7 @@ const KILLCHAIN = [
   { name: "INSTALL", attck: "T1543 · T1547 · T1053", actions: [
     { side: "red", ttl: "Persistence vector brief", att: "T1547", type: "info", info: ["Vectors: systemd units, cron/@reboot, shell rc, autostart .desktop, rc.local.", "Use the BLUE audit to see which of these exist on this host right now."] },
     { side: "blue", ttl: "Persistence audit (host)", att: "T1543", type: "api", endpoint: "/api/kc/persistence", btn: "AUDIT" },
+    { side: "blue", ttl: "Surface diff since yesterday", att: "DS0009", type: "api", endpoint: "/api/kc/surface", btn: "DIFF" },
   ]},
   { name: "C2", attck: "T1071 · T1571 · T1572", actions: [
     { side: "red", ttl: "Beacon-profile brief", att: "T1071", type: "info", info: ["Beacons = periodic low-jitter callbacks on app-layer protocols / odd ports / DNS tunnels.", "PLANNING ONLY — no C2 implant is generated. Hunt for it with the BLUE tools."] },
@@ -409,6 +411,7 @@ const KILLCHAIN = [
 const ATTACK = [
   { name: "RECON", attck: "TA0043", actions: [
     { side: "red", ttl: "Active scanning", att: "T1595", type: "api", endpoint: "/api/scan", needsTarget: true, btn: "PROBE" },
+    { side: "blue", ttl: "Detector fire drill", att: "self-test", type: "api", endpoint: "/api/kc/drill", btn: "DRILL" },
     { side: "blue", ttl: "Scan detection (ICE)", att: "DS0029", type: "info", info: ["ICE flags ARP floods and port-scan fan-out against you.", "Watch the WATCHTOWER intrusion log."] },
   ]},
   { name: "RES DEV", attck: "TA0042", actions: [
@@ -426,6 +429,7 @@ const ATTACK = [
   { name: "PERSIST", attck: "TA0003", actions: [
     { side: "red", ttl: "Autostart vector brief", att: "T1547", type: "info", info: ["Vectors: systemd, cron/@reboot, shell rc, autostart, rc.local.", "Use the BLUE audit to list what exists on this host now."] },
     { side: "blue", ttl: "Persistence audit (host)", att: "T1543", type: "api", endpoint: "/api/kc/persistence", btn: "AUDIT" },
+    { side: "blue", ttl: "Surface diff since yesterday", att: "DS0009", type: "api", endpoint: "/api/kc/surface", btn: "DIFF" },
   ]},
   { name: "PRIVESC", attck: "TA0004", actions: [
     { side: "red", ttl: "Priv-esc surface brief", att: "T1548", type: "info", info: ["Surfaces: SUID/SGID binaries, sudo misconfig, writable units, stale kernels.", "PLANNING ONLY — no exploit is launched."] },
@@ -917,6 +921,17 @@ function sonarDraw(t) {
   for (let g = -8; g <= 8; g++) { x.beginPath(); x.moveTo(W / 2 + g * S / 5, 0); x.lineTo(W / 2 + g * S / 5, H); x.stroke(); x.beginPath(); x.moveTo(0, H / 2 + g * S / 5); x.lineTo(W, H / 2 + g * S / 5); x.stroke(); }
   const nodes = sonarState.nodes || [];
   const ap = P(sonarXY("@ap", 0, 1));
+  // floor plan and tripwires
+  x.lineCap = "round";
+  room.walls.forEach((w) => { const a = P(w.a), b = P(w.b); x.strokeStyle = "rgba(189,249,255,0.7)"; x.lineWidth = 6; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); });
+  room.wires.forEach((w) => {
+    const a = P(w.a), b = P(w.b);
+    x.strokeStyle = "#ff5449"; x.lineWidth = 4; x.setLineDash([14, 10]); x.lineDashOffset = -t * 30; x.shadowColor = "#ff5449"; x.shadowBlur = 12;
+    x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); x.setLineDash([]); x.shadowBlur = 0;
+    x.font = "600 20px Rajdhani, sans-serif"; x.fillStyle = "#ff5449"; x.fillText("⟂ " + (w.name || "tripwire").toUpperCase(), (a[0] + b[0]) / 2 + 10, (a[1] + b[1]) / 2 - 10);
+  });
+  if (sonarDrawing) { const a = P(sonarDrawing.a), b = P(sonarDrawing.b); x.strokeStyle = "#ffb84a"; x.lineWidth = 4; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); }
+  x.lineCap = "butt";
   // sweep rings from the access point
   for (let k = 0; k < 3; k++) { const r = ((t * 0.12 + k / 3) % 1) * S * 1.1; x.strokeStyle = "rgba(29,255,161," + (0.22 * (1 - r / (S * 1.1))) + ")"; x.lineWidth = 2; x.beginPath(); x.arc(ap[0], ap[1], r, 0, 6.283); x.stroke(); }
   nodes.forEach((n, i) => {
@@ -941,6 +956,14 @@ function sonarDraw(t) {
     x.font = "20px ui-monospace, monospace"; x.fillStyle = col; x.fillText(n.state.toUpperCase() + (n.state === "offline" ? "" : " · " + Math.round(n.score)) + (n.distM ? " · " + n.distM.toFixed(1) + " m" : ""), np[0] + 24, np[1] + 22);
     if (n.breath) { x.fillStyle = "#ffb84a"; x.fillText("RESP " + n.breath + "/min — someone still", np[0] + 24, np[1] + 46); }
   });
+  // located network hosts
+  (sonarHosts || []).forEach((hst) => {
+    const pt = P(hst), dv = (STATE.devices || []).find((d) => d.ip === hst.ip), hot = dv && threatOf(dv) >= 50;
+    const col = hot ? "#ff5449" : "#5ef6ff";
+    x.strokeStyle = col; x.fillStyle = col; x.lineWidth = 3; x.shadowColor = col; x.shadowBlur = 10;
+    x.beginPath(); x.rect(pt[0] - 9, pt[1] - 9, 18, 18); hst.nodes >= 3 ? x.fill() : x.stroke(); x.shadowBlur = 0;
+    x.font = "600 21px Rajdhani, sans-serif"; x.fillText(hst.name.toUpperCase(), pt[0] + 16, pt[1] + 7);
+  });
   // estimated position of the movement, and where it has been
   if (sonarTrail.length) {
     x.lineWidth = 4; x.strokeStyle = "rgba(255,184,74,0.7)"; x.beginPath();
@@ -958,7 +981,8 @@ function sonarDraw(t) {
 function sonarRenderList() {
   const nodes = sonarState.nodes || [], list = $("#sonarList");
   const moving = nodes.filter((n) => n.state === "motion").length;
-  $("#sonarMeta").textContent = nodes.length ? nodes.length + " nodes · " + (moving ? moving + " link" + (moving > 1 ? "s" : "") + " disturbed" : "field clear") : "no nodes reporting";
+  $("#sonarMeta").textContent = (nodes.length ? nodes.length + " nodes · " + (moving ? moving + " link" + (moving > 1 ? "s" : "") + " disturbed" : "field clear") : "no nodes reporting") +
+    (!dance.play && sonarPeople ? " · ≈" + sonarPeople + " present" : "") + (!dance.play && sonarHosts.length ? " · " + sonarHosts.length + " hosts located" : "");
   $("#sonarSrc").textContent = sonarState.demo ? "simulated csi" : sonarState.listening ? "udp " + sonarState.listening : "wi-fi csi";
   const arm = $("#sonarArm");
   arm.classList.toggle("armed", !!sonarState.armed);
@@ -971,10 +995,11 @@ function sonarRenderList() {
     list.appendChild(h); return;
   }
   nodes.forEach((n) => {
-    const row = el("div", "snode " + n.state);
+    const row = el("div", "snode " + n.state + (n.node === sleepNode ? " picked" : ""));
+    row.addEventListener("click", () => { sleepNode = n.node; sleepPoll(); sonarRenderList(); });
     const tr = n.trace || [];
     const pts = tr.map((v, i) => (i / Math.max(1, tr.length - 1) * 120).toFixed(1) + "," + (19 - Math.min(100, v) / 100 * 18).toFixed(1)).join(" ");
-    row.innerHTML = '<div class="top"><span class="nm">' + esc(n.node.toUpperCase()) + '</span><span class="badge ' + (n.state === "motion" ? "bad" : "") + '">' + esc(n.state.toUpperCase()) + "</span>" + (n.breath ? '<span class="badge resp">RESP ' + esc(n.breath) + "/MIN</span>" : "") + '<span class="sc">' + Math.round(n.score) + "</span></div>" +
+    row.innerHTML = '<div class="top"><span class="nm">' + esc(n.node.toUpperCase()) + '</span><span class="badge ' + (n.state === "motion" ? "bad" : "") + '">' + esc(n.state.toUpperCase()) + "</span>" + (n.breath ? '<span class="badge resp">RESP ' + esc(n.breath) + "/MIN</span>" : "") + (n.activity && n.activity !== "empty" ? '<span class="badge ' + (n.activity === "fall?" ? "bad" : "act") + '">' + esc(n.activity.toUpperCase()) + "</span>" : "") + '<span class="sc">' + Math.round(n.score) + "</span></div>" +
       '<div class="bar"><i style="width:' + Math.min(100, n.score) + '%"></i></div>' +
       '<div class="meta2"><span>' + (n.rssi == null ? "recorded" : "RSSI " + esc(n.rssi) + " dBm · " + esc(n.fps) + " fps") + (n.distM ? " · " + esc(n.distM.toFixed(1)) + " m" : "") + '</span><svg viewBox="0 0 120 20"><polyline fill="none" stroke="' + (n.state === "motion" ? "#ff5449" : "#1dffa1") + '" stroke-width="1.2" points="' + pts + '"/></svg></div>';
     list.appendChild(row);
@@ -985,6 +1010,8 @@ async function sonarPoll() {
   if (!visible && !audioOn) return;
   const r = await get("/api/sonar"); if (!r) return;
   liveSonar = r;
+  if (!sonarDrawing && !roomDirty) { room.walls = r.walls || []; room.wires = r.wires || []; renderWires(); }
+  sonarHosts = r.hosts || []; sonarPeople = r.people || 0;
   if (!layoutSynced) { // adopt the server's room map once, or seed it with ours
     layoutSynced = true;
     if (r.layout && Object.keys(r.layout).length) sonarPos = Object.assign({}, r.layout);
@@ -1010,14 +1037,71 @@ $("#sonarArm").addEventListener("click", async () => { await post("/api/sonar/ar
   const c = $("#sonarCanvas");
   const norm = (e) => { const r = c.getBoundingClientRect(), S = Math.min(r.width, r.height) / 2; return { x: (e.clientX - r.left - r.width / 2) / S, y: (e.clientY - r.top - r.height / 2) / S }; };
   c.addEventListener("pointerdown", (e) => {
-    const m = norm(e); let best = null, bd = 0.09;
     if (dance.play) return;
-    Object.keys(sonarPos).forEach((k) => { const at = sonarShown[k] || sonarPos[k], d = Math.hypot(at.x - m.x, at.y - m.y); if (d < bd) { bd = d; best = k; } });
+    const m = norm(e);
+    if (sonarTool !== "move") { sonarDrawing = { a: m, b: m }; c.setPointerCapture(e.pointerId); return; }
+    let best = null, near = 0.09;
+    Object.keys(sonarPos).forEach((k) => { const at = sonarShown[k] || sonarPos[k], d = Math.hypot(at.x - m.x, at.y - m.y); if (d < near) { near = d; best = k; } });
     if (best) { sonarDrag = best; c.setPointerCapture(e.pointerId); }
   });
-  c.addEventListener("pointermove", (e) => { if (sonarDrag) sonarPos[sonarDrag] = norm(e); });
-  c.addEventListener("pointerup", () => { if (sonarDrag) { sonarDrag = null; try { localStorage.setItem("nw.sonarPos", JSON.stringify(sonarPos)); } catch (_) {} pushLayout(); } });
+  c.addEventListener("pointermove", (e) => { if (sonarDrawing) sonarDrawing.b = norm(e); else if (sonarDrag) sonarPos[sonarDrag] = norm(e); });
+  c.addEventListener("pointerup", () => {
+    if (sonarDrawing) { const seg = sonarDrawing; sonarDrawing = null; addSegment(sonarTool, seg.a, seg.b); return; }
+    if (sonarDrag) { sonarDrag = null; try { localStorage.setItem("nw.sonarPos", JSON.stringify(sonarPos)); } catch (_) {} pushLayout(); }
+  });
 })();
+
+// ---- floor plan walls and tripwires ----
+const room = { walls: [], wires: [] };
+let sonarTool = "move", sonarDrawing = null, roomDirty = false, sonarHosts = [], sonarPeople = 0;
+async function saveRoom() { roomDirty = true; await post("/api/sonar/map", { walls: room.walls, wires: room.wires }); roomDirty = false; renderWires(); }
+function addSegment(kind, a, b, name) {
+  if (Math.hypot(a.x - b.x, a.y - b.y) < 0.04) return false;
+  if (kind === "wall") room.walls.push({ id: "", name: "", a, b });
+  else {
+    if (name == null) { try { name = window.prompt("Name this tripwire", "tripwire " + (room.wires.length + 1)); } catch (_) { name = null; } }
+    room.wires.push({ id: "", name: name || "tripwire " + (room.wires.length + 1), a, b });
+  }
+  saveRoom(); return true;
+}
+function renderWires() {
+  const box = $("#wireList"); box.innerHTML = "";
+  room.wires.forEach((w, i) => {
+    const row = el("div", "wire-row"); row.appendChild(el("span", null, "⟂ " + (w.name || "tripwire")));
+    const del = el("button", null, "✕"); del.title = "remove this tripwire";
+    del.addEventListener("click", () => { room.wires.splice(i, 1); saveRoom(); });
+    row.appendChild(del); box.appendChild(row);
+  });
+}
+document.querySelectorAll("#sonarTools [data-tool]").forEach((btn) => btn.addEventListener("click", () => {
+  sonarTool = btn.dataset.tool;
+  document.querySelectorAll("#sonarTools [data-tool]").forEach((x) => x.classList.toggle("on", x === btn));
+  document.querySelector(".sonar-map").dataset.tool = sonarTool;
+}));
+$("#wallUndo").addEventListener("click", () => { if (room.walls.length) { room.walls.pop(); saveRoom(); } });
+
+// ---- respiration log (sleep tracking) ----
+let sleepNode = "";
+async function sleepPoll() {
+  if (currentDeck() !== "sonar") return;
+  const r = await get("/api/sonar/sleep" + (sleepNode ? "?node=" + encodeURIComponent(sleepNode) : ""));
+  if (!r) return;
+  if (!sleepNode) sleepNode = r.node || "";
+  $("#sleepNode").textContent = (r.node || "—").toUpperCase();
+  const pts = r.series || [], c = $("#sleepChart"), w = c.clientWidth || 300;
+  c.width = w * 2; c.height = 128;
+  const x = c.getContext("2d"); x.clearRect(0, 0, c.width, c.height);
+  x.strokeStyle = "rgba(94,246,255,0.15)"; x.lineWidth = 1;
+  [10, 15, 20].forEach((v) => { const Y = 100 - (v - 8) / 16 * 92; x.beginPath(); x.moveTo(0, Y); x.lineTo(c.width, Y); x.stroke(); x.fillStyle = "#43727e"; x.font = "18px ui-monospace, monospace"; x.fillText(v, 4, Y - 3); });
+  if (pts.length < 2) { $("#sleepMeta").textContent = "collecting — one reading a minute"; return; }
+  const t0 = pts[0].t, span = Math.max(1, pts[pts.length - 1].t - t0), X = (p) => 30 + (p.t - t0) / span * (c.width - 34);
+  pts.forEach((p) => { if (p.m) { x.fillStyle = "rgba(255,84,73,0.75)"; x.fillRect(X(p) - 1, 128 - Math.min(26, 8 + p.m * 6), 3, 26); } });
+  x.strokeStyle = "#ffb84a"; x.lineWidth = 2.5; x.beginPath(); let pen = false;
+  pts.forEach((p) => { if (!p.b) { pen = false; return; } const Y = 100 - (Math.max(8, Math.min(24, p.b)) - 8) / 16 * 92; pen ? x.lineTo(X(p), Y) : x.moveTo(X(p), Y); pen = true; });
+  x.stroke();
+  const br = pts.filter((p) => p.b).map((p) => p.b), restless = pts.filter((p) => p.m).length;
+  $("#sleepMeta").textContent = (span / 3600000).toFixed(1) + " h · " + (br.length ? "avg " + (br.reduce((a, v) => a + v, 0) / br.length).toFixed(1) + "/min" : "no breathing found") + " · " + restless + " restless min";
+}
 
 // ---- SONAR: where is the movement? a score-weighted blend of the disturbed links ----
 let sonarTrail = [], sonarMode = "";
@@ -1067,11 +1151,13 @@ function sonar3dInit() {
     blob.visible = false; scene.add(blob);
     const trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffb84a, transparent: true, opacity: 0.85 })); scene.add(trail);
     const dyn = new THREE.Group(); scene.add(dyn);
+    const plan = new THREE.Group(); scene.add(plan);
+    const hostsG = new THREE.Group(); scene.add(hostsG);
     host.addEventListener("pointerdown", (e) => { s3.drag = { x: e.clientX, y: e.clientY }; host.setPointerCapture(e.pointerId); });
     host.addEventListener("pointermove", (e) => { if (!s3.drag) return; s3.az += (e.clientX - s3.drag.x) * 0.006; s3.el = Math.max(0.12, Math.min(1.45, s3.el + (e.clientY - s3.drag.y) * 0.005)); s3.drag = { x: e.clientX, y: e.clientY }; s3.lastUser = performance.now(); });
     host.addEventListener("pointerup", () => { s3.drag = null; });
     host.addEventListener("wheel", (e) => { e.preventDefault(); s3.dist = Math.max(6, Math.min(26, s3.dist + e.deltaY * 0.01)); s3.lastUser = performance.now(); }, { passive: false });
-    s3.r = { renderer, scene, camera, ap, rings, blob, trail, dyn, host, w: 0, h: 0 };
+    s3.r = { renderer, scene, camera, ap, rings, blob, trail, dyn, plan, hostsG, planSig: "", hostSig: "", hostObjs: {}, host, w: 0, h: 0 };
     return true;
   } catch (e) { s3.failed = true; return false; }
 }
@@ -1120,6 +1206,40 @@ function sonar3dRender(t) {
   R.blob.visible = !!last;
   if (last) { R.blob.position.set(last.x * S3, 0.75, last.y * S3); const sc = 1 + 0.12 * Math.sin(t * 7); R.blob.scale.set(sc, 1, sc); }
   R.trail.geometry.setFromPoints(sonarTrail.map((q) => new THREE.Vector3(q.x * S3, 0.05, q.y * S3)));
+  // floor plan walls and tripwire curtains (rebuilt only when they change)
+  const planSig = JSON.stringify([room.walls, room.wires]);
+  if (planSig !== R.planSig) {
+    R.planSig = planSig;
+    while (R.plan.children.length) R.plan.remove(R.plan.children[0]);
+    const curtain = (w, color, opacity, height) => {
+      const ax = w.a.x * S3, az = w.a.y * S3, bx = w.b.x * S3, bz = w.b.y * S3, len = Math.hypot(bx - ax, bz - az);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, height), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+      m.position.set((ax + bx) / 2, height / 2, (az + bz) / 2); m.rotation.y = -Math.atan2(bz - az, bx - ax);
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color, transparent: true, opacity: Math.min(1, opacity * 4) }));
+      edge.position.copy(m.position); edge.rotation.copy(m.rotation);
+      R.plan.add(m, edge); return m;
+    };
+    room.walls.forEach((w) => curtain(w, 0xbdf9ff, 0.1, 2.4));
+    R.wireMeshes = room.wires.map((w) => curtain(w, 0xff5449, 0.2, 2.2));
+  }
+  (R.wireMeshes || []).forEach((m) => { m.material.opacity = 0.14 + 0.1 * Math.sin(t * 5); });
+  // located hosts
+  const hostSig = sonarHosts.map((q) => q.mac).join("|");
+  if (hostSig !== R.hostSig) {
+    R.hostSig = hostSig; R.hostObjs = {};
+    while (R.hostsG.children.length) R.hostsG.remove(R.hostsG.children[0]);
+    sonarHosts.forEach((q) => {
+      const g = new THREE.Group(), box = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), new THREE.MeshBasicMaterial({ color: 0x5ef6ff, wireframe: q.nodes < 3 }));
+      const label = textSprite(q.name.toUpperCase(), "#5ef6ff"); label.position.set(0.25, 0.2, 0); label.scale.set(2.6, 0.5, 1);
+      g.add(box, label); R.hostsG.add(g); R.hostObjs[q.mac] = { g, box };
+    });
+  }
+  sonarHosts.forEach((q) => {
+    const o = R.hostObjs[q.mac]; if (!o) return;
+    const dv = (STATE.devices || []).find((d) => d.ip === q.ip);
+    o.box.material.color.setHex(dv && threatOf(dv) >= 50 ? 0xff5449 : 0x5ef6ff);
+    o.g.position.set(q.x * S3, 0.5, q.y * S3); o.box.rotation.y = t;
+  });
   R.renderer.render(R.scene, R.camera);
 }
 function sonarPref() { try { return localStorage.getItem("nw.sonarMode") || "3d"; } catch (_) { return "3d"; } }
@@ -1227,6 +1347,65 @@ function renderGate(g) {
 $("#gateSet").addEventListener("click", async () => { if (selectedIP) await post("/api/gate", { ip: selectedIP }); });
 $("#gateClear").addEventListener("click", async () => { await post("/api/gate", { ip: "" }); });
 
+// ================= ULTRASONIC PROXIMITY LOCK (experimental) =================
+// The speaker plays a quiet 19 kHz tone and the microphone listens to it. A body
+// moving nearby smears energy into the bands beside the tone (Doppler). When
+// that stops for long enough, nobody is at the laptop and the screen is locked.
+const prox = { on: false, ctx: null, stream: null, timer: null, floor: null, lastMove: 0, calib: [], awaySec: 60, graceSec: 10 };
+const PROX_HZ = 19000;
+// Ratio of sideband power to carrier power in a power spectrum (linear units).
+function proxIndex(power, carrierBin) {
+  let carrier = 0, side = 0;
+  for (let k = -2; k <= 2; k++) carrier += power[carrierBin + k] || 0;
+  for (let k = 4; k <= 34; k++) side += (power[carrierBin + k] || 0) + (power[carrierBin - k] || 0);
+  return carrier > 0 ? side / carrier : 0;
+}
+// One step of the presence logic. Returns "calibrating" | "present" | "away" | "warn" | "lock".
+function proxStep(st, index, now) {
+  if (st.floor == null) {
+    st.calib.push(index);
+    if (st.calib.length < 12) return "calibrating";
+    st.floor = st.calib.slice().sort((a, b) => a - b)[Math.floor(st.calib.length / 2)] || 1e-9;
+    st.lastMove = now;
+  }
+  if (index > st.floor * 3) st.lastMove = now;
+  const idle = (now - st.lastMove) / 1000;
+  if (idle >= st.awaySec + st.graceSec) return "lock";
+  if (idle >= st.awaySec) return "warn";
+  return idle > 5 ? "away" : "present";
+}
+async function setProx(on) {
+  const btn = $("#proxBtn"), banner = $("#proxBanner");
+  if (!on) {
+    prox.on = false; clearInterval(prox.timer); banner.hidden = true;
+    if (prox.stream) prox.stream.getTracks().forEach((t) => t.stop());
+    if (prox.ctx) prox.ctx.close();
+    prox.ctx = prox.stream = null; btn.className = "hs-btn"; btn.textContent = "PROX LOCK OFF"; return "Proximity lock off.";
+  }
+  try {
+    prox.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (e) { status("proximity lock needs the microphone: " + e.name); return "I need microphone access for that."; }
+  const AC = window.AudioContext || window.webkitAudioContext; prox.ctx = new AC();
+  if (prox.ctx.sampleRate < 40000) { setProx(false); return "This audio device cannot carry a 19 kHz tone."; }
+  const osc = prox.ctx.createOscillator(), gain = prox.ctx.createGain(); osc.frequency.value = PROX_HZ; gain.gain.value = 0.08; osc.connect(gain).connect(prox.ctx.destination); osc.start();
+  const an = prox.ctx.createAnalyser(); an.fftSize = 8192; an.smoothingTimeConstant = 0.2; prox.ctx.createMediaStreamSource(prox.stream).connect(an);
+  const db = new Float32Array(an.frequencyBinCount), power = new Float32Array(an.frequencyBinCount), bin = Math.round(PROX_HZ / (prox.ctx.sampleRate / an.fftSize));
+  Object.assign(prox, { on: true, floor: null, calib: [], lastMove: Date.now() });
+  btn.classList.add("on");
+  prox.timer = setInterval(async () => {
+    an.getFloatFrequencyData(db);
+    for (let i = 0; i < db.length; i++) power[i] = Math.pow(10, db[i] / 10);
+    const st = proxStep(prox, proxIndex(power, bin), Date.now()), idle = Math.round((Date.now() - prox.lastMove) / 1000);
+    btn.classList.toggle("away", st === "away" || st === "warn");
+    btn.textContent = st === "calibrating" ? "PROX · CALIBRATING" : st === "present" ? "PROX · PRESENT" : "PROX · AWAY " + idle + "s";
+    banner.hidden = st !== "warn";
+    if (st === "warn") banner.textContent = "No movement near the laptop — locking in " + Math.max(0, prox.awaySec + prox.graceSec - idle) + " s · move to cancel";
+    if (st === "lock") { await post("/api/lock"); setProx(false); status("screen locked by proximity lock"); }
+  }, 500);
+  return "Proximity lock armed. I will lock the screen after " + prox.awaySec + " seconds with nobody moving nearby.";
+}
+$("#proxBtn").addEventListener("click", () => setProx(!prox.on));
+
 // ================= COMMANDS: typed or spoken =================
 const DECK_WORDS = { watchtower: "netwatch", watch: "netwatch", breach: "breach", "kill chain": "killchain", killchain: "killchain", "attack": "attack", "att&ck": "attack", mitre: "attack", grid: "grid", globe: "grid", ar: "ar", optic: "ar", sonar: "sonar" };
 let pendingConfirm = null;
@@ -1263,6 +1442,13 @@ async function runCommand(text) {
   if (/^(exit|stop) (replay|braindance)$/.test(t)) { bdExit(); return "Back to the live field."; }
   if ((m = t.match(/^set key(?: to)?\s+(.+)$/))) { const d = findDevice(m[1]); if (!d) return "No host matches " + m[1] + "."; const r = await post("/api/gate", { ip: d.ip }); return r && r.ok ? (d.hostname || d.ip) + " is now the presence key." : "Could not set the key."; }
   if (/^clear key$/.test(t)) { const r = await post("/api/gate", { ip: "" }); return r && r.ok ? "Presence key removed." : "The key device has to be present to remove it."; }
+  if (/^(surface diff|what changed|what's changed)$/.test(t)) { const r = await get("/api/surface"); return r ? r.lines.join("\n") : "I could not read the surface."; }
+  if (/^(fire drill|run (a |the )?(fire )?drill|test (the )?detectors)$/.test(t)) { const r = await post("/api/drill"); return r ? r.lines.join("\n") : "The drill did not run."; }
+  if (/^(usb|list usb|usb devices)$/.test(t)) { const r = await get("/api/usb"); return r ? (r.devices.length ? r.devices.map((d) => (d.vendor + " " + d.product).trim() + " [" + d.vid + ":" + d.pid + "]" + (d.keyboard ? " — keyboard" : "")).join("\n") : "No USB devices.") : "I could not list USB devices."; }
+  if (/^lock( the)?( screen)?$/.test(t)) { const r = await post("/api/lock"); return r && r.ok ? (r.note || "Screen locked.") : "I could not lock the screen."; }
+  if (/^(proximity|prox) lock (on|off)$/.test(t)) return await setProx(/on$/.test(t));
+  if (/^(how many people|who is (home|here)|anyone (home|here))/.test(t)) { await sonarPoll(); const r = await get("/api/sonar"); if (!r || !r.nodes.length) return "SONAR has no nodes reporting."; const still = r.nodes.filter((n) => n.breath).length; return "About " + r.people + " present" + (still ? ", " + still + " of them still and breathing" : "") + ". " + r.nodes.filter((n) => n.state === "motion").length + " links disturbed."; }
+  if (/^(sleep|respiration) (report|log)$/.test(t)) { const r = await get("/api/sonar/sleep"); if (!r || r.series.length < 2) return "There is no respiration data yet."; const b = r.series.filter((p) => p.b).map((p) => p.b); return "On " + r.node + ": " + ((r.series[r.series.length - 1].t - r.series[0].t) / 3600000).toFixed(1) + " hours logged, average " + (b.reduce((a, v) => a + v, 0) / Math.max(1, b.length)).toFixed(1) + " breaths a minute, " + r.series.filter((p) => p.m).length + " restless minutes."; }
   if (/^(audio on|unmute)$/.test(t)) { setAudio(true); return "Spatial audio on."; }
   if (/^(audio off|mute)$/.test(t)) { setAudio(false); return "Spatial audio off."; }
   return null;
@@ -1324,7 +1510,7 @@ function onNewAlerts(snap) {
 }
 
 // test hooks (also handy from the browser console)
-window.netwatch = { dance, bdOpen, bdExit, sonarNodes: () => sonarState.nodes, sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
+window.netwatch = { room, addSegment, proxIndex, proxStep, sonarHosts: () => sonarHosts, dance, bdOpen, bdExit, sonarNodes: () => sonarState.nodes, sonarMode: () => sonarMode, setSonarMode, sonarTrail: () => sonarTrail.length, runCommand, audioPosFor, playAlert, setAudio, scrubTo, goLive, state: () => STATE };
 
 // ---------- boot ----------
 initNeural();
@@ -1339,6 +1525,7 @@ setInterval(loadHistory, 10000);
 setInterval(sonarPoll, 400);
 sysPoll(); setInterval(sysPoll, 1500);
 setInterval(() => { if (currentDeck() === "sonar") bdRefresh(); }, 2000);
+setInterval(sleepPoll, 30000);
 (function sonarLoop() {
   bdTick();
   if (currentDeck() === "sonar") { const t = performance.now() / 1000; if (sonarMode === "3d") sonar3dRender(t); else sonarDraw(t); }

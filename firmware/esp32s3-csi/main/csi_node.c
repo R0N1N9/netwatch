@@ -5,6 +5,10 @@
 // frames, and streams the per-subcarrier amplitudes to NetWatch over UDP as
 //   {"node":"node-A","rssi":-51,"amp":[12.0,13.4,...],"dist_cm":412}
 //
+// Once a second it also reports the signal strength of the other devices it
+// overhears on the channel, so NetWatch can place network hosts on the map:
+//   {"node":"node-A","seen":[{"mac":"aa:bb:cc:dd:ee:ff","rssi":-52}, ...]}
+//
 // If the access point is an 802.11mc (FTM) responder, the node also measures
 // its distance to it every couple of seconds and includes it as dist_cm.
 //
@@ -76,6 +80,68 @@ static void csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
     xQueueSend(s_queue, &s, 0);
 }
 
+// ---- overheard devices: transmitter address and signal strength ----
+#define MAX_SEEN 24
+typedef struct {
+    uint8_t mac[6];
+    int8_t rssi;
+    int64_t at_us;
+} seen_t;
+static seen_t s_seen[MAX_SEEN];
+static portMUX_TYPE s_seen_lock = portMUX_INITIALIZER_UNLOCKED;
+
+// Runs in the Wi-Fi task for every frame heard on the channel.
+static void sniff_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
+    const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
+    if (pkt->rx_ctrl.sig_len < 24) {
+        return;
+    }
+    const uint8_t *tx = pkt->payload + 10; // 802.11 address 2: the transmitter
+    if (memcmp(tx, s_ap_bssid, 6) == 0 || (tx[0] & 0x01)) {
+        return; // skip the access point itself and group addresses
+    }
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_seen_lock);
+    int slot = -1, oldest = 0;
+    for (int i = 0; i < MAX_SEEN; i++) {
+        if (memcmp(s_seen[i].mac, tx, 6) == 0) { slot = i; break; }
+        if (s_seen[i].at_us < s_seen[oldest].at_us) { oldest = i; }
+    }
+    if (slot < 0) { slot = oldest; memcpy(s_seen[slot].mac, tx, 6); s_seen[slot].rssi = pkt->rx_ctrl.rssi; }
+    s_seen[slot].rssi = (int8_t)((3 * s_seen[slot].rssi + pkt->rx_ctrl.rssi) / 4);
+    s_seen[slot].at_us = now;
+    portEXIT_CRITICAL(&s_seen_lock);
+}
+
+// Sends the overheard-device table once a second.
+static void seen_task(void *arg) {
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    struct sockaddr_in dst = {.sin_family = AF_INET, .sin_port = htons(NETWATCH_PORT)};
+    inet_pton(AF_INET, NETWATCH_HOST, &dst.sin_addr);
+    static char json[1400];
+    static seen_t copy[MAX_SEEN];
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        portENTER_CRITICAL(&s_seen_lock);
+        memcpy(copy, s_seen, sizeof(copy));
+        portEXIT_CRITICAL(&s_seen_lock);
+        int64_t now = esp_timer_get_time();
+        int len = snprintf(json, sizeof(json), "{\"node\":\"%s\",\"seen\":[", NODE_NAME), n = 0;
+        for (int i = 0; i < MAX_SEEN && len < (int)sizeof(json) - 64; i++) {
+            if (copy[i].at_us == 0 || now - copy[i].at_us > 10000000) {
+                continue; // empty or not heard for 10 s
+            }
+            const uint8_t *m = copy[i].mac;
+            len += snprintf(json + len, sizeof(json) - len, "%s{\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\",\"rssi\":%d}",
+                            n++ ? "," : "", m[0], m[1], m[2], m[3], m[4], m[5], copy[i].rssi);
+        }
+        len += snprintf(json + len, sizeof(json) - len, "]}");
+        if (n > 0) {
+            sendto(sock, json, len, 0, (struct sockaddr *)&dst, sizeof(dst));
+        }
+    }
+}
+
 static void sender_task(void *arg) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     struct sockaddr_in dst = {.sin_family = AF_INET, .sin_port = htons(NETWATCH_PORT)};
@@ -134,6 +200,12 @@ static void start_csi(void) {
     ESP_ERROR_CHECK(esp_wifi_set_csi_config(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_csi_rx_cb(csi_rx_cb, NULL));
     ESP_ERROR_CHECK(esp_wifi_set_csi(true));
+
+    // Overhear other devices on the channel for host location.
+    wifi_promiscuous_filter_t filt = {.filter_mask = WIFI_PROMIS_FILTER_MASK_DATA | WIFI_PROMIS_FILTER_MASK_MGMT};
+    esp_wifi_set_promiscuous_filter(&filt);
+    esp_wifi_set_promiscuous_rx_cb(sniff_cb);
+    esp_wifi_set_promiscuous(true);
     ESP_LOGI(TAG, "CSI streaming to %s:%d as %s", NETWATCH_HOST, NETWATCH_PORT, NODE_NAME);
 }
 
@@ -189,5 +261,6 @@ void app_main(void) {
     s_queue = xQueueCreate(8, sizeof(csi_sample_t));
     xTaskCreate(sender_task, "csi_sender", 4096, NULL, 5, NULL);
     xTaskCreate(ftm_task, "ftm_ranger", 3072, NULL, 4, NULL);
+    xTaskCreate(seen_task, "seen_sender", 4096, NULL, 4, NULL);
     ESP_ERROR_CHECK(esp_wifi_start());
 }

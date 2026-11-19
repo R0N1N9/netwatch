@@ -287,7 +287,7 @@ body.replay .btn-row, body.replay .field { opacity: 0.35; pointer-events: none; 
 .ram i { transition: background 0.3s, box-shadow 0.3s; }
 
 /* ---------- braindance: recordings + replay ---------- */
-.bd { flex: 0 0 auto; max-height: 46%; display: flex; flex-direction: column; border-top: 1px solid rgba(255, 84, 73, 0.45); min-height: 0; }
+.bd { flex: 0 0 auto; max-height: 34%; display: flex; flex-direction: column; border-top: 1px solid rgba(255, 84, 73, 0.45); min-height: 0; }
 .bd-head { display: flex; justify-content: space-between; padding: 8px 12px 0; }
 .bd-list { overflow-y: auto; padding: 0 12px 10px; min-height: 0; }
 .bd-then { font-family: var(--mono); font-size: 11px; color: var(--amber); padding: 0 12px 6px; }
@@ -316,3 +316,26 @@ body.replay .btn-row, body.replay .field { opacity: 0.35; pointer-events: none; 
 .gate-row .btn[hidden] { display: none; }
 body.gated #btnQuarantine, body.gated #btnRelease, body.gated #btnTrust { opacity: 0.3; pointer-events: none; }
 .gnode .p { grid-column: 1 / -1; font-size: 10.5px; color: var(--amber); }
+
+/* ---------- SONAR: map tools, tripwires, sleep log ---------- */
+.sonar-tools { position: absolute; top: 44px; right: 22px; display: flex; gap: 6px; z-index: 2; }
+.sonar-tools .hs-btn { background: rgba(7, 21, 36, 0.8); }
+.sonar-tools .hs-btn.on { color: #04121a; background: var(--amber); border-color: var(--amber); }
+.sonar-map[data-mode="3d"] .sonar-tools, .sonar-map.replaying .sonar-tools { display: none; }
+.sonar-map[data-tool="wall"] #sonarCanvas, .sonar-map[data-tool="wire"] #sonarCanvas { cursor: crosshair; }
+.wire-list { padding: 0 12px; }
+.wire-row { display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin-bottom: 4px; font-size: 13px; color: var(--red); border: 1px dashed rgba(255, 84, 73, 0.55); }
+.wire-row span { flex: 1; }
+.wire-row button { cursor: pointer; background: transparent; border: 0; color: var(--dim); font-size: 13px; }
+.sleep { flex: 0 0 auto; border-top: 1px solid rgba(255, 84, 73, 0.45); padding-bottom: 4px; }
+.sleep canvas { display: block; width: calc(100% - 24px); height: 64px; margin: 4px 12px 0; }
+.snode { cursor: pointer; }
+.snode.picked { box-shadow: inset 0 0 0 1px var(--amber); }
+.badge.act { border-color: var(--cyan-soft); color: var(--cyan-soft); }
+
+/* ---------- ultrasonic proximity lock ---------- */
+#proxBtn.on { color: var(--green); border-color: var(--green); box-shadow: 0 0 10px rgba(29, 255, 161, 0.35); }
+#proxBtn.away { color: var(--amber); border-color: var(--amber); }
+.prox-banner { position: fixed; left: 50%; top: 40%; transform: translateX(-50%); z-index: 200; padding: 14px 26px; font-size: 20px; font-weight: 700; letter-spacing: 0.12em;
+  color: #1a1204; background: var(--amber); box-shadow: 0 0 40px rgba(255, 184, 74, 0.6); }
+.prox-banner[hidden] { display: none; }
